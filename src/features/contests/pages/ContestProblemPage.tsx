@@ -2,15 +2,28 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useProblemDetails } from '../hooks/useProblemDetails';
 import { CodeProblemView } from '../components/CodeProblemView';
 import { MCQProblemView } from '../components/MCQProblemView';
+import { SubmissionPanel } from '../components/SubmissionPanel';
+import { useProblemSubmissions } from '../hooks/useProblemSubmissions';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { contestApi } from '@/services/api/contestApi';
 
 export const ContestProblemPage = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
   const navigate = useNavigate();
 
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
+  const {
+    activeSubmission,
+    history,
+    historyError,
+    isHistoryLoading,
+    hasMoreHistory,
+    submitCode,
+    submitMCQ,
+    retryPolling,
+    refreshHistory,
+    loadMoreHistory,
+  } = useProblemSubmissions(contestId || '', problemId || '');
 
   if (!contestId || !problemId) {
     return (
@@ -72,28 +85,34 @@ export const ContestProblemPage = () => {
     );
   }
 
-  const handleCodeSubmit = async (code: string, language: string) => {
-    await contestApi.submitCodeSolution(contestId, problemId, code, language);
-  };
-
-  const handleMCQSubmit = async (selectedOption: number) => {
-    await contestApi.submitMCQAnswer(contestId, problemId, selectedOption);
-  };
-
   return (
-    <>
-      {problem.type === 'Code' ? (
-        <CodeProblemView
-          problem={problem}
-          onSubmit={handleCodeSubmit}
-        />
-      ) : (
-        <MCQProblemView
-          problem={problem}
-          onSubmit={handleMCQSubmit}
-        />
-      )}
-    </>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1">
+        {problem.type === 'Code' ? (
+          <CodeProblemView
+            key={problem.id}
+            problem={problem}
+            onSubmit={submitCode}
+          />
+        ) : (
+          <MCQProblemView
+            key={problem.id}
+            problem={problem}
+            onSubmit={submitMCQ}
+          />
+        )}
+      </div>
+      <SubmissionPanel
+        problemType={problem.type}
+        activeSubmission={activeSubmission}
+        history={history}
+        historyError={historyError}
+        isHistoryLoading={isHistoryLoading}
+        hasMoreHistory={hasMoreHistory}
+        onRetryPolling={retryPolling}
+        onRefreshHistory={refreshHistory}
+        onLoadMoreHistory={loadMoreHistory}
+      />
+    </div>
   );
 };
-

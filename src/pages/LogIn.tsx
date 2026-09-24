@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../lib/firebase";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Footer from "./components/footer";
 import { motion } from "framer-motion";
@@ -21,6 +21,14 @@ export const Login: React.FC = () => {
     message: "",
   });
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const requestedPath = (location.state as { from?: unknown } | null)?.from;
+  const redirectPath = typeof requestedPath === "string"
+    && requestedPath.startsWith("/")
+    && !requestedPath.startsWith("//")
+    ? requestedPath
+    : "/";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,12 +41,15 @@ export const Login: React.FC = () => {
         message: "Login successful! Redirecting to homepage...",
       });
       setTimeout(() => {
-        navigate("/");
+        navigate(redirectPath, { replace: true });
       }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       let message = "Login failed. Please try again.";
-      if (err?.code) {
-        switch (err.code) {
+      const errorCode = typeof err === "object" && err !== null && "code" in err
+        ? String(err.code)
+        : undefined;
+      if (errorCode) {
+        switch (errorCode) {
           case "auth/user-not-found":
             message = "User invalid, please sign up first";
             break;

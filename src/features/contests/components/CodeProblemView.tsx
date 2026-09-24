@@ -52,7 +52,9 @@ int main() {
 
 export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => {
   const [selectedLanguage, setSelectedLanguage] = useState('cpp');
-  const [code, setCode] = useState(DEFAULT_CODE_TEMPLATES[selectedLanguage]);
+  const [codeByLanguage, setCodeByLanguage] = useState<Record<string, string>>(
+    () => ({ ...DEFAULT_CODE_TEMPLATES }),
+  );
   const [customInput, setCustomInput] = useState('');
   const [output, setOutput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,15 +67,18 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
   const [resizeDirection, setResizeDirection] = useState<'vertical' | 'horizontal' | null>(null);
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const code = codeByLanguage[selectedLanguage] || '';
 
   const handleLanguageChange = useCallback((newLanguage: string) => {
     setSelectedLanguage(newLanguage);
-    setCode(DEFAULT_CODE_TEMPLATES[newLanguage] || '');
   }, []);
 
   const handleCodeChange = useCallback((value: string | undefined) => {
-    setCode(value || '');
-  }, []);
+    setCodeByLanguage((current) => ({
+      ...current,
+      [selectedLanguage]: value || '',
+    }));
+  }, [selectedLanguage]);
 
   const handleRunCode = useCallback(async () => {
     setIsRunning(true);
@@ -320,7 +325,7 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
                               {line.trim().startsWith('•') || line.trim().startsWith('-') ? (
                                 <>
                                   <span className="text-gray-500 mt-0.5">•</span>
-                                  <span>{line.replace(/^[•\-]\s*/, '')}</span>
+                                  <span>{line.replace(/^[•-]\s*/, '')}</span>
                                 </>
                               ) : line.trim() ? (
                                 <span>{line}</span>
@@ -493,4 +498,3 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
     </div>
   );
 };
-

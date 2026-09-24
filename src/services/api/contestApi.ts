@@ -5,9 +5,20 @@ import { auth } from '@/lib/firebase';
 import { encodeBase64 } from '@/lib/base64';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const mockJudgingSetting = import.meta.env.VITE_MOCK_SUBMISSION_JUDGING;
+const MOCK_SUBMISSION_JUDGING = mockJudgingSetting === 'true'
+  || (import.meta.env.DEV && mockJudgingSetting !== 'false');
+type ContestPayload = ConstructorParameters<typeof Contest>[0];
+
+interface MockSubmission {
+  statusChecks: number;
+  details: SubmissionDetailsResponse;
+}
 
 class ContestApiService {
   private axiosInstance: AxiosInstance;
+  private mockSubmissions = new Map<string, MockSubmission>();
+
   constructor() {
     this.axiosInstance = axios.create({
       baseURL: API_BASE_URL,
@@ -44,7 +55,7 @@ class ContestApiService {
   }
 
   async getContestsList(page: number = 0): Promise<Contest[]> {
-    const response = await this.axiosInstance.get<any[]>(`/contests/list?page=${page}`);
+    const response = await this.axiosInstance.get<ContestPayload[]>(`/contests/list?page=${page}`);
     return response.data.map(c => new Contest(c));
   }
 
@@ -65,7 +76,7 @@ class ContestApiService {
 
   async getContestById(contestId: string): Promise<Contest | null> {
     try {
-      const response = await this.axiosInstance.get<any>(`/contests/${contestId}`);
+      const response = await this.axiosInstance.get<ContestPayload>(`/contests/${contestId}`);
       return new Contest(response.data);
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 404) {
@@ -82,12 +93,22 @@ class ContestApiService {
     language: string
   ): Promise<SubmissionResponse> {
     const encodedCode = encodeBase64(code);
-    const response = await this.axiosInstance.post<SubmissionResponse>('/submission/submit', {
-      contest_id: contestId,
-      problem_id: problemId,
-      code: encodedCode,
-      language,
+    const response = await this.axiosInstance.post<SubmissionResponse>(
+      '/submission/submit',
+      {
+        contest_id: contestId,
+        problem_id: problemId,
+        code: encodedCode,
+        language,
+        type: 'code',
+      },
+      { timeout: 15_000 },
+    );
+    this.rememberMockSubmission(response.data.submission_id, {
+      contestId,
+      problemId,
       type: 'code',
+      language,
     });
     return response.data;
   }
@@ -97,30 +118,119 @@ class ContestApiService {
     problemId: string,
     selectedOption: number
   ): Promise<SubmissionResponse> {
-    const response = await this.axiosInstance.post<SubmissionResponse>('/submission/submit', {
-      contest_id: contestId,
-      problem_id: problemId,
-      option: [selectedOption],
+    const response = await this.axiosInstance.post<SubmissionResponse>(
+      '/submission/submit',
+      {
+        contest_id: contestId,
+        problem_id: problemId,
+        option: [selectedOption],
+        type: 'mcq',
+      },
+      { timeout: 15_000 },
+    );
+    this.rememberMockSubmission(response.data.submission_id, {
+      contestId,
+      problemId,
       type: 'mcq',
     });
     return response.data;
   }
 
   async getSubmissionStatus(submissionId: string): Promise<SubmissionStatusResponse> {
-    const response = await this.axiosInstance.get<SubmissionStatusResponse>(`/submission/${submissionId}/status`);
+    const mockSubmission = this.mockSubmissions.get(submissionId);
+    if (MOCK_SUBMISSION_JUDGING && mockSubmission) {
+      mockSubmission.statusChecks += 1;
+      const status: SubmissionStatus = mockSubmission.statusChecks <= 2 ? 'pending' : 'accepted';
+      mockSubmission.details.status = status;
+      return { status };
+    }
+
+    const response = await this.axiosInstance.get<SubmissionStatusResponse>(
+      `/submission/${submissionId}/status`,
+      { timeout: 10_000 },
+    );
     return response.data;
   }
 
   async getSubmissionDetails(submissionId: string): Promise<SubmissionDetailsResponse> {
-    const response = await this.axiosInstance.get<SubmissionDetailsResponse>(`/submission/${submissionId}/details`);
+    const mockSubmission = this.mockSubmissions.get(submissionId);
+    if (MOCK_SUBMISSION_JUDGING && mockSubmission) {
+      return mockSubmission.details;
+    }
+
+    const response = await this.axiosInstance.get<SubmissionDetailsResponse>(
+      `/submission/${submissionId}/details`,
+      { timeout: 10_000 },
+    );
     return response.data;
   }
 
   async listUserSubmissions(problemId: string, page: number = 0): Promise<SubmissionDetailsResponse[]> {
     const response = await this.axiosInstance.get<{ submissions: SubmissionDetailsResponse[] }>(
-      `/submission/list?problem_id=${problemId}&page=${page}`
+      '/submission/list',
+      {
+        params: { problem_id: problemId, page },
+        timeout: 10_000,
+      },
     );
-    return response.data.submissions || [];
+    return (response.data.submissions || []).map((submission) => {
+      const mockSubmission = this.mockSubmissions.get(submission.id);
+      return MOCK_SUBMISSION_JUDGING && mockSubmission
+        ? { ...submission, ...mockSubmission.details }
+        : submission;
+    });
+  }
+
+  private rememberMockSubmission(
+    submissionId: string,
+    submission: {
+      contestId: string;
+      problemId: string;
+      type: SubmissionType;
+      language?: string;
+    }
+  ): void {
+    if (!MOCK_SUBMISSION_JUDGING) return;
+
+    const createdAt = Math.floor(Date.now() / 1000);
+    const testCaseResults: TestCaseResult[] = submission.type === 'code'
+      ? [
+          {
+            id: `${submissionId}-case-1`,
+            submission_id: submissionId,
+            test_case_id: '1',
+            status: 'pass',
+            runtime: 12,
+            memory: 1024,
+            created_at: createdAt,
+          },
+          {
+            id: `${submissionId}-case-2`,
+            submission_id: submissionId,
+            test_case_id: '2',
+            status: 'pass',
+            runtime: 18,
+            memory: 1104,
+            created_at: createdAt,
+          },
+        ]
+      : [];
+
+    this.mockSubmissions.set(submissionId, {
+      statusChecks: 0,
+      details: {
+        id: submissionId,
+        problem_id: submission.problemId,
+        contest_id: submission.contestId,
+        type: submission.type,
+        status: 'pending',
+        language: submission.language,
+        created_at: createdAt,
+        runtime: submission.type === 'code' ? 18 : 0,
+        memory: submission.type === 'code' ? 1104 : 0,
+        test_case_results: testCaseResults,
+      },
+    });
   }
 
   async registerForContest(contestId: string): Promise<void> {
@@ -140,9 +250,22 @@ export interface SubmissionResponse {
   submission_id: string;
 }
 
+export type SubmissionType = 'code' | 'mcq';
+
+export type SubmissionStatus =
+  | 'pending'
+  | 'processing'
+  | 'accepted'
+  | 'wrong_answer'
+  | 'tle'
+  | 'mle'
+  | 'rte'
+  | 'failed_to_process'
+  | 'completed'
+  | 'failed';
+
 export interface SubmissionStatusResponse {
-  submission_id: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: SubmissionStatus;
   score?: number;
   max_score?: number;
   test_cases_passed?: number;
@@ -151,22 +274,32 @@ export interface SubmissionStatusResponse {
 }
 
 export interface SubmissionDetailsResponse {
-  submission_id: string;
+  id: string;
+  user_id?: string;
   problem_id: string;
   contest_id: string;
-  status: string;
-  score: number;
-  max_score: number;
+  type: SubmissionType;
+  status: SubmissionStatus;
+  score?: number;
+  max_score?: number;
   language?: string;
-  submitted_at: number;
+  option?: number[];
+  created_at: number;
+  runtime?: number;
+  memory?: number;
   test_case_results?: TestCaseResult[];
+  code?: string;
+  error_message?: string;
 }
 
 export interface TestCaseResult {
+  id?: string;
+  submission_id?: string;
   test_case_id: string;
-  status: 'passed' | 'failed' | 'error';
+  status: 'pass' | 'passed' | 'wrong_answer' | 'tle' | 'mle' | 'rte' | 'failed' | 'error';
   runtime?: number;
   memory?: number;
+  created_at?: number;
   error_message?: string;
 }
 export interface ApiError {

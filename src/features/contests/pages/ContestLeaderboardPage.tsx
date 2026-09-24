@@ -4,6 +4,7 @@ import { LeaderboardTable } from '../components/LeaderboardTable';
 
 export const ContestLeaderboardPage = () => {
   const { contestId } = useParams<{ contestId: string }>();
+  const leaderboardState = useLeaderboard(contestId || '');
 
   if (!contestId) {
     return (
@@ -25,7 +26,7 @@ export const ContestLeaderboardPage = () => {
     isLoading,
     error,
     totalParticipants,
-  } = useLeaderboard(contestId);
+  } = leaderboardState;
 
 
   if (isLoading) {

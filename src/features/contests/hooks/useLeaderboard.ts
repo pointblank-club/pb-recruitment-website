@@ -1,15 +1,25 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { LeaderboardEntry, Contest } from '../problem.types';
 import { contestApi } from '@/services/api/contestApi';
+import { useAuth } from '@/lib/AuthContext';
 
 export const useLeaderboard = (contestId: string) => {
+  const { user } = useAuth();
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [contest, setContest] = useState<Contest | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentUserId] = useState('current-user');
+  const currentUserId = user?.uid;
 
   useEffect(() => {
+    if (!contestId) {
+      setLeaderboard([]);
+      setContest(null);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
     const fetchLeaderboard = async () => {
       try {
         setIsLoading(true);
