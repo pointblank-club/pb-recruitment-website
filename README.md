@@ -1,5 +1,12 @@
 # React + TypeScript + Vite
 
+## Local submission judging
+
+Until the judging worker is available, local development defaults to a mock judging response. The
+frontend exercises the normal polling flow with two `pending` responses followed by `accepted`,
+including mock test-case metrics. Set `VITE_MOCK_SUBMISSION_JUDGING=false` to use the backend in
+development. Production builds use the real backend unless the flag is explicitly set to `true`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

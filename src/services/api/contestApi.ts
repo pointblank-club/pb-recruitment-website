@@ -5,6 +5,8 @@ import { auth } from '@/lib/firebase';
 import { encodeBase64 } from '@/lib/base64';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+// TODO(PBR-2): Delete mockJudgingSetting, MOCK_SUBMISSION_JUDGING, MockSubmission,
+// mockSubmissions, rememberMockSubmission, and all mock branches when the judge ships.
 const mockJudgingSetting = import.meta.env.VITE_MOCK_SUBMISSION_JUDGING;
 const MOCK_SUBMISSION_JUDGING = mockJudgingSetting === 'true'
   || (import.meta.env.DEV && mockJudgingSetting !== 'false');
@@ -176,7 +178,7 @@ class ContestApiService {
     return (response.data.submissions || []).map((submission) => {
       const mockSubmission = this.mockSubmissions.get(submission.id);
       return MOCK_SUBMISSION_JUDGING && mockSubmission
-        ? { ...submission, ...mockSubmission.details }
+        ? { ...mockSubmission.details, ...submission }
         : submission;
     });
   }

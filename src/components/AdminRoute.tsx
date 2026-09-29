@@ -1,40 +1,33 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { adminApi } from '@/services/api/adminApi';
-import { useAuth } from '@/lib/AuthContext';
+import { AuthenticatedRoute } from '@/components/AuthenticatedRoute';
 
 interface AdminRouteProps {
   children: React.ReactNode;
 }
 
-export const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
+const AdminAuthorization: React.FC<AdminRouteProps> = ({ children }) => {
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
-  const { user, loading } = useAuth();
 
   useEffect(() => {
+    let cancelled = false;
+
     const checkAdminAccess = async () => {
-      // Wait for auth to finish loading
-      if (loading) {
-        return;
-      }
-
-      // If no user is logged in, deny access
-      if (!user) {
-        setIsAuthorized(false);
-        return;
-      }
-
       try {
         await adminApi.checkAdminAccess();
-        setIsAuthorized(true);
+        if (!cancelled) setIsAuthorized(true);
       } catch (error) {
         console.error('Admin access denied:', error);
-        setIsAuthorized(false);
+        if (!cancelled) setIsAuthorized(false);
       }
     };
 
-    checkAdminAccess();
-  }, [user, loading]);
+    void checkAdminAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (isAuthorized === null) {
     // Loading state - you can replace this with a proper loading component
@@ -51,3 +44,9 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
 
   return <>{children}</>;
 };
+
+export const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => (
+  <AuthenticatedRoute>
+    <AdminAuthorization>{children}</AdminAuthorization>
+  </AuthenticatedRoute>
+);

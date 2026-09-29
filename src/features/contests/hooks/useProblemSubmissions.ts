@@ -198,7 +198,6 @@ export const useProblemSubmissions = (contestId: string, problemId: string) => {
             message: detailsMessage || statusResponse.error_message || details.error_message,
           });
           setHistory((current) => mergeSubmissions([details], current));
-          void refreshHistory();
           return;
         }
       } catch (error) {
@@ -235,7 +234,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string) => {
           message: 'Judging is taking longer than expected. Your submission was saved; you can check again.',
         }
       : current);
-  }, [refreshHistory]);
+  }, []);
 
   const submit = useCallback(async (
     createSubmission: () => Promise<SubmissionResponse>,

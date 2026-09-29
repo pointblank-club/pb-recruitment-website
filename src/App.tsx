@@ -38,8 +38,7 @@ const App: React.FC = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/contests/:contestId/leaderboard" element={<ContestLeaderboardPage />} />
+        <Route path="/profile" element={<AuthenticatedRoute><Profile /></AuthenticatedRoute>} />
         <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
         <Route path="/admin/contest/create" element={<AdminRoute><AddContest /></AdminRoute>} />
         <Route path="/admin/contest/:contestId/edit" element={<AdminRoute><AddContest /></AdminRoute>} />
