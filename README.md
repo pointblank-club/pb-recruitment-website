@@ -2,10 +2,13 @@
 
 ## Local submission judging
 
-Until the judging worker is available, local development defaults to a mock judging response. The
-frontend exercises the normal polling flow with two `pending` responses followed by `accepted`,
-including mock test-case metrics. Set `VITE_MOCK_SUBMISSION_JUDGING=false` to use the backend in
-development. Production builds use the real backend unless the flag is explicitly set to `true`.
+Until the judging worker is available (PBR-2), submissions stay `pending` forever, so the polling UI
+ends in the "Verdict delayed" state. To exercise the full flow locally, set
+`VITE_MOCK_SUBMISSION_JUDGING=true`: the real submit call still happens, but status checks return two
+`pending` responses followed by `accepted`, with mock test-case metrics.
+
+This is **opt-in and ignored in production builds** — contestants can never be shown a fabricated
+verdict. Leave it unset to develop against the real backend.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

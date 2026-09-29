@@ -7,9 +7,8 @@ import { encodeBase64 } from '@/lib/base64';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 // TODO(PBR-2): Delete mockJudgingSetting, MOCK_SUBMISSION_JUDGING, MockSubmission,
 // mockSubmissions, rememberMockSubmission, and all mock branches when the judge ships.
-const mockJudgingSetting = import.meta.env.VITE_MOCK_SUBMISSION_JUDGING;
-const MOCK_SUBMISSION_JUDGING = mockJudgingSetting === 'true'
-  || (import.meta.env.DEV && mockJudgingSetting !== 'false');
+const MOCK_SUBMISSION_JUDGING =
+  import.meta.env.VITE_MOCK_SUBMISSION_JUDGING === 'true' && !import.meta.env.PROD;
 type ContestPayload = ConstructorParameters<typeof Contest>[0];
 
 interface MockSubmission {
