@@ -1,114 +1,253 @@
 import React, { useState } from "react";
+import axios from "axios";
+import { toast } from "react-toastify";
+import {
+  adminApi,
+  type AdminProblem,
+  type AdminProblemSummary,
+  type AdminProblemType,
+  type ProblemTestCase,
+  type UpsertProblemPayload,
+} from "@/services/api/adminApi";
 
-interface Problem {
-  id: string;
+interface ProblemFormData {
   title: string;
   description: string;
   points: number;
-  type: "code" | "mcq";
-  // MCQ specific fields
-  options?: string[];
-  correctAnswer?: number; 
-  expectedOutput?: string;
-  timeLimit?: number; 
-  memoryLimit?: number; 
+  type: AdminProblemType;
+  options: string[];
+  correctAnswer: number;
+  testcases: ProblemTestCase[];
 }
 
 interface ProblemManagerProps {
-  problems: Problem[];
-  setProblems: (problems: Problem[]) => void;
+  contestId: string;
+  problems: AdminProblemSummary[];
+  onProblemSaved: (problem: AdminProblemSummary) => void;
+  onProblemDeleted: (problemId: string) => void;
 }
 
-const ProblemManager: React.FC<ProblemManagerProps> = ({ problems, setProblems }) => {
+const emptyTestCase = (): ProblemTestCase => ({ input: "", expected_output: "" });
+
+const initialFormData = (): ProblemFormData => ({
+  title: "",
+  description: "",
+  points: 100,
+  type: "code",
+  options: ["", "", "", ""],
+  correctAnswer: 0,
+  testcases: [emptyTestCase()],
+});
+
+const unpackDescription = (description: string): string => {
+  try {
+    const parsed: unknown = JSON.parse(description);
+    if (typeof parsed === "object" && parsed !== null) {
+      const value = (parsed as Record<string, unknown>).description;
+      if (typeof value === "string") return value;
+    }
+  } catch {
+    // Older problems may already store the description as plain text.
+  }
+  return description;
+};
+
+const formDataFromProblem = (problem: AdminProblem): ProblemFormData => ({
+  title: problem.name,
+  description: unpackDescription(problem.description),
+  points: problem.score,
+  type: problem.type,
+  options: problem.options.length > 0 ? problem.options : ["", "", "", ""],
+  correctAnswer: problem.answer[0] ?? 0,
+  testcases: problem.testcases.length > 0 ? problem.testcases : [emptyTestCase()],
+});
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (axios.isAxiosError(error)) {
+    const responseData: unknown = error.response?.data;
+    if (typeof responseData === "object" && responseData !== null) {
+      const data = responseData as Record<string, unknown>;
+      if (typeof data.error === "string") return data.error;
+      if (typeof data.message === "string") return data.message;
+    }
+    if (error.message) return error.message;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
+const ProblemManager: React.FC<ProblemManagerProps> = ({
+  contestId,
+  problems,
+  onProblemSaved,
+  onProblemDeleted,
+}) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProblem, setEditingProblem] = useState<Problem | null>(null);
-  const [formData, setFormData] = useState<Problem>({
-    id: "",
-    title: "",
-    description: "",
-    points: 100,
-    type: "code",
-    options: ["", "", "", ""],
-    correctAnswer: 0,
-    expectedOutput: "",
-    timeLimit: 1,
-    memoryLimit: 256,
-  });
+  const [editingProblemId, setEditingProblemId] = useState<string | null>(null);
+  const [loadingProblemId, setLoadingProblemId] = useState<string | null>(null);
+  const [deletingProblemId, setDeletingProblemId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [formData, setFormData] = useState<ProblemFormData>(initialFormData);
+
+  const resetForm = () => {
+    setFormData(initialFormData());
+    setEditingProblemId(null);
+    setFormError("");
+    setIsModalOpen(false);
+  };
+
+  const openCreateModal = () => {
+    setFormData(initialFormData());
+    setEditingProblemId(null);
+    setFormError("");
+    setIsModalOpen(true);
+  };
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: name === "points" || name === "timeLimit" || name === "memoryLimit" || name === "correctAnswer"
-        ? parseInt(value)
-        : value,
+    const { name, value } = event.target;
+    setFormData((current) => ({
+      ...current,
+      [name]: name === "points" ? Number(value) : value,
     }));
   };
 
   const handleOptionChange = (index: number, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      options: prev.options?.map((opt, i) => (i === index ? value : opt)) || ["", "", "", ""],
+    setFormData((current) => ({
+      ...current,
+      options: current.options.map((option, optionIndex) => (
+        optionIndex === index ? value : option
+      )),
     }));
   };
 
-  const handleTypeChange = (type: "code" | "mcq") => {
-    setFormData((prev) => ({
-      ...prev,
+  const handleTestCaseChange = (
+    index: number,
+    field: keyof ProblemTestCase,
+    value: string,
+  ) => {
+    setFormData((current) => ({
+      ...current,
+      testcases: current.testcases.map((testcase, testcaseIndex) => (
+        testcaseIndex === index ? { ...testcase, [field]: value } : testcase
+      )),
+    }));
+  };
+
+  const addTestCase = () => {
+    setFormData((current) => ({
+      ...current,
+      testcases: [...current.testcases, emptyTestCase()],
+    }));
+  };
+
+  const removeTestCase = (index: number) => {
+    setFormData((current) => ({
+      ...current,
+      testcases: current.testcases.filter((_, testcaseIndex) => testcaseIndex !== index),
+    }));
+  };
+
+  const handleTypeChange = (type: AdminProblemType) => {
+    setFormData((current) => ({
+      ...current,
       type,
-      ...(type === "mcq"
-        ? { options: ["", "", "", ""], correctAnswer: 0 }
-        : { expectedOutput: "", timeLimit: 1, memoryLimit: 256 }),
+      options: current.options.length > 0 ? current.options : ["", "", "", ""],
+      testcases: current.testcases.length > 0 ? current.testcases : [emptyTestCase()],
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editingProblem) {
-      setProblems(problems.map((p) => (p.id === editingProblem.id ? formData : p)));
-    } else {
-      setProblems([...problems, formData]);
-    }
-    resetForm();
-  };
-
-  const handleEdit = (problem: Problem) => {
-    setEditingProblem(problem);
-    setFormData(problem);
-    setIsModalOpen(true);
-  };
-
-  const handleDelete = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this problem?")) {
-      setProblems(problems.filter((p) => p.id !== id));
+  const handleEdit = async (problem: AdminProblemSummary) => {
+    setLoadingProblemId(problem.id);
+    try {
+      const details = await adminApi.getProblemById(contestId, problem.id);
+      setFormData(formDataFromProblem(details));
+      setEditingProblemId(problem.id);
+      setFormError("");
+      setIsModalOpen(true);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to load the problem."));
+    } finally {
+      setLoadingProblemId(null);
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      id: "",
-      title: "",
-      description: "",
-      points: 100,
-      type: "code",
-      options: ["", "", "", ""],
-      correctAnswer: 0,
-      expectedOutput: "",
-      timeLimit: 1,
-      memoryLimit: 256,
-    });
-    setEditingProblem(null);
-    setIsModalOpen(false);
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setFormError("");
+
+    if (formData.type === "code" && formData.testcases.length === 0) {
+      setFormError("Add at least one testcase for a coding problem.");
+      return;
+    }
+
+    const basePayload = {
+      name: formData.title.trim(),
+      description: formData.description,
+      score: formData.points,
+    };
+    const payload: UpsertProblemPayload = formData.type === "code"
+      ? {
+          ...basePayload,
+          type: "code",
+          testcases: formData.testcases,
+        }
+      : {
+          ...basePayload,
+          type: "mcq",
+          answer: [formData.correctAnswer],
+          options: formData.options,
+        };
+
+    setIsSaving(true);
+    try {
+      const savedProblem = editingProblemId
+        ? await adminApi.updateProblem(contestId, editingProblemId, payload)
+        : await adminApi.createProblem(contestId, payload);
+
+      if (!savedProblem.id) {
+        throw new Error("The backend did not return a problem ID.");
+      }
+
+      onProblemSaved({
+        id: savedProblem.id,
+        name: payload.name,
+        score: payload.score,
+        type: payload.type,
+      });
+      toast.success(editingProblemId ? "Problem updated." : "Problem created.");
+      resetForm();
+    } catch (error) {
+      setFormError(getErrorMessage(error, "Failed to save the problem."));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (problem: AdminProblemSummary) => {
+    if (!window.confirm(`Delete “${problem.name}”? This cannot be undone.`)) return;
+
+    setDeletingProblemId(problem.id);
+    try {
+      await adminApi.deleteProblem(contestId, problem.id);
+      onProblemDeleted(problem.id);
+      toast.success("Problem deleted.");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to delete the problem."));
+    } finally {
+      setDeletingProblemId(null);
+    }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end mb-4">
+      <div className="mb-4 flex justify-end">
         <button
-          onClick={() => setIsModalOpen(true)}
-          className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black px-6 py-3 rounded-lg font-semibold transition-all duration-200"
+          type="button"
+          onClick={openCreateModal}
+          className="rounded-lg bg-gradient-to-r from-green-600 to-green-500 px-6 py-3 font-semibold text-black transition-all duration-200 hover:from-green-700 hover:to-green-600"
         >
           + Add Problem
         </button>
@@ -116,60 +255,49 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({ problems, setProblems }
 
       <div className="grid gap-4">
         {problems.length === 0 ? (
-          <div className="text-center py-12 bg-gray-800 rounded-lg border border-gray-700">
+          <div className="rounded-lg border border-gray-700 bg-gray-800 py-12 text-center">
             <p className="text-gray-400">No problems created for this contest yet.</p>
           </div>
         ) : (
           problems.map((problem) => (
             <div
               key={problem.id}
-              className="bg-gray-800 border border-gray-700 rounded-lg p-6 hover:border-green-500 transition-all duration-200"
+              className="rounded-lg border border-gray-700 bg-gray-800 p-6 transition-all duration-200 hover:border-green-500"
             >
-              <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-                <div className="flex-grow min-w-0">
-                  <div className="flex items-center gap-4 mb-2">
-                    <h4 className="text-xl font-bold text-green-400">{problem.title}</h4>
-                    <span className="text-sm text-green-400">{problem.points} points</span>
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                      problem.type === 'code' 
-                        ? 'bg-blue-900 text-blue-300 border border-blue-700' 
-                        : 'bg-purple-900 text-purple-300 border border-purple-700'
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0 flex-grow">
+                  <div className="mb-3 flex flex-wrap items-center gap-4">
+                    <h4 className="text-xl font-bold text-green-400">{problem.name}</h4>
+                    <span className="text-sm text-green-400">{problem.score} points</span>
+                    <span className={`rounded border px-2 py-1 text-xs font-semibold ${
+                      problem.type === "code"
+                        ? "border-blue-700 bg-blue-900 text-blue-300"
+                        : "border-purple-700 bg-purple-900 text-purple-300"
                     }`}>
-                      {problem.type === 'code' ? 'CODE' : 'MCQ'}
+                      {problem.type === "code" ? "CODE" : "MCQ"}
                     </span>
                   </div>
-                  <p className="text-gray-400 mb-4 line-clamp-2">{problem.description}</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-500">Problem ID:</span>
-                      <span className="text-gray-300 ml-2">{problem.id}</span>
-                    </div>
-                    {problem.type === 'code' && (
-                      <>
-                        <div>
-                          <span className="text-gray-500">Time Limit:</span>
-                          <span className="text-gray-300 ml-2">{problem.timeLimit}s</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Memory Limit:</span>
-                          <span className="text-gray-300 ml-2">{problem.memoryLimit}MB</span>
-                        </div>
-                      </>
-                    )}
+                  <div className="text-sm">
+                    <span className="text-gray-500">Problem ID:</span>
+                    <span className="ml-2 break-all text-gray-300">{problem.id}</span>
                   </div>
                 </div>
-                <div className="flex flex-col gap-2 md:ml-4 w-full md:w-auto mt-2 md:mt-0">
+                <div className="flex w-full flex-col gap-2 md:ml-4 md:w-auto">
                   <button
-                    onClick={() => handleEdit(problem)}
-                    className="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors font-semibold"
+                    type="button"
+                    onClick={() => void handleEdit(problem)}
+                    disabled={loadingProblemId === problem.id || deletingProblemId === problem.id}
+                    className="w-full rounded bg-gray-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Edit
+                    {loadingProblemId === problem.id ? "Loading..." : "Edit"}
                   </button>
                   <button
-                    onClick={() => handleDelete(problem.id)}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition-colors font-semibold"
+                    type="button"
+                    onClick={() => void handleDelete(problem)}
+                    disabled={deletingProblemId === problem.id || loadingProblemId === problem.id}
+                    className="w-full rounded bg-red-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Delete
+                    {deletingProblemId === problem.id ? "Deleting..." : "Delete"}
                   </button>
                 </div>
               </div>
@@ -179,32 +307,22 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({ problems, setProblems }
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 rounded-lg p-4 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-green-500">
-            <h3 className="text-2xl font-bold text-green-400 mb-6">
-              {editingProblem ? "Edit Problem" : "Create New Problem"}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-green-500 bg-gray-900 p-4 sm:p-8">
+            <h3 className="mb-2 text-2xl font-bold text-green-400">
+              {editingProblemId ? "Edit Problem" : "Create New Problem"}
             </h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            {editingProblemId && (
+              <p className="mb-6 break-all text-sm text-gray-500">ID: {editingProblemId}</p>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-gray-400 mb-2">Problem ID</label>
-                <input
-                  type="text"
-                  name="id"
-                  value={formData.id}
-                  onChange={handleInputChange}
-                  disabled={!!editingProblem}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none disabled:opacity-50"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-gray-400 mb-2">Problem Type</label>
+                <label className="mb-2 block text-gray-400">Problem Type</label>
                 <select
-                  name="type"
                   value={formData.type}
-                  onChange={(e) => handleTypeChange(e.target.value as "code" | "mcq")}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                  onChange={(event) => handleTypeChange(event.target.value as AdminProblemType)}
+                  className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
                   required
                 >
                   <option value="code">Code Problem</option>
@@ -213,24 +331,25 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({ problems, setProblems }
               </div>
 
               <div>
-                <label className="block text-gray-400 mb-2">Problem Title</label>
+                <label className="mb-2 block text-gray-400">Problem Title</label>
                 <input
                   type="text"
                   name="title"
                   value={formData.title}
                   onChange={handleInputChange}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                  className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
                   required
                 />
               </div>
+
               <div>
-                <label className="block text-gray-400 mb-2">Description</label>
+                <label className="mb-2 block text-gray-400">Description</label>
                 <textarea
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
                   rows={6}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                  className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
                   required
                 />
               </div>
@@ -238,107 +357,136 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({ problems, setProblems }
               {formData.type === "mcq" && (
                 <>
                   <div className="space-y-3">
-                    <label className="block text-gray-400 mb-2">Options</label>
-                    {formData.options?.map((option, index) => (
+                    <label className="mb-2 block text-gray-400">Options</label>
+                    {formData.options.map((option, index) => (
                       <div key={index}>
-                        <label className="block text-gray-500 text-sm mb-1">
+                        <label className="mb-1 block text-sm text-gray-500">
                           Option {index + 1}
                         </label>
                         <input
                           type="text"
                           value={option}
-                          onChange={(e) => handleOptionChange(index, e.target.value)}
-                          className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                          onChange={(event) => handleOptionChange(index, event.target.value)}
+                          className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
                           required
-                          placeholder={`Enter option ${index + 1}`}
                         />
                       </div>
                     ))}
                   </div>
                   <div>
-                    <label className="block text-gray-400 mb-2">Correct Answer</label>
+                    <label className="mb-2 block text-gray-400">Correct Answer</label>
                     <select
-                      name="correctAnswer"
                       value={formData.correctAnswer}
-                      onChange={handleInputChange}
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                      onChange={(event) => setFormData((current) => ({
+                        ...current,
+                        correctAnswer: Number(event.target.value),
+                      }))}
+                      className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
                       required
                     >
-                      <option value={0}>Option 1</option>
-                      <option value={1}>Option 2</option>
-                      <option value={2}>Option 3</option>
-                      <option value={3}>Option 4</option>
+                      {formData.options.map((_, index) => (
+                        <option key={index} value={index}>Option {index + 1}</option>
+                      ))}
                     </select>
                   </div>
                 </>
               )}
 
               {formData.type === "code" && (
-                <>
-                  <div>
-                    <label className="block text-gray-400 mb-2">Expected Output</label>
-                    <textarea
-                      name="expectedOutput"
-                      value={formData.expectedOutput}
-                      onChange={handleInputChange}
-                      rows={4}
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none font-mono text-sm"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <label className="block text-gray-400 mb-2">Time Limit (seconds)</label>
-                      <input
-                        type="number"
-                        name="timeLimit"
-                        value={formData.timeLimit}
-                        onChange={handleInputChange}
-                        min="1"
-                        step="0.1"
-                        className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
-                        required
-                      />
+                      <h4 className="font-semibold text-gray-300">Testcases</h4>
+                      <p className="text-sm text-gray-500">
+                        Each coding problem requires an input and expected output pair.
+                      </p>
                     </div>
-                    <div>
-                      <label className="block text-gray-400 mb-2">Memory Limit (MB)</label>
-                      <input
-                        type="number"
-                        name="memoryLimit"
-                        value={formData.memoryLimit}
-                        onChange={handleInputChange}
-                        min="1"
-                        className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
-                        required
-                      />
-                    </div>
+                    <button
+                      type="button"
+                      onClick={addTestCase}
+                      className="rounded bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-600"
+                    >
+                      + Add Testcase
+                    </button>
                   </div>
-                </>
-              )}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-400 mb-2">Points</label>
-                  <input
-                    type="number"
-                    name="points"
-                    value={formData.points}
-                    onChange={handleInputChange}
-                    min="0"
-                    className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
-                    required
-                  />
+
+                  {formData.testcases.map((testcase, index) => (
+                    <fieldset
+                      key={index}
+                      className="space-y-3 rounded-lg border border-gray-700 bg-gray-800/60 p-4"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <legend className="font-semibold text-gray-300">Testcase {index + 1}</legend>
+                        <button
+                          type="button"
+                          onClick={() => removeTestCase(index)}
+                          disabled={formData.testcases.length === 1}
+                          className="text-sm font-semibold text-red-400 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <label className="mb-2 block text-sm text-gray-400">Input</label>
+                          <textarea
+                            value={testcase.input}
+                            onChange={(event) => handleTestCaseChange(index, "input", event.target.value)}
+                            rows={4}
+                            className="w-full rounded border border-gray-700 bg-gray-900 px-4 py-2 font-mono text-sm text-gray-300 focus:border-green-500 focus:outline-none"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-sm text-gray-400">Expected Output</label>
+                          <textarea
+                            value={testcase.expected_output}
+                            onChange={(event) => handleTestCaseChange(index, "expected_output", event.target.value)}
+                            rows={4}
+                            className="w-full rounded border border-gray-700 bg-gray-900 px-4 py-2 font-mono text-sm text-gray-300 focus:border-green-500 focus:outline-none"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </fieldset>
+                  ))}
                 </div>
+              )}
+
+              <div className="max-w-xs">
+                <label className="mb-2 block text-gray-400">Points</label>
+                <input
+                  type="number"
+                  name="points"
+                  value={formData.points}
+                  onChange={handleInputChange}
+                  min="1"
+                  className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                  required
+                />
               </div>
-              <div className="flex space-x-4 pt-4">
+
+              {formError && (
+                <p role="alert" className="rounded border border-red-800 bg-red-950/50 p-3 text-red-300">
+                  {formError}
+                </p>
+              )}
+
+              <div className="flex flex-col gap-3 pt-4 sm:flex-row">
                 <button
                   type="submit"
-                  className="flex-1 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black px-6 py-3 rounded-lg font-semibold transition-all duration-200"
+                  disabled={isSaving}
+                  className="flex-1 rounded-lg bg-gradient-to-r from-green-600 to-green-500 px-6 py-3 font-semibold text-black transition-all duration-200 hover:from-green-700 hover:to-green-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {editingProblem ? "Update Problem" : "Create Problem"}
+                  {isSaving
+                    ? "Saving..."
+                    : editingProblemId ? "Update Problem" : "Create Problem"}
                 </button>
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 px-6 py-3 rounded-lg font-semibold transition-all duration-200"
+                  disabled={isSaving}
+                  className="flex-1 rounded-lg bg-gray-800 px-6 py-3 font-semibold text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancel
                 </button>
