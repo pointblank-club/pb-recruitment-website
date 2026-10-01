@@ -39,12 +39,7 @@ export const MCQProblemView = ({ problem, onSubmit }: MCQProblemViewProps) => {
     }
   };
 
-  const options = problem.options || [
-    'Option A',
-    'Option B',
-    'Option C',
-    'Option D',
-  ];
+  const options = problem.options ?? [];
 
   return (
     <div className="flex-1 flex flex-col bg-black text-white">
@@ -79,44 +74,50 @@ export const MCQProblemView = ({ problem, onSubmit }: MCQProblemViewProps) => {
             <h2 className="text-lg font-semibold text-green-400 font-['DM_Sans']">
               Select Your Answer
             </h2>
-            <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer}>
-              <div className="space-y-2">
-                {options.map((option, index) => {
-                  const optionValue = index.toString();
-                  const optionLabel = String.fromCharCode(65 + index); // A, B, C, D...
+            {options.length === 0 ? (
+              <p role="alert" className="rounded-lg border border-red-800 bg-red-950/50 p-4 text-red-300">
+                This question has no answer options. Please contact the contest administrator.
+              </p>
+            ) : (
+              <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer}>
+                <div className="space-y-2">
+                  {options.map((option, index) => {
+                    const optionValue = index.toString();
+                    const optionLabel = String.fromCharCode(65 + index); // A, B, C, D...
 
-                  return (
-                    <div
-                      key={optionValue}
-                      className={`
-                        flex items-center gap-4 p-4 rounded-lg border transition-all cursor-pointer
-                        ${
-                          selectedAnswer === optionValue
-                            ? 'bg-green-900/20 border-green-500'
-                            : 'bg-gray-900/30 border-gray-700 hover:bg-gray-900/50'
-                        }
-                      `}
-                      onClick={() => setSelectedAnswer(optionValue)}
-                    >
-                      <RadioGroupItem
-                        value={optionValue}
-                        id={`option-${optionValue}`}
-                        className="border-2"
-                      />
-                      <Label
-                        htmlFor={`option-${optionValue}`}
-                        className="flex-1 cursor-pointer font-['DM_Sans'] text-base"
+                    return (
+                      <div
+                        key={optionValue}
+                        className={`
+                          flex items-center gap-4 p-4 rounded-lg border transition-all cursor-pointer
+                          ${
+                            selectedAnswer === optionValue
+                              ? 'bg-green-900/20 border-green-500'
+                              : 'bg-gray-900/30 border-gray-700 hover:bg-gray-900/50'
+                          }
+                        `}
+                        onClick={() => setSelectedAnswer(optionValue)}
                       >
-                        <span className="font-semibold text-green-400 mr-2">
-                          {optionLabel}.
-                        </span>
-                        <span className="text-white">{option}</span>
-                      </Label>
-                    </div>
-                  );
-                })}
-              </div>
-            </RadioGroup>
+                        <RadioGroupItem
+                          value={optionValue}
+                          id={`option-${optionValue}`}
+                          className="border-2"
+                        />
+                        <Label
+                          htmlFor={`option-${optionValue}`}
+                          className="flex-1 cursor-pointer font-['DM_Sans'] text-base"
+                        >
+                          <span className="font-semibold text-green-400 mr-2">
+                            {optionLabel}.
+                          </span>
+                          <span className="text-white">{option}</span>
+                        </Label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </RadioGroup>
+            )}
           </div>
 
           {problem.constraints && problem.constraints.length > 0 && (
@@ -149,7 +150,7 @@ export const MCQProblemView = ({ problem, onSubmit }: MCQProblemViewProps) => {
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={isSubmitting || !selectedAnswer}
+              disabled={isSubmitting || !selectedAnswer || options.length === 0}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-700 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
@@ -170,5 +171,4 @@ export const MCQProblemView = ({ problem, onSubmit }: MCQProblemViewProps) => {
     </div>
   );
 };
-
 

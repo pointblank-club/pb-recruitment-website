@@ -69,6 +69,17 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
       const data = responseData as Record<string, unknown>;
       if (typeof data.error === "string") return data.error;
       if (typeof data.message === "string") return data.message;
+      if (Array.isArray(data.errors)) {
+        const messages = data.errors.flatMap((item) => {
+          if (typeof item !== "object" || item === null) return [];
+          const validationError = item as Record<string, unknown>;
+          if (typeof validationError.message !== "string") return [];
+          return [typeof validationError.field === "string"
+            ? `${validationError.field}: ${validationError.message}`
+            : validationError.message];
+        });
+        if (messages.length > 0) return messages.join("; ");
+      }
     }
     if (error.message) return error.message;
   }

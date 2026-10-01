@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import Navbar from "./components/Navbar";
@@ -12,38 +12,33 @@ const AdminContestProblems: React.FC = () => {
   const [problems, setProblems] = useState<AdminProblemSummary[]>([]);
   const [contestName, setContestName] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-
-  const loadPage = useCallback(async () => {
-    if (!contestId) return;
-
-    setIsLoading(true);
-    setLoadError("");
-
-    const [contestResult, problemsResult] = await Promise.allSettled([
-      adminApi.getContestById(contestId),
-      adminApi.getContestProblems(contestId),
-    ]);
-
-    if (contestResult.status === "fulfilled" && contestResult.value) {
-      setContestName(contestResult.value.name);
-    } else {
-      setContestName(contestId);
-    }
-
-    if (problemsResult.status === "fulfilled") {
-      setProblems(problemsResult.value);
-    } else {
-      setProblems([]);
-      setLoadError("Existing problems could not be loaded. You can retry or create a new problem.");
-    }
-
-    setIsLoading(false);
-  }, [contestId]);
 
   useEffect(() => {
-    void loadPage();
-  }, [loadPage]);
+    if (!contestId) return;
+
+    let cancelled = false;
+    setIsLoading(true);
+
+    void Promise.all([
+      adminApi.getContestById(contestId).catch((error) => {
+        console.error("Failed to load contest details:", error);
+        return null;
+      }),
+      adminApi.getContestProblems(contestId).catch((error) => {
+        console.error("Failed to load contest problems:", error);
+        return [];
+      }),
+    ]).then(([contest, loadedProblems]) => {
+      if (cancelled) return;
+      setContestName(contest?.name ?? contestId);
+      setProblems(loadedProblems);
+      setIsLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId]);
 
   const handleProblemSaved = (problem: AdminProblemSummary) => {
     setProblems((current) => {
@@ -52,7 +47,6 @@ const AdminContestProblems: React.FC = () => {
         ? current.map((item) => item.id === problem.id ? problem : item)
         : [...current, problem];
     });
-    setLoadError("");
   };
 
   const handleProblemDeleted = (problemId: string) => {
@@ -88,19 +82,6 @@ const AdminContestProblems: React.FC = () => {
             Contest: <span className="text-green-400">{contestName || contestId}</span>
           </p>
         </div>
-
-        {loadError && (
-          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-yellow-700 bg-yellow-950/40 p-4 text-yellow-200 sm:flex-row sm:items-center sm:justify-between">
-            <p>{loadError}</p>
-            <button
-              type="button"
-              onClick={() => void loadPage()}
-              className="rounded bg-yellow-700 px-4 py-2 font-semibold text-white hover:bg-yellow-600"
-            >
-              Retry
-            </button>
-          </div>
-        )}
 
         {/* Problem Manager */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">

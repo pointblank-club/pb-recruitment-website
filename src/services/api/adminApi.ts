@@ -26,6 +26,12 @@ export interface ProblemTestCase {
   expected_output: string;
 }
 
+interface ProblemTestCaseResponse {
+  index?: number;
+  input: string;
+  expected_output?: string;
+}
+
 export interface AdminProblem extends AdminProblemSummary {
   contest_id: string;
   description: string;
@@ -44,8 +50,8 @@ interface AdminProblemResponse {
   type: AdminProblemType;
   answer?: number[];
   options?: string[];
-  testcases?: ProblemTestCase[];
-  test_cases?: ProblemTestCase[];
+  testcases?: ProblemTestCaseResponse[];
+  test_cases?: ProblemTestCaseResponse[];
 }
 
 interface ProblemPayloadBase {
@@ -65,20 +71,14 @@ export type UpsertProblemPayload =
       options: string[];
     });
 
-const normalizeProblem = (
+const normalizeProblemSummary = (
   problem: AdminProblemResponse,
-  contestId: string,
   problemId: string,
-): AdminProblem => ({
+): AdminProblemSummary => ({
   id: problem.id ?? problem.problem_id ?? problemId,
-  contest_id: problem.contest_id ?? contestId,
   name: problem.name,
-  description: problem.description ?? '',
   score: problem.score,
   type: problem.type,
-  answer: problem.answer ?? [],
-  options: problem.options ?? [],
-  testcases: problem.testcases ?? problem.test_cases ?? [],
 });
 
 class AdminApiService {
@@ -136,27 +136,87 @@ class AdminApiService {
     const response = await this.axiosInstance.get<AdminProblemResponse>(
       `/admin/${contestId}/problem/${problemId}`,
     );
-    return normalizeProblem(response.data, contestId, problemId);
+    const problem = response.data;
+    const baseProblem = {
+      ...normalizeProblemSummary(problem, problemId),
+      contest_id: problem.contest_id ?? contestId,
+      description: problem.description ?? '',
+    };
+
+    if (problem.type === 'code') {
+      const testcaseInputs = problem.testcases ?? problem.test_cases;
+      if (!testcaseInputs) {
+        throw new Error('The backend did not return this problem\'s testcase inputs.');
+      }
+
+      const answers = await this.getProblemAnswers(contestId, problemId);
+      const testcases = testcaseInputs.map((testcase, position) => {
+        if (typeof testcase.input !== 'string') {
+          throw new Error('The backend returned an invalid testcase input; editing was stopped.');
+        }
+        const answer = answers[testcase.index ?? position];
+        if (typeof answer !== 'string') {
+          throw new Error('The backend returned incomplete testcase answers; editing was stopped.');
+        }
+        return { input: testcase.input, expected_output: answer };
+      });
+
+      return {
+        ...baseProblem,
+        answer: [],
+        options: [],
+        testcases,
+      };
+    }
+
+    if (!problem.options || problem.options.length < 2) {
+      throw new Error('This MCQ cannot be edited safely because its options were not returned.');
+    }
+    if (!problem.answer || problem.answer.length === 0) {
+      throw new Error('This MCQ cannot be edited safely because its correct answer was not returned.');
+    }
+    if (problem.answer.length !== 1) {
+      throw new Error('This editor cannot safely modify an MCQ with multiple correct answers.');
+    }
+    if (!Number.isInteger(problem.answer[0])
+      || problem.answer[0] < 0
+      || problem.answer[0] >= problem.options.length) {
+      throw new Error('This MCQ cannot be edited because its stored answer is invalid.');
+    }
+
+    return {
+      ...baseProblem,
+      answer: problem.answer,
+      options: problem.options,
+      testcases: [],
+    };
   }
 
-  async createProblem(contestId: string, problem: UpsertProblemPayload): Promise<AdminProblem> {
+  async getProblemAnswers(contestId: string, problemId: string): Promise<string[]> {
+    const response = await this.axiosInstance.get<string[]>(
+      `/admin/${contestId}/${problemId}/answers`,
+    );
+    return response.data;
+  }
+
+  async createProblem(contestId: string, problem: UpsertProblemPayload): Promise<AdminProblemSummary> {
     const response = await this.axiosInstance.post<AdminProblemResponse>(
       `/admin/${contestId}/problem`,
       problem,
     );
-    return normalizeProblem(response.data, contestId, response.data.id ?? '');
+    return normalizeProblemSummary(response.data, response.data.id ?? '');
   }
 
   async updateProblem(
     contestId: string,
     problemId: string,
     problem: UpsertProblemPayload,
-  ): Promise<AdminProblem> {
+  ): Promise<AdminProblemSummary> {
     const response = await this.axiosInstance.put<AdminProblemResponse>(
       `/admin/${contestId}/problem/${problemId}`,
       problem,
     );
-    return normalizeProblem(response.data, contestId, problemId);
+    return normalizeProblemSummary(response.data, problemId);
   }
 
   async deleteProblem(contestId: string, problemId: string): Promise<void> {
