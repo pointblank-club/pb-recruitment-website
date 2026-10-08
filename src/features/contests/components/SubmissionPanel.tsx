@@ -37,6 +37,7 @@ const VERDICT_LABELS: Record<SubmissionStatus, string> = {
   mle: 'Memory limit exceeded',
   rte: 'Runtime error',
   failed_to_process: 'Compilation error',
+  judge_error: 'Judge unavailable — please resubmit',
   completed: 'Completed',
   failed: 'Failed',
 };

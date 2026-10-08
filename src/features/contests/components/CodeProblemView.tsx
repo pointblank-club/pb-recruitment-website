@@ -188,12 +188,12 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
                     </span>
                     {problem.time_limit && (
                       <span className="flex items-center text-white gap-1">
-                        <span className="text-white"></span> {problem.time_limit}
+                        {problem.time_limit} ms
                       </span>
                     )}
                     {problem.memory_limit && (
                       <span className="flex items-center text-white gap-1">
-                        <span className="text-white"></span> {problem.memory_limit}
+                        {problem.memory_limit} MB
                       </span>
                     )}
                   </div>

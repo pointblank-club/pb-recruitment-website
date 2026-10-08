@@ -103,7 +103,8 @@ class ContestApiService {
         language,
         type: 'code',
       },
-      { timeout: 15_000 },
+      // Preparation (5s), dispatch (10s), bookkeeping (10s), and response margin.
+      { timeout: 30_000 },
     );
     this.rememberMockSubmission(response.data.submission_id, {
       contestId,
@@ -262,6 +263,7 @@ export type SubmissionStatus =
   | 'mle'
   | 'rte'
   | 'failed_to_process'
+  | 'judge_error'
   | 'completed'
   | 'failed';
 

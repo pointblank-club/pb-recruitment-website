@@ -12,8 +12,8 @@ export interface Problem {
   input_format?: string;
   output_format?: string;
   examples?: ProblemExample[];
-  time_limit?: string;
-  memory_limit?: string;
+  time_limit?: number;
+  memory_limit?: number;
   options?: string[];  // For MCQ questions
 }
 
