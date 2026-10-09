@@ -1,4 +1,4 @@
-export type ProblemType = 'Code' | 'MCQ';
+export type ProblemType = 'code' | 'mcq';
 
 export interface Problem {
   id: string;

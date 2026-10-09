@@ -16,8 +16,8 @@ export const ProblemAccordion = ({ problems, contestId }: ProblemAccordionProps)
     );
   }
 
-  const codeProblems = problems.filter(problem => problem.type === 'Code');
-  const mcqProblems = problems.filter(problem => problem.type === 'MCQ');
+  const codeProblems = problems.filter(problem => problem.type === 'code');
+  const mcqProblems = problems.filter(problem => problem.type === 'mcq');
 
   return (
     <div className="w-full">
