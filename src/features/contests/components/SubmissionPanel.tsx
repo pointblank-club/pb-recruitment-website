@@ -184,7 +184,7 @@ export const SubmissionPanel = ({
                     )}
                   </div>
 
-                  {problemType === 'Code' && (
+                  {problemType === 'code' && (
                     <div className="overflow-hidden rounded-lg border border-gray-800 bg-black/30">
                       <div className="grid grid-cols-[minmax(90px,1fr)_auto_auto_auto] gap-3 bg-gray-900 px-3 py-2 text-[10px] uppercase tracking-wide text-gray-500">
                         <span>Case</span>
