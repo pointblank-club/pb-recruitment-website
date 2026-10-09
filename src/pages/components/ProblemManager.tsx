@@ -39,22 +39,9 @@ const initialFormData = (): ProblemFormData => ({
   testcases: [emptyTestCase()],
 });
 
-const unpackDescription = (description: string): string => {
-  try {
-    const parsed: unknown = JSON.parse(description);
-    if (typeof parsed === "object" && parsed !== null) {
-      const value = (parsed as Record<string, unknown>).description;
-      if (typeof value === "string") return value;
-    }
-  } catch {
-    // Older problems may already store the description as plain text.
-  }
-  return description;
-};
-
 const formDataFromProblem = (problem: AdminProblem): ProblemFormData => ({
   title: problem.name,
-  description: unpackDescription(problem.description),
+  description: problem.description,
   points: problem.score,
   type: problem.type,
   options: problem.options.length > 0 ? problem.options : ["", "", "", ""],
