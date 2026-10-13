@@ -1,14 +1,33 @@
 # React + TypeScript + Vite
 
-## Local submission judging
+## Local development
 
-Until the judging worker is available (PBR-2), submissions stay `pending` forever, so the polling UI
-ends in the "Verdict delayed" state. To exercise the full flow locally, set
-`VITE_MOCK_SUBMISSION_JUDGING=true`: the real submit call still happens, but status checks return two
-`pending` responses followed by `accepted`, with mock test-case metrics.
+Use Node.js 22.12 or newer and configure `.env` from `.env.example`:
 
-This is **opt-in and ignored in production builds** — contestants can never be shown a fabricated
-verdict. Leave it unset to develop against the real backend.
+```dotenv
+VITE_API_BASE_URL=http://localhost:8080
+VITE_MOCK_SUBMISSION_JUDGING=false
+```
+
+Set all `VITE_FIREBASE_*` values from a registered web app in the **same Firebase
+project** as the backend service account. The current local backend uses
+`pb-recruitment`; tokens from a different project will be rejected.
+
+Start the Go backend on port 8080 using the
+[backend instructions](https://github.com/pointblank-club/pb-recruitment-server#how-to-run), then start the frontend:
+
+```bash
+npm install
+npm run dev -- --host localhost --port 5173 --strictPort
+```
+
+Open `http://localhost:5173`. The backend permits this origin in its CORS settings.
+Restart Vite after changing `.env`. Local code judging uses the backend's EC2 SSH
+tunnel and recovery polling; keep the tunnel running.
+
+For UI-only development, `VITE_MOCK_SUBMISSION_JUDGING=true` replaces verdict
+polling with fabricated accepted results after the real submit call. It is ignored
+in production builds; keep it false when verifying real judging.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
