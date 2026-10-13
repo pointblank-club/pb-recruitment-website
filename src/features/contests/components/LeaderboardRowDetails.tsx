@@ -47,7 +47,7 @@ export const LeaderboardRowDetails = ({ problemScores }: LeaderboardRowDetailsPr
                 </div>
 
                 <div className="flex items-center justify-between text-xs text-gray-500 font-['DM_Sans']">
-                  <span>ATTEMPTS: {problemScore.attempts}</span>
+                  <span title="Includes judge errors, which do not count toward the final-ranking attempt penalty">SUBMISSIONS: {problemScore.attempts}</span>
                   {problemScore.solved_at && (
                     <span>{formatTimestamp(problemScore.solved_at)}</span>
                   )}

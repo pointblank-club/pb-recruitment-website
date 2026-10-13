@@ -45,7 +45,7 @@ export interface ProblemScore {
   problem_name: string;
   score: number;
   max_score: number;
-  attempts: number;
+  attempts: number; // Total submissions, including judge errors; not the ranking penalty.
   solved_at?: number;
 }
 
