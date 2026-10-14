@@ -1,3 +1,18 @@
+export interface PaginatedLeaderboard {
+  entries: LeaderboardEntry[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
+}
+
+export interface CustomRunResponse {
+  stdout: string;
+  stderr: string;
+  compile_output: string;
+  status: string;
+  time: string;
+  memory: number;
+}
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
 import type { Problem, LeaderboardEntry } from '@/features/contests/problem.types';
 import { Contest } from "@/models/contest";
@@ -66,12 +81,56 @@ class ContestApiService {
   }
 
   async getProblemById(contestId: string, problemId: string): Promise<Problem> {
-    const response = await this.axiosInstance.get<Problem>(`/contests/${contestId}/problems/${problemId}`);
-    return response.data;
+    const response = await this.axiosInstance.get<any>(`/contests/${contestId}/problems/${problemId}`);
+    const data = response.data;
+    if (!data.id && data.problem_id) {
+      data.id = data.problem_id;
+    }
+    if (!data.examples && Array.isArray(data.testcases)) {
+      data.examples = data.testcases
+        .filter((tc: any) => tc.is_sample)
+        .map((tc: any, index: number) => ({
+          id: tc.index ?? index,
+          input: tc.input || "",
+          output: tc.expected_output || "",
+          explanation: tc.explanation || "",
+        }));
+    }
+    return data;
   }
 
-  async getContestLeaderboard(contestId: string): Promise<LeaderboardEntry[]> {
-    const response = await this.axiosInstance.get<LeaderboardEntry[]>(`/contests/${contestId}/leaderboard`);
+  async getContestLeaderboard(contestId: string, page: number = 0): Promise<PaginatedLeaderboard> {
+    const response = await this.axiosInstance.get<LeaderboardEntry[]>(
+      `/contests/${contestId}/leaderboard?page=${page}`
+    );
+    const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
+    const totalPages = parseInt(response.headers["x-total-pages"] || "1", 10);
+    const currentPage = parseInt(response.headers["x-current-page"] || `${page}`, 10);
+
+    return {
+      entries: response.data || [],
+      totalCount: totalCount || (response.data || []).length,
+      totalPages: totalPages || 1,
+      currentPage,
+    };
+  }
+
+  async runCustomInput(
+    contestId: string,
+    problemId: string,
+    code: string,
+    language: string,
+    stdin: string
+  ): Promise<CustomRunResponse> {
+    const response = await this.axiosInstance.post<CustomRunResponse>(
+      `/contests/${contestId}/problems/${problemId}/run`,
+      {
+        code,
+        language,
+        stdin,
+      },
+      { timeout: 20_000 }
+    );
     return response.data;
   }
 

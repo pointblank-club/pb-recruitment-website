@@ -23,6 +23,9 @@ export const ContestLeaderboardPage = () => {
     leaderboard,
     contest,
     currentUserRank,
+    page,
+    setPage,
+    totalPages,
     isLoading,
     error,
     totalParticipants,
@@ -96,6 +99,31 @@ export const ContestLeaderboardPage = () => {
           entries={leaderboard}
           currentUserId={currentUserRank?.user_id}
         />
+
+        {/* Pagination controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 text-sm text-gray-400 font-['DM_Sans']">
+            <span>
+              Page {page + 1} of {totalPages} ({totalParticipants} total participants)
+            </span>
+            <div className="flex gap-2">
+              <button
+                disabled={page === 0}
+                onClick={() => setPage(page - 1)}
+                className="px-3 py-1 bg-gray-900 border border-gray-800 rounded disabled:opacity-40 hover:text-white transition"
+              >
+                Previous
+              </button>
+              <button
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage(page + 1)}
+                className="px-3 py-1 bg-gray-900 border border-gray-800 rounded disabled:opacity-40 hover:text-white transition"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Empty State for Filtered Results */}
         {leaderboard.length === 0 && totalParticipants > 0 && (

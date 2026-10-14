@@ -9,7 +9,13 @@ export interface ContestRegistration {
   user_id: string;
   name: string;
   email: string;
+  usn?: string;
+  department?: string;
+  current_year?: number;
   registered_at?: number;
+  score?: number;
+  hidden?: boolean;
+  disqualified?: boolean;
 }
 
 export type AdminProblemType = 'code' | 'mcq';
@@ -249,6 +255,37 @@ class AdminApiService {
 
   async deleteContest(contestId: string): Promise<void> {
     await this.axiosInstance.delete(`/admin/contest/${contestId}`);
+  }
+
+  async updateContestantStatus(
+    contestId: string,
+    userId: string,
+    status: "Active" | "Hidden" | "Banned"
+  ): Promise<void> {
+    const payload = {
+      hidden: status === "Hidden",
+      disqualified: status === "Banned",
+    };
+    await this.axiosInstance.put(`/admin/${contestId}/leaderboard/${userId}`, payload);
+  }
+
+  async consolidateContest(
+    contestId: string,
+    options: { regrade?: boolean; force?: boolean } = {}
+  ): Promise<{
+    contest_id: string;
+    mcqs_graded: number;
+    participants_ranked: number;
+    processed_at: number;
+  }> {
+    const params = new URLSearchParams();
+    if (options.regrade) params.append("regrade", "true");
+    if (options.force) params.append("force", "true");
+
+    const response = await this.axiosInstance.post(
+      `/admin/contest/${contestId}/consolidate?${params.toString()}`
+    );
+    return response.data;
   }
 }
 
