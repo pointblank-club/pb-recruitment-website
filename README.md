@@ -29,6 +29,27 @@ For UI-only development, `VITE_MOCK_SUBMISSION_JUDGING=true` replaces verdict
 polling with fabricated accepted results after the real submit call. It is ignored
 in production builds; keep it false when verifying real judging.
 
+## Vercel deployment
+
+The included `vercel.json` builds the Vite app and serves `index.html` for React
+Router paths, including direct visits to `/contests`, `/login`, and `/admin`.
+Configure these project environment variables before deploying:
+
+- `VITE_API_BASE_URL`: the EC2 backend's public HTTPS URL, without a trailing slash.
+- All `VITE_FIREBASE_*` values: the same Firebase web-app configuration used locally.
+- `VITE_MOCK_SUBMISSION_JUDGING=false`.
+
+Set the backend's `CORS_ALLOWED_ORIGINS` to the frontend's exact HTTPS origin,
+restart the backend, and add the frontend hostname to Firebase authorized domains.
+Environment changes require a new frontend deployment because Vite embeds them
+at build time. Never upload the backend `.env` or Firebase service-account JSON
+as frontend environment variables.
+
+The temporary E2E API uses a Cloudflare Quick Tunnel on the judge EC2 instance.
+Its hostname changes when the tunnel restarts; update `VITE_API_BASE_URL` and
+redeploy afterward. See the
+[temporary EC2 setup](https://github.com/pointblank-club/pb-recruitment-infra/tree/main/environments/e2e).
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
