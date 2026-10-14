@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Contest } from "@/models/contest";
 import { adminApi } from "@/services/api/adminApi";
@@ -35,6 +35,30 @@ const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }
 
   const handleEdit = (contest: Contest) => {
     navigate(`/admin/contest/${contest.id}/edit`);
+  };
+
+  const [consolidatingId, setConsolidatingId] = useState<string | null>(null);
+
+  const handleConsolidate = async (contestId: string) => {
+    if (
+      !window.confirm(
+        "Consolidating this contest will grade pending MCQs, compute final scores, and freeze rankings. Proceed?"
+      )
+    ) {
+      return;
+    }
+
+    setConsolidatingId(contestId);
+    try {
+      const res = await adminApi.consolidateContest(contestId, { force: true });
+      toast.success(
+        `Consolidation complete! Ranked ${res.participants_ranked} participants, graded ${res.mcqs_graded} MCQs.`
+      );
+    } catch (err: any) {
+      toast.error(`Consolidation failed: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setConsolidatingId(null);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -155,6 +179,13 @@ const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }
                       className="w-full bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded transition-colors font-semibold"
                     >
                       View Contestants
+                    </button>
+                    <button
+                      disabled={consolidatingId === contest.id}
+                      onClick={() => handleConsolidate(contest.id)}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded transition-colors font-semibold disabled:opacity-50"
+                    >
+                      {consolidatingId === contest.id ? "Consolidating..." : "Consolidate & Rank"}
                     </button>
                   </div>
                 </div>

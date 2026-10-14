@@ -33,16 +33,25 @@ const AdminContestContestants: React.FC = () => {
           setContestName(contestId);
         }
 
-        const mappedContestants = registrations.map((reg: any) => ({
-          id: reg.user_id,
-          name: reg.name,
-          email: reg.email,
-          status: "Active" as const,
-          registrationDate: reg.registered_at 
-            ? new Date(reg.registered_at * 1000).toLocaleDateString() 
-            : "N/A",
-          score: 0,
-        }));
+        const mappedContestants = registrations.map((reg: any) => {
+          let status: "Active" | "Banned" | "Hidden" = "Active";
+          if (reg.disqualified) {
+            status = "Banned";
+          } else if (reg.hidden) {
+            status = "Hidden";
+          }
+
+          return {
+            id: reg.user_id,
+            name: reg.name,
+            email: reg.email,
+            status,
+            registrationDate: reg.registered_at 
+              ? new Date(reg.registered_at * 1000).toLocaleDateString() 
+              : "N/A",
+            score: reg.score ?? 0,
+          };
+        });
 
         setContestants(mappedContestants);
       } catch (err: any) {
@@ -94,6 +103,7 @@ const AdminContestContestants: React.FC = () => {
             <p className="text-red-400">{error}</p>
           ) : (
             <ContestantManager
+              contestId={contestId}
               contestants={contestants}
               setContestants={setContestants}
             />

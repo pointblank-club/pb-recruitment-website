@@ -1,3 +1,4 @@
+import { adminApi } from "@/services/api/adminApi";
 import React, { useState } from "react";
 
 interface Contestant {
@@ -10,17 +11,31 @@ interface Contestant {
 }
 
 interface ContestantManagerProps {
+  contestId: string;
   contestants: Contestant[];
-  setContestants: (contestants: Contestant[]) => void;
+  setContestants: React.Dispatch<React.SetStateAction<Contestant[]>>;
 }
 
-const ContestantManager: React.FC<ContestantManagerProps> = ({ contestants, setContestants }) => {
+const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contestants, setContestants }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("All");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const handleStatusChange = (id: string, newStatus: "Active" | "Banned" | "Hidden") => {
+  const handleStatusChange = async (id: string, newStatus: "Active" | "Banned" | "Hidden") => {
+    const previous = [...contestants];
     const updated = contestants.map((c: Contestant) => (c.id === id ? { ...c, status: newStatus } as Contestant : c));
     setContestants(updated);
+    setUpdatingId(id);
+
+    try {
+      await adminApi.updateContestantStatus(contestId, id, newStatus);
+    } catch (err: any) {
+      console.error("Failed to update status:", err);
+      setContestants(previous);
+      alert(`Failed to update status: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   const filteredContestants = contestants.filter((contestant) => {
@@ -121,13 +136,14 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestants, setC
                   <label className="block text-gray-400 text-sm mb-2">Change Status</label>
                   <select
                     value={contestant.status}
+                    disabled={updatingId === contestant.id}
                     onChange={(e) =>
                       handleStatusChange(
                         contestant.id,
                         e.target.value as "Active" | "Banned" | "Hidden"
                       )
                     }
-                    className="bg-gray-900 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                    className={`bg-gray-900 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none ${updatingId === contestant.id ? "opacity-50 cursor-wait" : ""}`}
                   >
                     <option value="Active">Active</option>
                     <option value="Hidden">Hidden</option>

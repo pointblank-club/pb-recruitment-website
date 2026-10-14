@@ -3,6 +3,7 @@ import Editor from '@monaco-editor/react';
 import { Button } from '@/components/ui/button';
 import { Play, Send, Copy, Check } from 'lucide-react';
 import type { Problem } from '../problem.types';
+import { contestApi } from '@/services/api/contestApi';
 
 interface CodeProblemViewProps {
   problem: Problem;
@@ -81,12 +82,50 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
   }, [selectedLanguage]);
 
   const handleRunCode = useCallback(async () => {
+    if (!code.trim()) {
+      setActiveTab('output');
+      setOutput('Code is empty.');
+      return;
+    }
     setIsRunning(true);
     setActiveTab('output');
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setOutput('Code execution will be implemented with backend API\n\nYour custom input:\n' + (customInput || '(no input provided)'));
-    setIsRunning(false);
-  }, [customInput]);
+    setOutput('Running code against custom input...');
+
+    try {
+      const res = await contestApi.runCustomInput(
+        problem.contest_id,
+        problem.id,
+        code,
+        selectedLanguage,
+        customInput
+      );
+
+      let formattedOutput = '';
+      if (res.compile_output) {
+        formattedOutput += `Compilation Output:\n${res.compile_output}\n`;
+      }
+      if (res.stderr) {
+        formattedOutput += `Standard Error:\n${res.stderr}\n`;
+      }
+      if (res.stdout) {
+        formattedOutput += `Output:\n${res.stdout}\n`;
+      }
+      if (!res.compile_output && !res.stderr && !res.stdout) {
+        formattedOutput = `(No output produced)\nStatus: ${res.status}`;
+      }
+
+      if (res.time || res.memory) {
+        formattedOutput += `\n[Time: ${res.time || 'N/A'}s | Memory: ${Math.round((res.memory || 0) / 1024)} KB | Status: ${res.status}]`;
+      }
+
+      setOutput(formattedOutput);
+    } catch (err: any) {
+      console.error('Run code error:', err);
+      setOutput(`Execution error: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setIsRunning(false);
+    }
+  }, [code, selectedLanguage, customInput, problem.contest_id, problem.id]);
 
   const handleSubmit = async () => {
     if (!onSubmit) {
