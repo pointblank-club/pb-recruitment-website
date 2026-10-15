@@ -12,6 +12,27 @@ export interface ContestRegistration {
   registered_at?: number;
 }
 
+export interface PlagiarismReport {
+  status: 'pending' | 'processing' | 'queued' | 'running' | 'finished' | 'error' | 'failed' | 'skipped' | string;
+  report_url?: string;
+  error?: string;
+}
+
+export interface PlagiarismPair {
+  key: string;
+  left_file: string;
+  left_user_id: string;
+  left_name?: string;
+  right_file: string;
+  right_user_id: string;
+  right_name?: string;
+  similarity: number;
+  longest_fragment: number;
+  total_overlap: number;
+  review_status: 'unreviewed' | 'cleared' | 'confirmed';
+  review_note?: string;
+}
+
 export type AdminProblemType = 'code' | 'mcq';
 
 export interface AdminProblemSummary {
@@ -226,6 +247,20 @@ class AdminApiService {
   async getContestRegistrations(contestId: string): Promise<ContestRegistration[]> {
     const response = await this.axiosInstance.get<ContestRegistration[]>(`/admin/contests/${contestId}/registrations`);
     return response.data;
+  }
+
+  async getPlagiarismReport(contestId: string): Promise<PlagiarismReport> {
+    const response = await this.axiosInstance.get<PlagiarismReport>(`/admin/contest/${contestId}/plagiarism`);
+    return response.data;
+  }
+
+  async getPlagiarismPairs(contestId: string): Promise<PlagiarismPair[]> {
+    const response = await this.axiosInstance.get<PlagiarismPair[]>(`/admin/contest/${contestId}/plagiarism/pairs`);
+    return response.data;
+  }
+
+  async reviewPlagiarismPair(contestId: string, pairKey: string, status: PlagiarismPair['review_status'], note = ''): Promise<void> {
+    await this.axiosInstance.patch(`/admin/contest/${contestId}/plagiarism/pairs/${pairKey}`, { status, note });
   }
 
   async getContestById(contestId: string): Promise<Contest | null> {
