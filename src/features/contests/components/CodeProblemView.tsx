@@ -3,6 +3,7 @@ import Editor from '@monaco-editor/react';
 import { Button } from '@/components/ui/button';
 import { Play, Send, Copy, Check } from 'lucide-react';
 import type { Problem } from '../problem.types';
+import axios from 'axios';
 import { contestApi } from '@/services/api/contestApi';
 
 interface CodeProblemViewProps {
@@ -119,9 +120,19 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
       }
 
       setOutput(formattedOutput);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Run code error:', err);
-      setOutput(`Execution error: ${err.response?.data?.error || err.message}`);
+      let errorMsg = 'An unexpected error occurred';
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 404 || err.response?.status === 405 || err.response?.status === 501) {
+          errorMsg = 'Custom run endpoint is not available or supported on this server. Please submit your solution directly.';
+        } else {
+          errorMsg = err.response?.data?.error || err.message;
+        }
+      } else if (err instanceof Error) {
+        errorMsg = err.message;
+      }
+      setOutput(`Execution error: ${errorMsg}`);
     } finally {
       setIsRunning(false);
     }

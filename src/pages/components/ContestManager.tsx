@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { Contest } from "@/models/contest";
 import { adminApi } from "@/services/api/adminApi";
@@ -42,7 +43,7 @@ const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }
   const handleConsolidate = async (contestId: string) => {
     if (
       !window.confirm(
-        "Consolidating this contest will grade pending MCQs, compute final scores, and freeze rankings. Proceed?"
+        "Consolidating this contest will evaluate completed submissions and compute the current ranking snapshot. If the contest is active or has pending submissions, consolidation will be rejected. Proceed?"
       )
     ) {
       return;
@@ -50,12 +51,22 @@ const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }
 
     setConsolidatingId(contestId);
     try {
-      const res = await adminApi.consolidateContest(contestId, { force: true });
+      const res = await adminApi.consolidateContest(contestId, { force: false });
       toast.success(
         `Consolidation complete! Ranked ${res.participants_ranked} participants, graded ${res.mcqs_graded} MCQs.`
       );
-    } catch (err: any) {
-      toast.error(`Consolidation failed: ${err.response?.data?.error || err.message}`);
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 409) {
+          toast.error(
+            `Consolidation rejected (409): ${err.response.data?.error || "Contest is still running or has pending submissions."}`
+          );
+        } else {
+          toast.error(`Consolidation failed: ${err.response?.data?.error || err.message}`);
+        }
+      } else {
+        toast.error(`Consolidation failed: ${err instanceof Error ? err.message : "An unexpected error occurred"}`);
+      }
     } finally {
       setConsolidatingId(null);
     }
@@ -67,7 +78,7 @@ const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }
         await adminApi.deleteContest(id);
         setContests(contests.filter((c) => c.id !== id));
         toast.success("Contest deleted successfully.");
-      } catch (error) {
+      } catch {
         toast.error("Error deleting contest. Please try again later.");
       }
     }

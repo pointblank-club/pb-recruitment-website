@@ -101,15 +101,15 @@ export const ContestLeaderboardPage = () => {
         />
 
         {/* Pagination controls */}
-        {totalPages > 1 && (
+        {(totalPages > 1 || page > 0) && (
           <div className="flex items-center justify-between mt-4 text-sm text-gray-400 font-['DM_Sans']">
             <span>
-              Page {page + 1} of {totalPages} ({totalParticipants} total participants)
+              Page {page + 1} of {Math.max(1, totalPages)} ({totalParticipants} total participants)
             </span>
             <div className="flex gap-2">
               <button
                 disabled={page === 0}
-                onClick={() => setPage(page - 1)}
+                onClick={() => setPage(Math.max(0, page - 1))}
                 className="px-3 py-1 bg-gray-900 border border-gray-800 rounded disabled:opacity-40 hover:text-white transition"
               >
                 Previous
