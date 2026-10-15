@@ -81,22 +81,34 @@ class ContestApiService {
   }
 
   async getProblemById(contestId: string, problemId: string): Promise<Problem> {
-    const response = await this.axiosInstance.get<any>(`/contests/${contestId}/problems/${problemId}`);
+    interface RawTestCase {
+      index?: number;
+      input?: string;
+      expected_output?: string;
+      explanation?: string;
+      is_sample?: boolean;
+    }
+    interface RawProblemResponse extends Partial<Problem> {
+      problem_id?: string;
+      testcases?: RawTestCase[];
+    }
+
+    const response = await this.axiosInstance.get<RawProblemResponse>(`/contests/${contestId}/problems/${problemId}`);
     const data = response.data;
     if (!data.id && data.problem_id) {
       data.id = data.problem_id;
     }
     if (!data.examples && Array.isArray(data.testcases)) {
       data.examples = data.testcases
-        .filter((tc: any) => tc.is_sample)
-        .map((tc: any, index: number) => ({
+        .filter((tc: RawTestCase) => tc.is_sample)
+        .map((tc: RawTestCase, index: number) => ({
           id: tc.index ?? index,
           input: tc.input || "",
           output: tc.expected_output || "",
           explanation: tc.explanation || "",
         }));
     }
-    return data;
+    return data as Problem;
   }
 
   async getContestLeaderboard(contestId: string, page: number = 0): Promise<PaginatedLeaderboard> {

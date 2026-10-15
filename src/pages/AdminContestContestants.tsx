@@ -4,12 +4,21 @@ import { ChevronLeft } from "lucide-react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/footer";
 import ContestantManager from "./components/ContestantManager";
-import { adminApi } from "@/services/api/adminApi";
+import { adminApi, type ContestRegistration } from "@/services/api/adminApi";
+
+interface ContestantItem {
+  id: string;
+  name: string;
+  email: string;
+  status: "Active" | "Banned" | "Hidden";
+  registrationDate: string;
+  score: number;
+}
 
 const AdminContestContestants: React.FC = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
-  const [contestants, setContestants] = useState<any[]>([]);
+  const [contestants, setContestants] = useState<ContestantItem[]>([]);
   const [contestName, setContestName] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
@@ -24,7 +33,7 @@ const AdminContestContestants: React.FC = () => {
         
         const [contest, registrations] = await Promise.all([
           adminApi.getContestById(contestId),
-          adminApi.getContestRegistrations(contestId).catch(() => []),
+          adminApi.getContestRegistrations(contestId).catch(() => [] as ContestRegistration[]),
         ]);
 
         if (contest) {
@@ -33,7 +42,7 @@ const AdminContestContestants: React.FC = () => {
           setContestName(contestId);
         }
 
-        const mappedContestants = registrations.map((reg: any) => {
+        const mappedContestants: ContestantItem[] = registrations.map((reg: ContestRegistration) => {
           let status: "Active" | "Banned" | "Hidden" = "Active";
           if (reg.disqualified) {
             status = "Banned";
@@ -54,9 +63,9 @@ const AdminContestContestants: React.FC = () => {
         });
 
         setContestants(mappedContestants);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error fetching contestants:", err);
-        setError(err.message || "Failed to load contestants");
+        setError(err instanceof Error ? err.message : "Failed to load contestants");
         setContestants([]);
       } finally {
         setLoading(false);

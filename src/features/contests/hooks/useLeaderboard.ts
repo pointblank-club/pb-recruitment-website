@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import type { LeaderboardEntry, Contest } from "../problem.types";
 import { contestApi } from "@/services/api/contestApi";
 import { useAuth } from "@/lib/AuthContext";
@@ -14,8 +14,11 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
   const [error, setError] = useState<string | null>(null);
   const currentUserId = user?.uid;
 
+  const requestGenRef = useRef(0);
+  const prevContestIdRef = useRef(contestId);
+
   const fetchLeaderboard = useCallback(
-    async (isBackground = false) => {
+    async (targetPage: number, isBackground = false) => {
       if (!contestId) {
         setLeaderboard([]);
         setContest(null);
@@ -24,36 +27,73 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
         return;
       }
 
+      const generation = ++requestGenRef.current;
       if (!isBackground) setIsLoading(true);
 
       try {
         const [res, contestData] = await Promise.all([
-          contestApi.getContestLeaderboard(contestId, page),
+          contestApi.getContestLeaderboard(contestId, targetPage),
           contestApi.getContestById(contestId),
         ]);
+
+        // Discard responses from obsolete requests
+        if (generation !== requestGenRef.current) {
+          return;
+        }
+
+        // Clamp page if total count/pages shrank below selected page
+        if (res.totalPages > 0 && targetPage >= res.totalPages) {
+          const clampedPage = Math.max(0, res.totalPages - 1);
+          setTotalParticipants(res.totalCount);
+          setTotalPages(res.totalPages);
+          setContest(contestData);
+          setPage(clampedPage);
+          return;
+        }
+
         setLeaderboard(res.entries);
         setTotalParticipants(res.totalCount);
         setTotalPages(res.totalPages);
         setContest(contestData);
         setError(null);
       } catch (err) {
+        if (generation !== requestGenRef.current) return;
         if (!isBackground) {
           setError(err instanceof Error ? err.message : "Failed to fetch leaderboard");
         }
       } finally {
-        if (!isBackground) setIsLoading(false);
+        if (generation === requestGenRef.current && !isBackground) {
+          setIsLoading(false);
+        }
       }
     },
-    [contestId, page]
+    [contestId]
   );
 
   useEffect(() => {
-    fetchLeaderboard(false);
+    // If contest changed, reset page to 0 immediately
+    if (prevContestIdRef.current !== contestId) {
+      prevContestIdRef.current = contestId;
+      if (page !== 0) {
+        setPage(0);
+        return;
+      }
+    }
+
+    fetchLeaderboard(page, false);
 
     if (!refreshIntervalMs) return;
-    const interval = setInterval(() => fetchLeaderboard(true), refreshIntervalMs);
-    return () => clearInterval(interval);
-  }, [fetchLeaderboard, refreshIntervalMs]);
+    const interval = setInterval(() => {
+      fetchLeaderboard(page, true);
+    }, refreshIntervalMs);
+
+    const genRef = requestGenRef;
+    return () => {
+      // Invalidate outstanding work during cleanup
+      genRef.current++;
+      clearInterval(interval);
+    };
+  }, [contestId, page, fetchLeaderboard, refreshIntervalMs]);
 
   const currentUserRank = useMemo(() => {
     return leaderboard.find((entry) => entry.user_id === currentUserId);
@@ -69,6 +109,6 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
     totalParticipants,
     isLoading,
     error,
-    refresh: () => fetchLeaderboard(false),
+    refresh: () => fetchLeaderboard(page, false),
   };
 };
