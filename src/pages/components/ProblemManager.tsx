@@ -27,7 +27,7 @@ interface ProblemManagerProps {
   onProblemDeleted: (problemId: string) => void;
 }
 
-const emptyTestCase = (): ProblemTestCase => ({ input: "", expected_output: "" });
+const emptyTestCase = (): ProblemTestCase => ({ input: "", expected_output: "", is_sample: false });
 
 const initialFormData = (): ProblemFormData => ({
   title: "",
@@ -123,7 +123,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
 
   const handleTestCaseChange = (
     index: number,
-    field: keyof ProblemTestCase,
+    field: "input" | "expected_output",
     value: string,
   ) => {
     setFormData((current) => ({
@@ -158,6 +158,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
   };
 
   const handleEdit = async (problem: AdminProblemSummary) => {
+    if (loadingProblemId !== null) return;
     setLoadingProblemId(problem.id);
     try {
       const details = await adminApi.getProblemById(contestId, problem.id);
@@ -245,6 +246,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
         <button
           type="button"
           onClick={openCreateModal}
+          disabled={loadingProblemId !== null}
           className="rounded-lg bg-gradient-to-r from-green-600 to-green-500 px-6 py-3 font-semibold text-black transition-all duration-200 hover:from-green-700 hover:to-green-600"
         >
           + Add Problem
@@ -284,7 +286,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => void handleEdit(problem)}
-                    disabled={loadingProblemId === problem.id || deletingProblemId === problem.id}
+                    disabled={loadingProblemId !== null || deletingProblemId === problem.id}
                     className="w-full rounded bg-gray-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {loadingProblemId === problem.id ? "Loading..." : "Edit"}
@@ -432,7 +434,6 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                             onChange={(event) => handleTestCaseChange(index, "input", event.target.value)}
                             rows={4}
                             className="w-full rounded border border-gray-700 bg-gray-900 px-4 py-2 font-mono text-sm text-gray-300 focus:border-green-500 focus:outline-none"
-                            required
                           />
                         </div>
                         <div>
@@ -442,7 +443,6 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                             onChange={(event) => handleTestCaseChange(index, "expected_output", event.target.value)}
                             rows={4}
                             className="w-full rounded border border-gray-700 bg-gray-900 px-4 py-2 font-mono text-sm text-gray-300 focus:border-green-500 focus:outline-none"
-                            required
                           />
                         </div>
                       </div>

@@ -24,11 +24,13 @@ export interface AdminProblemSummary {
 export interface ProblemTestCase {
   input: string;
   expected_output: string;
+  is_sample: boolean;
 }
 
 interface ProblemTestCaseResponse {
   input: string;
   expected_output?: string;
+  is_sample?: boolean;
 }
 
 export interface AdminProblem extends AdminProblemSummary {
@@ -156,7 +158,11 @@ class AdminApiService {
         if (typeof answer !== 'string') {
           throw new Error('The backend returned incomplete testcase answers; editing was stopped.');
         }
-        return { input: testcase.input, expected_output: answer };
+        return {
+          input: testcase.input,
+          expected_output: answer,
+          is_sample: testcase.is_sample === true,
+        };
       });
 
       return {
