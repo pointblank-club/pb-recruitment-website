@@ -1,3 +1,5 @@
+import { adminApi } from "@/services/api/adminApi";
+import axios from "axios";
 import React, { useState } from "react";
 
 interface Contestant {
@@ -10,17 +12,49 @@ interface Contestant {
 }
 
 interface ContestantManagerProps {
+  contestId: string;
   contestants: Contestant[];
-  setContestants: (contestants: Contestant[]) => void;
+  setContestants: React.Dispatch<React.SetStateAction<Contestant[]>>;
 }
 
-const ContestantManager: React.FC<ContestantManagerProps> = ({ contestants, setContestants }) => {
+const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contestants, setContestants }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("All");
+  const [updatingMap, setUpdatingMap] = useState<Record<string, boolean>>({});
 
-  const handleStatusChange = (id: string, newStatus: "Active" | "Banned" | "Hidden") => {
-    const updated = contestants.map((c: Contestant) => (c.id === id ? { ...c, status: newStatus } as Contestant : c));
-    setContestants(updated);
+  const handleStatusChange = async (id: string, newStatus: "Active" | "Banned" | "Hidden") => {
+    const current = contestants.find((c) => c.id === id);
+    const prevStatus = current?.status;
+    if (!prevStatus || prevStatus === newStatus) return;
+
+    // Optimistically update ONLY this contestant
+    setContestants((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, status: newStatus } : c))
+    );
+    setUpdatingMap((prev) => ({ ...prev, [id]: true }));
+
+    try {
+      await adminApi.updateContestantStatus(contestId, id, newStatus);
+    } catch (err: unknown) {
+      console.error("Failed to update status:", err);
+      // Roll back ONLY the failed contestant
+      setContestants((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, status: prevStatus } : c))
+      );
+      let errorMsg = "An unexpected error occurred";
+      if (axios.isAxiosError(err)) {
+        errorMsg = err.response?.data?.error || err.message;
+      } else if (err instanceof Error) {
+        errorMsg = err.message;
+      }
+      alert(`Failed to update status: ${errorMsg}`);
+    } finally {
+      setUpdatingMap((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
   };
 
   const filteredContestants = contestants.filter((contestant) => {
@@ -121,13 +155,14 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestants, setC
                   <label className="block text-gray-400 text-sm mb-2">Change Status</label>
                   <select
                     value={contestant.status}
+                    disabled={Boolean(updatingMap[contestant.id])}
                     onChange={(e) =>
                       handleStatusChange(
                         contestant.id,
                         e.target.value as "Active" | "Banned" | "Hidden"
                       )
                     }
-                    className="bg-gray-900 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                    className={`bg-gray-900 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none ${updatingMap[contestant.id] ? "opacity-50 cursor-wait" : ""}`}
                   >
                     <option value="Active">Active</option>
                     <option value="Hidden">Hidden</option>

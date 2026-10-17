@@ -1,46 +1,99 @@
-import { useState, useEffect, useMemo } from 'react';
-import type { LeaderboardEntry, Contest } from '../problem.types';
-import { contestApi } from '@/services/api/contestApi';
-import { useAuth } from '@/lib/AuthContext';
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import type { LeaderboardEntry, Contest } from "../problem.types";
+import { contestApi } from "@/services/api/contestApi";
+import { useAuth } from "@/lib/AuthContext";
 
-export const useLeaderboard = (contestId: string) => {
+export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30000) => {
   const { user } = useAuth();
+  const [page, setPage] = useState(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [totalParticipants, setTotalParticipants] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [contest, setContest] = useState<Contest | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const currentUserId = user?.uid;
 
-  useEffect(() => {
-    if (!contestId) {
-      setLeaderboard([]);
-      setContest(null);
-      setIsLoading(false);
-      setError(null);
-      return;
-    }
+  const requestGenRef = useRef(0);
+  const prevContestIdRef = useRef(contestId);
 
-    const fetchLeaderboard = async () => {
-      try {
-        setIsLoading(true);
+  const fetchLeaderboard = useCallback(
+    async (targetPage: number, isBackground = false) => {
+      if (!contestId) {
+        setLeaderboard([]);
+        setContest(null);
+        setIsLoading(false);
         setError(null);
+        return;
+      }
 
-        const [leaderboardData, contestData] = await Promise.all([
-          contestApi.getContestLeaderboard(contestId),
+      const generation = ++requestGenRef.current;
+      if (!isBackground) setIsLoading(true);
+
+      try {
+        const [res, contestData] = await Promise.all([
+          contestApi.getContestLeaderboard(contestId, targetPage),
           contestApi.getContestById(contestId),
         ]);
-        setLeaderboard(leaderboardData);
+
+        // Discard responses from obsolete requests
+        if (generation !== requestGenRef.current) {
+          return;
+        }
+
+        // Clamp page if total count/pages shrank below selected page
+        if (res.totalPages > 0 && targetPage >= res.totalPages) {
+          const clampedPage = Math.max(0, res.totalPages - 1);
+          setTotalParticipants(res.totalCount);
+          setTotalPages(res.totalPages);
+          setContest(contestData);
+          setPage(clampedPage);
+          return;
+        }
+
+        setLeaderboard(res.entries);
+        setTotalParticipants(res.totalCount);
+        setTotalPages(res.totalPages);
         setContest(contestData);
+        setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch leaderboard');
+        if (generation !== requestGenRef.current) return;
+        if (!isBackground) {
+          setError(err instanceof Error ? err.message : "Failed to fetch leaderboard");
+        }
       } finally {
-        setIsLoading(false);
+        if (generation === requestGenRef.current && !isBackground) {
+          setIsLoading(false);
+        }
       }
+    },
+    [contestId]
+  );
+
+  useEffect(() => {
+    // If contest changed, reset page to 0 immediately
+    if (prevContestIdRef.current !== contestId) {
+      prevContestIdRef.current = contestId;
+      if (page !== 0) {
+        setPage(0);
+        return;
+      }
+    }
+
+    fetchLeaderboard(page, false);
+
+    if (!refreshIntervalMs) return;
+    const interval = setInterval(() => {
+      fetchLeaderboard(page, true);
+    }, refreshIntervalMs);
+
+    const genRef = requestGenRef;
+    return () => {
+      // Invalidate outstanding work during cleanup
+      genRef.current++;
+      clearInterval(interval);
     };
-
-    fetchLeaderboard();
-  }, [contestId]);
-
+  }, [contestId, page, fetchLeaderboard, refreshIntervalMs]);
 
   const currentUserRank = useMemo(() => {
     return leaderboard.find((entry) => entry.user_id === currentUserId);
@@ -50,8 +103,12 @@ export const useLeaderboard = (contestId: string) => {
     leaderboard,
     contest,
     currentUserRank,
+    page,
+    setPage,
+    totalPages,
+    totalParticipants,
     isLoading,
     error,
-    totalParticipants: leaderboard.length,
+    refresh: () => fetchLeaderboard(page, false),
   };
 };
