@@ -10,31 +10,61 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
   const [totalParticipants, setTotalParticipants] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [contest, setContest] = useState<Contest | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isContestLoading, setIsContestLoading] = useState(true);
+  const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const currentUserId = user?.uid;
 
   const requestGenRef = useRef(0);
   const prevContestIdRef = useRef(contestId);
 
+  // Fetch contest metadata only when contestId changes
+  useEffect(() => {
+    let isCancelled = false;
+    if (!contestId) {
+      setContest(null);
+      setIsContestLoading(false);
+      return;
+    }
+
+    setIsContestLoading(true);
+    contestApi.getContestById(contestId).then((data) => {
+      if (!isCancelled) {
+        setContest(data);
+        if (!data) {
+          setError("Contest not found");
+        }
+      }
+    }).catch((err) => {
+      if (!isCancelled) {
+        setError(err instanceof Error ? err.message : "Failed to fetch contest metadata");
+      }
+      console.error("Failed to fetch contest metadata:", err);
+    }).finally(() => {
+      if (!isCancelled) {
+        setIsContestLoading(false);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [contestId]);
+
   const fetchLeaderboard = useCallback(
     async (targetPage: number, isBackground = false) => {
       if (!contestId) {
         setLeaderboard([]);
-        setContest(null);
-        setIsLoading(false);
+        setIsLeaderboardLoading(false);
         setError(null);
         return;
       }
 
       const generation = ++requestGenRef.current;
-      if (!isBackground) setIsLoading(true);
+      if (!isBackground) setIsLeaderboardLoading(true);
 
       try {
-        const [res, contestData] = await Promise.all([
-          contestApi.getContestLeaderboard(contestId, targetPage),
-          contestApi.getContestById(contestId),
-        ]);
+        const res = await contestApi.getContestLeaderboard(contestId, targetPage);
 
         // Discard responses from obsolete requests
         if (generation !== requestGenRef.current) {
@@ -46,7 +76,6 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
           const clampedPage = Math.max(0, res.totalPages - 1);
           setTotalParticipants(res.totalCount);
           setTotalPages(res.totalPages);
-          setContest(contestData);
           setPage(clampedPage);
           return;
         }
@@ -54,7 +83,6 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
         setLeaderboard(res.entries);
         setTotalParticipants(res.totalCount);
         setTotalPages(res.totalPages);
-        setContest(contestData);
         setError(null);
       } catch (err) {
         if (generation !== requestGenRef.current) return;
@@ -62,8 +90,8 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
           setError(err instanceof Error ? err.message : "Failed to fetch leaderboard");
         }
       } finally {
-        if (generation === requestGenRef.current && !isBackground) {
-          setIsLoading(false);
+        if (generation === requestGenRef.current) {
+          setIsLeaderboardLoading(false);
         }
       }
     },
@@ -98,6 +126,8 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
   const currentUserRank = useMemo(() => {
     return leaderboard.find((entry) => entry.user_id === currentUserId);
   }, [leaderboard, currentUserId]);
+
+  const isLoading = (isLeaderboardLoading || isContestLoading) && !error;
 
   return {
     leaderboard,

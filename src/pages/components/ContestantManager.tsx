@@ -22,10 +22,16 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [updatingMap, setUpdatingMap] = useState<Record<string, boolean>>({});
 
+  const contestIdRef = React.useRef(contestId);
+  React.useEffect(() => {
+    contestIdRef.current = contestId;
+  }, [contestId]);
+
   const handleStatusChange = async (id: string, newStatus: "Active" | "Banned" | "Hidden") => {
+    const targetContestId = contestId;
     const current = contestants.find((c) => c.id === id);
-    const prevStatus = current?.status;
-    if (!prevStatus || prevStatus === newStatus) return;
+    const prevStatus = current?.status || "Active";
+    if (prevStatus === newStatus) return;
 
     // Optimistically update ONLY this contestant
     setContestants((prev) =>
@@ -34,26 +40,30 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
     setUpdatingMap((prev) => ({ ...prev, [id]: true }));
 
     try {
-      await adminApi.updateContestantStatus(contestId, id, newStatus);
+      await adminApi.updateContestantStatus(targetContestId, id, newStatus);
     } catch (err: unknown) {
       console.error("Failed to update status:", err);
-      // Roll back ONLY the failed contestant
-      setContestants((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, status: prevStatus } : c))
-      );
-      let errorMsg = "An unexpected error occurred";
-      if (axios.isAxiosError(err)) {
-        errorMsg = err.response?.data?.error || err.message;
-      } else if (err instanceof Error) {
-        errorMsg = err.message;
+      // Only roll back if the admin is still viewing the same contest
+      if (contestIdRef.current === targetContestId) {
+        setContestants((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, status: prevStatus } : c))
+        );
+        let errorMsg = "An unexpected error occurred";
+        if (axios.isAxiosError(err)) {
+          errorMsg = err.response?.data?.error || err.message;
+        } else if (err instanceof Error) {
+          errorMsg = err.message;
+        }
+        alert(`Failed to update status: ${errorMsg}`);
       }
-      alert(`Failed to update status: ${errorMsg}`);
     } finally {
-      setUpdatingMap((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+      if (contestIdRef.current === targetContestId) {
+        setUpdatingMap((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
     }
   };
 
@@ -81,6 +91,9 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
 
   return (
     <div className="space-y-6">
+      <div className="bg-gray-800/60 border border-gray-700/80 rounded-lg p-3 text-xs text-gray-400">
+        💡 <span className="font-semibold text-gray-300">Note:</span> If this contest has already been consolidated, updating a contestant's moderation status requires re-running contest consolidation to recalculate and freeze the updated ranking snapshot.
+      </div>
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>

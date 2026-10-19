@@ -33,7 +33,7 @@ const AdminContestContestants: React.FC = () => {
         
         const [contest, registrations] = await Promise.all([
           adminApi.getContestById(contestId),
-          adminApi.getContestRegistrations(contestId).catch(() => [] as ContestRegistration[]),
+          adminApi.getContestRegistrations(contestId),
         ]);
 
         if (contest) {

@@ -92,14 +92,19 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
     setActiveTab('output');
     setOutput('Running code against custom input...');
 
+    const runLanguage = selectedLanguage;
+
     try {
       const res = await contestApi.runCustomInput(
-        problem.contest_id,
-        problem.id,
         code,
-        selectedLanguage,
+        runLanguage,
         customInput
       );
+
+      // Discard response if user changed language
+      if (selectedLanguage !== runLanguage) {
+        return;
+      }
 
       let formattedOutput = '';
       if (res.compile_output) {
@@ -115,17 +120,24 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
         formattedOutput = `(No output produced)\nStatus: ${res.status}`;
       }
 
-      if (res.time || res.memory) {
-        formattedOutput += `\n[Time: ${res.time || 'N/A'}s | Memory: ${Math.round((res.memory || 0) / 1024)} KB | Status: ${res.status}]`;
-      }
+      const statusText = res.status || 'Finished';
+      const runtimeText = typeof res.runtime === 'number' ? `${res.runtime} ms` : 'N/A';
+      const memoryText = typeof res.memory === 'number'
+        ? `${(res.memory / 1024).toFixed(1)} MB`
+        : 'N/A';
+
+      formattedOutput += `\n[Status: ${statusText} | Runtime: ${runtimeText} | Memory: ${memoryText}]`;
 
       setOutput(formattedOutput);
     } catch (err: unknown) {
+      if (selectedLanguage !== runLanguage) return;
       console.error('Run code error:', err);
       let errorMsg = 'An unexpected error occurred';
       if (axios.isAxiosError(err)) {
         if (err.response?.status === 404 || err.response?.status === 405 || err.response?.status === 501) {
-          errorMsg = 'Custom run endpoint is not available or supported on this server. Please submit your solution directly.';
+          errorMsg = 'Custom code execution is currently disabled or unavailable on this server.';
+        } else if (err.response?.status === 429) {
+          errorMsg = err.response.data?.error || 'Run capacity busy; please wait a few seconds before trying again.';
         } else {
           errorMsg = err.response?.data?.error || err.message;
         }
@@ -136,7 +148,7 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
     } finally {
       setIsRunning(false);
     }
-  }, [code, selectedLanguage, customInput, problem.contest_id, problem.id]);
+  }, [code, selectedLanguage, customInput]);
 
   const handleSubmit = async () => {
     if (!onSubmit) {
@@ -405,8 +417,11 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
           <div className="border-b border-gray-700 px-4 py-2 bg-gray-900/50 flex items-center justify-between">
             <select
               value={selectedLanguage}
+              disabled={isRunning}
               onChange={(e) => handleLanguageChange(e.target.value)}
-              className="bg-gray-800 border border-gray-600 text-white rounded px-3 py-1.5 text-xs focus:outline-none focus:border-green-400 font-['DM_Sans']"
+              className={`bg-gray-800 border border-gray-600 text-white rounded px-3 py-1.5 text-xs focus:outline-none focus:border-green-400 font-['DM_Sans'] ${
+                isRunning ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
               {SUPPORTED_LANGUAGES.map((lang) => (
                 <option key={lang.value} value={lang.value}>

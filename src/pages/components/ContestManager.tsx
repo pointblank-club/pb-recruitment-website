@@ -192,7 +192,7 @@ const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }
                       View Contestants
                     </button>
                     <button
-                      disabled={consolidatingId === contest.id}
+                      disabled={consolidatingId !== null}
                       onClick={() => handleConsolidate(contest.id)}
                       className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded transition-colors font-semibold disabled:opacity-50"
                     >

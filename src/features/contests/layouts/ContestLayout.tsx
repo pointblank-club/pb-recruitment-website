@@ -76,6 +76,7 @@ export const ContestLayout = () => {
         timeRemaining={timeRemaining}
         progress={progress}
         contestName={contest?.name || 'Contest'}
+        contestId={contestId}
       />
       
       <div className="flex-1 overflow-hidden">
