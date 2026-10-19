@@ -50,12 +50,20 @@ export const ContestLeaderboardPage = () => {
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
             <p className="text-red-800 font-medium mb-2">Error loading leaderboard</p>
             <p className="text-red-600 text-sm mb-4">{error || 'Contest not found'}</p>
-            <Link
-              to="/contests"
-              className="inline-block px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Back to Contests
-            </Link>
+            <div className="flex justify-center gap-3">
+              <button
+                onClick={leaderboardState.refresh}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Retry
+              </button>
+              <Link
+                to="/contests"
+                className="inline-block px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Back to Contests
+              </Link>
+            </div>
           </div>
         </div>
       </div>
