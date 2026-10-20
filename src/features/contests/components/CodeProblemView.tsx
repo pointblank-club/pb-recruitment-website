@@ -110,13 +110,13 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
         formattedOutput += `Output:\n${res.stdout}\n`;
       }
       if (!res.compile_output && !res.stderr && !res.stdout) {
-        formattedOutput = `(No output produced)\nStatus: ${res.status}`;
+        formattedOutput = '(No output produced)';
       }
 
       const statusText = res.status || 'Finished';
       const runtimeText = typeof res.runtime === 'number' ? `${res.runtime} ms` : 'N/A';
       const memoryText = typeof res.memory === 'number'
-        ? `${(res.memory / 1024).toFixed(1)} MB`
+        ? `${(res.memory / 1024).toFixed(1)} MiB`
         : 'N/A';
 
       formattedOutput += `\n[Status: ${statusText} | Runtime: ${runtimeText} | Memory: ${memoryText}]`;

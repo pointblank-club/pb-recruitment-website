@@ -61,6 +61,10 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
 
   useEffect(() => {
     fetchContest();
+    const metaRef = metadataGenRef;
+    return () => {
+      metaRef.current++;
+    };
   }, [fetchContest]);
 
   const fetchLeaderboard = useCallback(
@@ -93,8 +97,8 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
         }
 
         // Clamp page if total count/pages shrank below selected page
-        if (res.totalPages > 0 && targetPage >= res.totalPages) {
-          const clampedPage = Math.max(0, res.totalPages - 1);
+        const clampedPage = Math.max(0, res.totalPages - 1);
+        if (targetPage > clampedPage) {
           setTotalParticipants(res.totalCount);
           setTotalPages(res.totalPages);
           setPage(clampedPage);
@@ -127,7 +131,6 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
     if (prevContestIdRef.current !== contestId) {
       prevContestIdRef.current = contestId;
       requestGenRef.current++;
-      metadataGenRef.current++;
       hasLoadedDataRef.current = false;
       setContest(null);
       setContestError(null);
@@ -141,20 +144,17 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
 
     fetchLeaderboard(page, false);
 
-    if (!refreshIntervalMs) return;
-    const interval = setInterval(() => {
+    const interval = refreshIntervalMs ? setInterval(() => {
       if (!contestRef.current || contestErrorRef.current) {
         fetchContest();
       }
       fetchLeaderboard(page, true);
-    }, refreshIntervalMs);
+    }, refreshIntervalMs) : undefined;
 
     const genRef = requestGenRef;
-    const metaRef = metadataGenRef;
     return () => {
       // Invalidate outstanding work during cleanup
       genRef.current++;
-      metaRef.current++;
       clearInterval(interval);
     };
   }, [contestId, page, fetchLeaderboard, fetchContest, refreshIntervalMs]);

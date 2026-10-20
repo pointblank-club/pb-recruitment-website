@@ -131,13 +131,18 @@ class ContestApiService {
       `/contests/${contestId}/leaderboard?page=${page}`,
       { timeout: 15_000 }
     );
-    const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
-    const totalPages = parseInt(response.headers["x-total-pages"] || "1", 10);
+    const [totalCount, totalPages] = ['x-total-count', 'x-total-pages'].map((header) => {
+      const value = response.headers[header];
+      if (typeof value !== 'string' || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+        throw new Error('Missing or invalid leaderboard pagination headers. Please try again.');
+      }
+      return Number(value);
+    });
 
     return {
       entries: response.data || [],
-      totalCount: totalCount || (response.data || []).length,
-      totalPages: totalPages || 1,
+      totalCount,
+      totalPages,
     };
   }
 

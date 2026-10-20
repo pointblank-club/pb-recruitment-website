@@ -3,22 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/footer";
-import ContestantManager from "./components/ContestantManager";
-import { adminApi, type ContestRegistration } from "@/services/api/adminApi";
-
-interface ContestantItem {
-  id: string;
-  name: string;
-  email: string;
-  status: "Active" | "Banned" | "Hidden";
-  registrationDate: string;
-  score: number;
-}
+import ContestantManager, { type Contestant } from "./components/ContestantManager";
+import { adminApi } from "@/services/api/adminApi";
 
 const AdminContestContestants: React.FC = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
-  const [contestants, setContestants] = useState<ContestantItem[]>([]);
+  const [contestants, setContestants] = useState<Contestant[]>([]);
   const [contestName, setContestName] = useState<string>("");
   const [loadedContestId, setLoadedContestId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -48,7 +39,7 @@ const AdminContestContestants: React.FC = () => {
           setContestName(contestId);
         }
 
-        const mappedContestants: ContestantItem[] = registrations.map((reg: ContestRegistration) => {
+        const mappedContestants: Contestant[] = registrations.map((reg) => {
           let status: "Active" | "Banned" | "Hidden" = "Active";
           if (reg.disqualified) {
             status = "Banned";
@@ -61,8 +52,8 @@ const AdminContestContestants: React.FC = () => {
             name: reg.name,
             email: reg.email,
             status,
-            registrationDate: reg.registered_at 
-              ? new Date(reg.registered_at * 1000).toLocaleDateString() 
+            registrationDate: reg.registered_at
+              ? new Date(reg.registered_at * 1000).toLocaleDateString()
               : "N/A",
             score: reg.score ?? 0,
           };

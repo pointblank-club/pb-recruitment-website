@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "node --test scripts/*.test.mjs",
     "test:editor": "node --test scripts/testcase-editor.test.mjs",
     "preview": "vite preview"
   },

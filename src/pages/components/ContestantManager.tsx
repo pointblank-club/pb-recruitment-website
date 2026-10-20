@@ -2,7 +2,7 @@ import { adminApi } from "@/services/api/adminApi";
 import axios from "axios";
 import React, { useState } from "react";
 
-interface Contestant {
+export interface Contestant {
   id: string;
   name: string;
   email: string;
@@ -22,9 +22,12 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [updatingMap, setUpdatingMap] = useState<Record<string, boolean>>({});
 
-  const contestIdRef = React.useRef(contestId);
+  const contestIdRef = React.useRef<string | null>(contestId);
   React.useEffect(() => {
     contestIdRef.current = contestId;
+    return () => {
+      contestIdRef.current = null;
+    };
   }, [contestId]);
 
   const handleStatusChange = async (id: string, newStatus: "Active" | "Banned" | "Hidden") => {
