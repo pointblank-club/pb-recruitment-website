@@ -17,9 +17,14 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
   const currentUserId = user?.uid;
 
   const requestGenRef = useRef(0);
+  const metadataGenRef = useRef(0);
   const prevContestIdRef = useRef(contestId);
   const contestRef = useRef<Contest | null>(null);
   contestRef.current = contest;
+  const contestErrorRef = useRef<string | null>(null);
+  contestErrorRef.current = contestError;
+  const isFetchingLeaderboardRef = useRef(false);
+  const hasLoadedDataRef = useRef(false);
 
   const fetchContest = useCallback(async () => {
     if (!contestId) {
@@ -29,11 +34,14 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
       return;
     }
 
+    const gen = ++metadataGenRef.current;
     const currentId = contestId;
     setIsContestLoading(true);
+
     try {
       const data = await contestApi.getContestById(contestId);
-      if (prevContestIdRef.current !== currentId) return;
+      if (gen !== metadataGenRef.current || prevContestIdRef.current !== currentId) return;
+
       setContest(data);
       if (!data) {
         setContestError("Contest not found");
@@ -41,11 +49,11 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
         setContestError(null);
       }
     } catch (err) {
-      if (prevContestIdRef.current !== currentId) return;
+      if (gen !== metadataGenRef.current || prevContestIdRef.current !== currentId) return;
       console.error("Failed to fetch contest metadata:", err);
       setContestError(err instanceof Error ? err.message : "Failed to fetch contest metadata");
     } finally {
-      if (prevContestIdRef.current === currentId) {
+      if (gen === metadataGenRef.current && prevContestIdRef.current === currentId) {
         setIsContestLoading(false);
       }
     }
@@ -61,11 +69,21 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
         setLeaderboard([]);
         setIsLeaderboardLoading(false);
         setLeaderboardError(null);
+        hasLoadedDataRef.current = false;
         return;
       }
 
-      const generation = ++requestGenRef.current;
-      if (!isBackground) setIsLeaderboardLoading(true);
+      // If a fetch is already in flight for this page, skip background tick
+      if (isBackground && isFetchingLeaderboardRef.current) {
+        return;
+      }
+
+      if (!isBackground) {
+        requestGenRef.current++;
+        setIsLeaderboardLoading(true);
+      }
+      const generation = requestGenRef.current;
+      isFetchingLeaderboardRef.current = true;
 
       try {
         const res = await contestApi.getContestLeaderboard(contestId, targetPage);
@@ -88,12 +106,15 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
         setTotalParticipants(res.totalCount);
         setTotalPages(res.totalPages);
         setLeaderboardError(null);
+        hasLoadedDataRef.current = true;
       } catch (err) {
         if (generation !== requestGenRef.current) return;
-        if (!isBackground) {
+        // Suppress background errors only if valid data is already loaded and displayed
+        if (!isBackground || !hasLoadedDataRef.current) {
           setLeaderboardError(err instanceof Error ? err.message : "Failed to fetch leaderboard");
         }
       } finally {
+        isFetchingLeaderboardRef.current = false;
         if (generation === requestGenRef.current) {
           setIsLeaderboardLoading(false);
         }
@@ -106,8 +127,13 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
     // If contest changed, reset page to 0 immediately
     if (prevContestIdRef.current !== contestId) {
       prevContestIdRef.current = contestId;
+      requestGenRef.current++;
+      metadataGenRef.current++;
+      hasLoadedDataRef.current = false;
       setContest(null);
       setContestError(null);
+      setLeaderboard([]);
+      setLeaderboardError(null);
       if (page !== 0) {
         setPage(0);
         return;
@@ -118,16 +144,18 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
 
     if (!refreshIntervalMs) return;
     const interval = setInterval(() => {
-      if (!contestRef.current) {
+      if (!contestRef.current || contestErrorRef.current) {
         fetchContest();
       }
       fetchLeaderboard(page, true);
     }, refreshIntervalMs);
 
     const genRef = requestGenRef;
+    const metaRef = metadataGenRef;
     return () => {
       // Invalidate outstanding work during cleanup
       genRef.current++;
+      metaRef.current++;
       clearInterval(interval);
     };
   }, [contestId, page, fetchLeaderboard, fetchContest, refreshIntervalMs]);
@@ -140,11 +168,11 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
   const isLoading = (isLeaderboardLoading || isContestLoading) && !error;
 
   const refresh = useCallback(() => {
-    if (!contest) {
+    if (!contest || contestError) {
       fetchContest();
     }
     fetchLeaderboard(page, false);
-  }, [contest, fetchContest, fetchLeaderboard, page]);
+  }, [contest, contestError, fetchContest, fetchLeaderboard, page]);
 
   return {
     leaderboard,

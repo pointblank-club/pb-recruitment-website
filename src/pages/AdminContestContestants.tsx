@@ -20,21 +20,27 @@ const AdminContestContestants: React.FC = () => {
   const navigate = useNavigate();
   const [contestants, setContestants] = useState<ContestantItem[]>([]);
   const [contestName, setContestName] = useState<string>("");
+  const [loadedContestId, setLoadedContestId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
 
   useEffect(() => {
+    let isCancelled = false;
+
     const fetchData = async () => {
       if (!contestId) return;
 
       try {
         setLoading(true);
         setError("");
+        setLoadedContestId(null);
         
         const [contest, registrations] = await Promise.all([
           adminApi.getContestById(contestId),
           adminApi.getContestRegistrations(contestId),
         ]);
+
+        if (isCancelled) return;
 
         if (contest) {
           setContestName(contest.name);
@@ -63,15 +69,25 @@ const AdminContestContestants: React.FC = () => {
         });
 
         setContestants(mappedContestants);
+        setLoadedContestId(contestId);
       } catch (err: unknown) {
+        if (isCancelled) return;
         console.error("Error fetching contestants:", err);
         setError(err instanceof Error ? err.message : "Failed to load contestants");
         setContestants([]);
+        setLoadedContestId(null);
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
+
     fetchData();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [contestId]);
 
   if (!contestId) {
@@ -106,12 +122,13 @@ const AdminContestContestants: React.FC = () => {
 
         {/* Contestant Manager */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-          {loading ? (
+          {loading || loadedContestId !== contestId ? (
             <p className="text-gray-400">Loading contestants...</p>
           ) : error ? (
             <p className="text-red-400">{error}</p>
           ) : (
             <ContestantManager
+              key={contestId}
               contestId={contestId}
               contestants={contestants}
               setContestants={setContestants}

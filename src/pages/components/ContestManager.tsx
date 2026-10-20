@@ -43,7 +43,7 @@ const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }
   const handleConsolidate = async (contestId: string) => {
     if (
       !window.confirm(
-        "Consolidating this contest will evaluate completed submissions and compute the current ranking snapshot. If the contest is active or has pending submissions, consolidation will be rejected. Proceed?"
+        "Grade pending MCQs and save final rankings; active contests or pending code submissions will be rejected. Proceed?"
       )
     ) {
       return;

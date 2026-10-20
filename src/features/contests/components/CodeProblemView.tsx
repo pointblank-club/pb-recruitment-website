@@ -92,19 +92,12 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
     setActiveTab('output');
     setOutput('Running code against custom input...');
 
-    const runLanguage = selectedLanguage;
-
     try {
       const res = await contestApi.runCustomInput(
         code,
-        runLanguage,
+        selectedLanguage,
         customInput
       );
-
-      // Discard response if user changed language
-      if (selectedLanguage !== runLanguage) {
-        return;
-      }
 
       let formattedOutput = '';
       if (res.compile_output) {
@@ -130,7 +123,6 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
 
       setOutput(formattedOutput);
     } catch (err: unknown) {
-      if (selectedLanguage !== runLanguage) return;
       console.error('Run code error:', err);
       let errorMsg = 'An unexpected error occurred';
       if (axios.isAxiosError(err)) {

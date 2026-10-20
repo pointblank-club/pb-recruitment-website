@@ -128,7 +128,8 @@ class ContestApiService {
 
   async getContestLeaderboard(contestId: string, page: number = 0): Promise<PaginatedLeaderboard> {
     const response = await this.axiosInstance.get<LeaderboardEntry[]>(
-      `/contests/${contestId}/leaderboard?page=${page}`
+      `/contests/${contestId}/leaderboard?page=${page}`,
+      { timeout: 15_000 }
     );
     const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
     const totalPages = parseInt(response.headers["x-total-pages"] || "1", 10);
