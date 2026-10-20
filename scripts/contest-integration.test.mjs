@@ -204,6 +204,7 @@ test('pagination preserves zero counts and rejects missing or malformed headers'
   };
   const { contestApi } = load('services/api/contestApi.ts', {
     axios: { create: () => client },
+    '@/features/contests/problemAdapter': {},
     '@/models/contest': { Contest: class {} },
     '@/lib/firebase': { auth: { currentUser: null } },
     '@/lib/base64': { encodeBase64: value => value },

@@ -1,14 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
+import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Play, Send, Copy, Check } from 'lucide-react';
 import type { Problem } from '../problem.types';
-import axios from 'axios';
-import { contestApi } from '@/services/api/contestApi';
+import type { RunCodeResponse } from '@/services/api/contestApi';
 
 interface CodeProblemViewProps {
   problem: Problem;
   onSubmit?: (code: string, language: string) => Promise<void>;
+  onRun?: (code: string, language: string, stdin: string) => Promise<RunCodeResponse>;
 }
 
 const SUPPORTED_LANGUAGES = [
@@ -52,13 +53,28 @@ int main() {
 }`,
 };
 
-export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => {
+const getRunErrorMessage = (error: unknown): string => {
+  if (axios.isAxiosError(error)) {
+    if (error.response?.status === 404) return 'Code execution is unavailable right now.';
+    const responseData: unknown = error.response?.data;
+    if (typeof responseData === 'object' && responseData !== null) {
+      const data = responseData as Record<string, unknown>;
+      if (typeof data.error === 'string') return data.error;
+      if (typeof data.message === 'string') return data.message;
+    }
+    if (error.message) return error.message;
+  }
+  return error instanceof Error ? error.message : 'Code execution failed. Please try again.';
+};
+
+export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewProps) => {
   const [selectedLanguage, setSelectedLanguage] = useState('cpp');
   const [codeByLanguage, setCodeByLanguage] = useState<Record<string, string>>(
     () => ({ ...DEFAULT_CODE_TEMPLATES }),
   );
   const [customInput, setCustomInput] = useState('');
   const [output, setOutput] = useState('');
+  const [isOutputError, setIsOutputError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<'input' | 'output'>('input');
@@ -69,78 +85,85 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
   const [resizeDirection, setResizeDirection] = useState<'vertical' | 'horizontal' | null>(null);
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const inputRevisionRef = useRef(0);
   const code = codeByLanguage[selectedLanguage] || '';
 
-  const handleLanguageChange = useCallback((newLanguage: string) => {
-    setSelectedLanguage(newLanguage);
+  const invalidateRun = useCallback(() => {
+    inputRevisionRef.current += 1;
+    setOutput('');
+    setIsOutputError(false);
   }, []);
 
+  const handleLanguageChange = useCallback((newLanguage: string) => {
+    invalidateRun();
+    setSelectedLanguage(newLanguage);
+  }, [invalidateRun]);
+
   const handleCodeChange = useCallback((value: string | undefined) => {
+    invalidateRun();
     setCodeByLanguage((current) => ({
       ...current,
       [selectedLanguage]: value || '',
     }));
-  }, [selectedLanguage]);
+  }, [invalidateRun, selectedLanguage]);
 
   const handleRunCode = useCallback(async () => {
     if (!code.trim()) {
-      setActiveTab('output');
       setOutput('Code is empty.');
+      setIsOutputError(true);
+      setActiveTab('output');
       return;
     }
+    if (!onRun) {
+      setOutput('Code execution is unavailable right now.');
+      setIsOutputError(true);
+      setActiveTab('output');
+      return;
+    }
+
     setIsRunning(true);
     setActiveTab('output');
-    setOutput('Running code against custom input...');
+    setOutput('Running code...');
+    setIsOutputError(false);
+    const inputRevision = inputRevisionRef.current;
 
     try {
-      const res = await contestApi.runCustomInput(
-        code,
-        selectedLanguage,
-        customInput
+      const result = await onRun(code, selectedLanguage, customInput);
+      if (inputRevision !== inputRevisionRef.current) return;
+      const sections = [
+        'Status: ' + result.status,
+        'Runtime: ' + result.runtime + ' ms',
+        'Memory: ' + result.memory + ' KiB',
+      ];
+      setIsOutputError(result.status !== 'accepted');
+      let hasProgramOutput = false;
+      if (result.compile_output?.trim()) {
+        hasProgramOutput = true;
+        sections.push('Compiler output:\n' + result.compile_output.trimEnd());
+      }
+      if (result.stderr?.trim()) {
+        hasProgramOutput = true;
+        sections.push('Error output:\n' + result.stderr.trimEnd());
+      }
+      if (result.stdout) {
+        hasProgramOutput = true;
+        sections.push(result.stdout);
+      }
+      if (!hasProgramOutput) sections.push(
+        result.status === 'accepted'
+          ? '(Program finished without output.)'
+          : '(No output was returned.)',
       );
 
-      let formattedOutput = '';
-      if (res.compile_output) {
-        formattedOutput += `Compilation Output:\n${res.compile_output}\n`;
-      }
-      if (res.stderr) {
-        formattedOutput += `Standard Error:\n${res.stderr}\n`;
-      }
-      if (res.stdout) {
-        formattedOutput += `Output:\n${res.stdout}\n`;
-      }
-      if (!res.compile_output && !res.stderr && !res.stdout) {
-        formattedOutput = '(No output produced)';
-      }
-
-      const statusText = res.status || 'Finished';
-      const runtimeText = typeof res.runtime === 'number' ? `${res.runtime} ms` : 'N/A';
-      const memoryText = typeof res.memory === 'number'
-        ? `${(res.memory / 1024).toFixed(1)} MiB`
-        : 'N/A';
-
-      formattedOutput += `\n[Status: ${statusText} | Runtime: ${runtimeText} | Memory: ${memoryText}]`;
-
-      setOutput(formattedOutput);
-    } catch (err: unknown) {
-      console.error('Run code error:', err);
-      let errorMsg = 'An unexpected error occurred';
-      if (axios.isAxiosError(err)) {
-        if (err.response?.status === 404 || err.response?.status === 405 || err.response?.status === 501) {
-          errorMsg = 'Custom code execution is currently disabled or unavailable on this server.';
-        } else if (err.response?.status === 429) {
-          errorMsg = err.response.data?.error || 'Run capacity busy; please wait a few seconds before trying again.';
-        } else {
-          errorMsg = err.response?.data?.error || err.message;
-        }
-      } else if (err instanceof Error) {
-        errorMsg = err.message;
-      }
-      setOutput(`Execution error: ${errorMsg}`);
+      setOutput(sections.join('\n\n'));
+    } catch (error) {
+      if (inputRevision !== inputRevisionRef.current) return;
+      setIsOutputError(true);
+      setOutput(getRunErrorMessage(error));
     } finally {
       setIsRunning(false);
     }
-  }, [code, selectedLanguage, customInput]);
+  }, [code, customInput, onRun, selectedLanguage]);
 
   const handleSubmit = async () => {
     if (!onSubmit) {
@@ -409,11 +432,8 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
           <div className="border-b border-gray-700 px-4 py-2 bg-gray-900/50 flex items-center justify-between">
             <select
               value={selectedLanguage}
-              disabled={isRunning}
               onChange={(e) => handleLanguageChange(e.target.value)}
-              className={`bg-gray-800 border border-gray-600 text-white rounded px-3 py-1.5 text-xs focus:outline-none focus:border-green-400 font-['DM_Sans'] ${
-                isRunning ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+              className="bg-gray-800 border border-gray-600 text-white rounded px-3 py-1.5 text-xs focus:outline-none focus:border-green-400 font-['DM_Sans']"
             >
               {SUPPORTED_LANGUAGES.map((lang) => (
                 <option key={lang.value} value={lang.value}>
@@ -424,7 +444,7 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
             <div className="flex items-center gap-2">
               <Button
                 onClick={handleRunCode}
-                disabled={isRunning}
+                disabled={isRunning || !code.trim()}
                 size="sm"
                 variant="outline"
                 className="text-xs flex items-center gap-1 text-black hover:text-black"
@@ -525,7 +545,10 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
                   </label>
                   <textarea
                     value={customInput}
-                    onChange={(e) => setCustomInput(e.target.value)}
+                    onChange={(e) => {
+                      invalidateRun();
+                      setCustomInput(e.target.value);
+                    }}
                     placeholder="Enter your custom input here..."
                     className="flex-1 bg-gray-900 border border-gray-700 rounded p-2 text-xs font-mono text-white focus:outline-none focus:border-green-400 resize-none"
                   />
@@ -536,7 +559,7 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
                     Output:
                   </label>
                   {output ? (
-                    <pre className="flex-1 bg-black border border-gray-700 rounded p-2 text-xs font-mono text-green-300 overflow-auto">
+                    <pre className={'flex-1 bg-black border border-gray-700 rounded p-2 text-xs font-mono overflow-auto ' + (isOutputError ? 'text-red-300' : 'text-green-300')}>
                       {output}
                     </pre>
                   ) : (

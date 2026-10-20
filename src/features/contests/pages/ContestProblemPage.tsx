@@ -19,6 +19,7 @@ export const ContestProblemPage = () => {
     isHistoryLoading,
     hasMoreHistory,
     submitCode,
+    runCode,
     submitMCQ,
     retryPolling,
     refreshHistory,
@@ -93,6 +94,7 @@ export const ContestProblemPage = () => {
             key={problem.id}
             problem={problem}
             onSubmit={submitCode}
+            onRun={runCode}
           />
         ) : (
           <MCQProblemView

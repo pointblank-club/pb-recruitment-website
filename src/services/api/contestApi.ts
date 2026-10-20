@@ -4,16 +4,14 @@ export interface PaginatedLeaderboard {
   totalPages: number;
 }
 
-export interface CustomRunResponse {
-  status: string;
-  stdout: string;
-  stderr: string;
-  compile_output: string;
-  runtime?: number; // milliseconds
-  memory?: number;  // KiB
-}
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
 import type { Problem, LeaderboardEntry } from '@/features/contests/problem.types';
+import {
+  toProblemDetails,
+  toProblemOverview,
+  type ProblemDetailsResponse,
+  type ProblemOverviewResponse,
+} from '@/features/contests/problemAdapter';
 import { Contest } from "@/models/contest";
 import { auth } from '@/lib/firebase';
 import { encodeBase64 } from '@/lib/base64';
@@ -75,55 +73,13 @@ class ContestApiService {
   }
 
   async getContestProblems(contestId: string): Promise<Problem[]> {
-    const response = await this.axiosInstance.get<Problem[]>(`/contests/${contestId}/problems`);
-    return response.data;
+    const response = await this.axiosInstance.get<ProblemOverviewResponse[]>(`/contests/${contestId}/problems`);
+    return response.data.map((problem) => toProblemOverview(problem, contestId));
   }
 
   async getProblemById(contestId: string, problemId: string): Promise<Problem> {
-    interface RawTestCaseResponse {
-      index?: number;
-      input?: string;
-      expected_output?: string;
-      is_sample?: boolean;
-    }
-    interface RawProblemStatementResponse {
-      problem_id: string;
-      contest_id: string;
-      name: string;
-      description?: string;
-      score: number;
-      type: 'code' | 'mcq';
-      answer?: number[];
-      options?: string[];
-      testcases?: RawTestCaseResponse[];
-      time_limit?: number;
-      memory_limit?: number;
-    }
-
-    const response = await this.axiosInstance.get<RawProblemStatementResponse>(
-      `/contests/${contestId}/problems/${problemId}`
-    );
-    const data = response.data;
-    return {
-      id: data.problem_id,
-      contest_id: data.contest_id,
-      name: data.name,
-      description: data.description,
-      score: data.score,
-      type: data.type,
-      answer: data.answer,
-      options: data.options,
-      time_limit: data.time_limit,
-      memory_limit: data.memory_limit,
-      examples: Array.isArray(data.testcases)
-        ? data.testcases
-            .filter((tc) => tc.is_sample)
-            .map((tc) => ({
-              input: tc.input || '',
-              output: tc.expected_output || '',
-            }))
-        : [],
-    };
+    const response = await this.axiosInstance.get<ProblemDetailsResponse>(`/contests/${contestId}/problems/${problemId}`);
+    return toProblemDetails(response.data);
   }
 
   async getContestLeaderboard(contestId: string, page: number = 0): Promise<PaginatedLeaderboard> {
@@ -144,23 +100,6 @@ class ContestApiService {
       totalCount,
       totalPages,
     };
-  }
-
-  async runCustomInput(
-    code: string,
-    language: string,
-    stdin: string
-  ): Promise<CustomRunResponse> {
-    const response = await this.axiosInstance.post<CustomRunResponse>(
-      '/submission/run',
-      {
-        code,
-        language,
-        stdin,
-      },
-      { timeout: 20_000 }
-    );
-    return response.data;
   }
 
   async getContestById(contestId: string): Promise<Contest | null> {
@@ -201,6 +140,34 @@ class ContestApiService {
       language,
     });
     return response.data;
+  }
+
+  async runCodeSolution(
+    code: string,
+    language: string,
+    stdin: string,
+  ): Promise<RunCodeResponse> {
+    const response = await this.axiosInstance.post<RunCodeResponse>(
+      '/submission/run',
+      {
+        code,
+        language,
+        stdin,
+      },
+      { timeout: 20_000 },
+    );
+    const result = response.data;
+    if (
+      typeof result !== 'object' || result === null ||
+      !['accepted', 'wrong_answer', 'tle', 'failed_to_process', 'rte', 'judge_error'].includes(result.status) ||
+      [result.stdout, result.stderr, result.compile_output].some((value) => typeof value !== 'string') ||
+      [result.runtime, result.memory].some((value) => (
+        typeof value !== 'number' || !Number.isFinite(value) || value < 0
+      ))
+    ) {
+      throw new Error('Code execution returned an invalid response.');
+    }
+    return result;
   }
 
   async submitMCQAnswer(
@@ -338,6 +305,15 @@ class ContestApiService {
 
 export interface SubmissionResponse {
   submission_id: string;
+}
+
+export interface RunCodeResponse {
+  status: string;
+  stdout: string;
+  stderr: string;
+  compile_output: string;
+  runtime: number;
+  memory: number;
 }
 
 export type SubmissionType = 'code' | 'mcq';

@@ -6,6 +6,7 @@ import {
   type SubmissionResponse,
   type SubmissionStatus,
   type SubmissionType,
+  type RunCodeResponse,
 } from '@/services/api/contestApi';
 
 const FIRST_POLL_DELAY_MS = 1000;
@@ -289,6 +290,10 @@ export const useProblemSubmissions = (contestId: string, problemId: string) => {
     )
   ), [contestId, problemId, submit]);
 
+  const runCode = useCallback((code: string, language: string, stdin: string): Promise<RunCodeResponse> => (
+    contestApi.runCodeSolution(code, language, stdin)
+  ), []);
+
   const submitMCQ = useCallback((selectedOption: number) => (
     submit(
       () => contestApi.submitMCQAnswer(contestId, problemId, selectedOption),
@@ -323,6 +328,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string) => {
     isHistoryLoading,
     hasMoreHistory,
     submitCode,
+    runCode,
     submitMCQ,
     retryPolling,
     refreshHistory,
