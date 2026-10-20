@@ -124,11 +124,13 @@ export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewPro
     try {
       const result = await onRun(code, selectedLanguage, customInput);
       if (inputRevision !== inputRevisionRef.current) return;
-      const sections = ['Status: ' + (result.status || 'Finished')];
-      setIsOutputError(!['accepted', 'finished'].includes(result.status.toLowerCase()));
+      const sections = [
+        'Status: ' + result.status,
+        'Runtime: ' + result.runtime + ' ms',
+        'Memory: ' + result.memory + ' KiB',
+      ];
+      setIsOutputError(result.status !== 'accepted');
       let hasProgramOutput = false;
-      if (result.runtime > 0) sections.push('Runtime: ' + result.runtime + ' ms');
-      if (result.memory) sections.push('Memory: ' + result.memory + ' KB');
       if (result.compile_output?.trim()) {
         hasProgramOutput = true;
         sections.push('Compiler output:\n' + result.compile_output.trimEnd());
@@ -142,7 +144,7 @@ export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewPro
         sections.push(result.stdout);
       }
       if (!hasProgramOutput) sections.push(
-        result.status.toLowerCase() === 'accepted'
+        result.status === 'accepted'
           ? '(Program finished without output.)'
           : '(No output was returned.)',
       );

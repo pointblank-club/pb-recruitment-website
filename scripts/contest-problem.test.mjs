@@ -7,6 +7,7 @@ import { transformSync } from 'esbuild';
 function load(path, imports = {}) {
   const { code } = transformSync(readFileSync(new URL(path, import.meta.url), 'utf8'), {
     loader: path.endsWith('.tsx') ? 'tsx' : 'ts', format: 'cjs', jsx: 'automatic',
+    define: { 'import.meta.env': '{}' },
   });
   const module = { exports: {} };
   runInNewContext(code, {
@@ -104,6 +105,62 @@ function edit(render, input, revision) {
 const result = {
   status: 'accepted', stdout: 'OLD RESULT', stderr: '', compile_output: '', runtime: 1, memory: 1,
 };
+
+test('Run validates results without changing the raw request or retrying', async () => {
+  let data = result;
+  const requests = [];
+  const client = {
+    interceptors: { request: { use() {} }, response: { use() {} } },
+    async post(...args) {
+      requests.push(args);
+      return { data };
+    },
+  };
+  const { contestApi } = load('../src/services/api/contestApi.ts', {
+    axios: { __esModule: true, default: { create: () => client } },
+    '@/features/contests/problemAdapter': {},
+    '@/models/contest': { Contest: class {} },
+    '@/lib/firebase': { auth: { currentUser: null } },
+    '@/lib/base64': {},
+  });
+  const run = () => contestApi.runCodeSolution('YWJj', 'python', 'नमस्ते\n');
+  for (const status of ['accepted', 'wrong_answer', 'tle', 'failed_to_process', 'rte', 'judge_error']) {
+    data = { ...result, status, stdout: ' \nनमस्ते\n', runtime: 0, memory: 0 };
+    assert.equal(await run(), data);
+  }
+  assert.deepEqual(JSON.parse(JSON.stringify(requests[0])), [
+    '/submission/run', { code: 'YWJj', language: 'python', stdin: 'नमस्ते\n' }, { timeout: 20_000 },
+  ]);
+  const invalid = [
+    null, 'invalid', [], { status: 'accepted' },
+    ...Object.keys(result).map((missing) => Object.fromEntries(
+      Object.entries(result).filter(([key]) => key !== missing),
+    )),
+    ...['finished', 'pending', '', 0].map((status) => ({ ...result, status })),
+    ...['stdout', 'stderr', 'compile_output'].flatMap((field) => (
+      [null, 0, {}].map((value) => ({ ...result, [field]: value }))
+    )),
+    ...['runtime', 'memory'].flatMap((field) => (
+      [null, '0', -1, NaN, Infinity].map((value) => ({ ...result, [field]: value }))
+    )),
+  ];
+  for (data of invalid) {
+    const before = requests.length;
+    await assert.rejects(run(), /invalid response/);
+    assert.equal(requests.length, before + 1);
+  }
+});
+
+test('Run displays zero metrics with milliseconds and KiB', async () => {
+  const render = codeView(async () => ({ ...result, stdout: '', runtime: 0, memory: 0 }));
+  await find(render(), (element) => element.type === 'Button' && element.props.variant === 'outline')
+    .props.onClick();
+  const output = node(render(), 'pre').props.children;
+  assert.match(output, /Status: accepted/);
+  assert.match(output, /Runtime: 0 ms/);
+  assert.match(output, /Memory: 0 KiB/);
+  assert.match(output, /Program finished without output/);
+});
 
 for (const input of ['code', 'language', 'stdin']) {
   test(`${input} edits clear completed output and discard pending output`, async () => {

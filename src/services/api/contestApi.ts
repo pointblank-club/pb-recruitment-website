@@ -135,7 +135,18 @@ class ContestApiService {
       },
       { timeout: 20_000 },
     );
-    return response.data;
+    const result = response.data;
+    if (
+      typeof result !== 'object' || result === null ||
+      !['accepted', 'wrong_answer', 'tle', 'failed_to_process', 'rte', 'judge_error'].includes(result.status) ||
+      [result.stdout, result.stderr, result.compile_output].some((value) => typeof value !== 'string') ||
+      [result.runtime, result.memory].some((value) => (
+        typeof value !== 'number' || !Number.isFinite(value) || value < 0
+      ))
+    ) {
+      throw new Error('Code execution returned an invalid response.');
+    }
+    return result;
   }
 
   async submitMCQAnswer(
