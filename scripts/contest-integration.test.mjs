@@ -63,7 +63,7 @@ function leaderboard() {
   const calls = [];
   const intervals = new Map();
   const api = Object.fromEntries(['getContestById', 'getContestLeaderboard'].map(method => [method,
-    (...args) => new Promise(resolve => calls.push({ method, args, resolve })),
+    (...args) => new Promise((resolve, reject) => calls.push({ method, args, resolve, reject })),
   ]));
   const { useLeaderboard } = load('features/contests/hooks/useLeaderboard.ts', {
     react: harness.react,
@@ -77,6 +77,7 @@ function leaderboard() {
     calls,
     render: (id = 'A', interval = 0) => harness.render(() => useLeaderboard(id, interval)),
     async resolve(index, value) { calls[index].resolve(value); await new Promise(setImmediate); },
+    async reject(index, error) { calls[index].reject(error); await new Promise(setImmediate); },
     tick: () => [...intervals.values()].forEach(fn => fn()),
     unmount: harness.unmount,
     intervals,
@@ -115,6 +116,66 @@ test('page cleanup leaves pending metadata valid and refresh ticks do not overla
   assert.equal(state.isLoading, false);
   h.unmount();
   assert.equal(h.intervals.size, 0);
+});
+
+test('automatic refresh preserves slow metadata while leaderboard refreshes continue', async () => {
+  const h = leaderboard();
+  h.render('A', 30000);
+  await h.resolve(1, rows());
+  h.render('A', 30000);
+
+  for (let tick = 0; tick < 3; tick++) {
+    h.tick();
+    assert.equal(h.calls.filter(call => call.method === 'getContestById').length, 1);
+    assert.equal(h.calls.filter(call => call.method === 'getContestLeaderboard').length, tick + 2);
+    await h.resolve(tick + 2, rows());
+    h.render('A', 30000);
+  }
+
+  await h.resolve(0, { id: 'A' });
+  const state = h.render('A', 30000);
+  assert.equal(state.contest.id, 'A');
+  assert.equal(state.isLoading, false);
+  h.unmount();
+});
+
+test('automatic metadata retries resume after a failure and stop overlapping', async () => {
+  const h = leaderboard();
+  h.render('A', 30000);
+  await h.resolve(1, rows());
+  await h.reject(0, new Error('metadata unavailable'));
+  assert.ok(h.render('A', 30000).error);
+
+  h.tick();
+  h.tick();
+  assert.equal(h.calls.filter(call => call.method === 'getContestById').length, 2);
+  await h.resolve(2, { id: 'A' });
+  await h.resolve(3, rows());
+  const state = h.render('A', 30000);
+  assert.equal(state.contest.id, 'A');
+  assert.equal(state.error, null);
+  assert.equal(state.isLoading, false);
+  h.unmount();
+});
+
+test('manual retry can supersede pending metadata without an old completion clearing its guard', async () => {
+  const h = leaderboard();
+  h.render('A', 30000);
+  await h.reject(1, new Error('leaderboard unavailable'));
+  h.render('A', 30000).refresh();
+  assert.equal(h.calls.filter(call => call.method === 'getContestById').length, 2);
+
+  await h.resolve(0, { id: 'obsolete' });
+  h.render('A', 30000);
+  h.tick();
+  assert.equal(h.calls.filter(call => call.method === 'getContestById').length, 2);
+  await h.resolve(2, { id: 'A' });
+  await h.resolve(3, rows());
+  const state = h.render('A', 30000);
+  assert.equal(state.contest.id, 'A');
+  assert.equal(state.error, null);
+  assert.equal(state.isLoading, false);
+  h.unmount();
 });
 
 test('a leaderboard shrinking to zero pages clamps to page zero and finishes loading', async () => {

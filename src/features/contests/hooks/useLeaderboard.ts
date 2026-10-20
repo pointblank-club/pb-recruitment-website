@@ -23,6 +23,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
   contestRef.current = contest;
   const contestErrorRef = useRef<string | null>(null);
   contestErrorRef.current = contestError;
+  const isFetchingContestRef = useRef(false);
   const isFetchingLeaderboardRef = useRef(false);
   const hasLoadedDataRef = useRef(false);
 
@@ -36,6 +37,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
 
     const gen = ++metadataGenRef.current;
     const currentId = contestId;
+    isFetchingContestRef.current = true;
     setIsContestLoading(true);
 
     try {
@@ -54,6 +56,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
       setContestError(err instanceof Error ? err.message : "Failed to fetch contest metadata");
     } finally {
       if (gen === metadataGenRef.current && prevContestIdRef.current === currentId) {
+        isFetchingContestRef.current = false;
         setIsContestLoading(false);
       }
     }
@@ -64,6 +67,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
     const metaRef = metadataGenRef;
     return () => {
       metaRef.current++;
+      isFetchingContestRef.current = false;
     };
   }, [fetchContest]);
 
@@ -145,7 +149,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
     fetchLeaderboard(page, false);
 
     const interval = refreshIntervalMs ? setInterval(() => {
-      if (!contestRef.current || contestErrorRef.current) {
+      if (!isFetchingContestRef.current && (!contestRef.current || contestErrorRef.current)) {
         fetchContest();
       }
       fetchLeaderboard(page, true);
