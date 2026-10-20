@@ -75,7 +75,7 @@ const AdminContestContestants: React.FC = () => {
         console.error("Error fetching contestants:", err);
         setError(err instanceof Error ? err.message : "Failed to load contestants");
         setContestants([]);
-        setLoadedContestId(null);
+        setLoadedContestId(contestId);
       } finally {
         if (!isCancelled) {
           setLoading(false);

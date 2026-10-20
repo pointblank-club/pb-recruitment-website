@@ -78,12 +78,11 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
         return;
       }
 
+      const generation = ++requestGenRef.current;
+      isFetchingLeaderboardRef.current = true;
       if (!isBackground) {
-        requestGenRef.current++;
         setIsLeaderboardLoading(true);
       }
-      const generation = requestGenRef.current;
-      isFetchingLeaderboardRef.current = true;
 
       try {
         const res = await contestApi.getContestLeaderboard(contestId, targetPage);
@@ -114,8 +113,8 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
           setLeaderboardError(err instanceof Error ? err.message : "Failed to fetch leaderboard");
         }
       } finally {
-        isFetchingLeaderboardRef.current = false;
         if (generation === requestGenRef.current) {
+          isFetchingLeaderboardRef.current = false;
           setIsLeaderboardLoading(false);
         }
       }
