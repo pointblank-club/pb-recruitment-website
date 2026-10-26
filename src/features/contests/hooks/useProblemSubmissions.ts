@@ -63,7 +63,8 @@ const mergeSubmissions = (
   return Array.from(byId.values()).sort((left, right) => right.created_at - left.created_at);
 };
 
-export const useProblemSubmissions = (contestId: string, problemId: string) => {
+export const useProblemSubmissions = (contestId: string, problemId: string, options?: { skip?: boolean }) => {
+  const skip = options?.skip ?? false;
   const [activeSubmission, setActiveSubmission] = useState<ActiveSubmission>({ phase: 'idle' });
   const [history, setHistory] = useState<SubmissionDetailsResponse[]>([]);
   const [historyPage, setHistoryPage] = useState(0);
@@ -104,7 +105,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string) => {
     setHasMoreHistory(false);
     setHistoryError(null);
 
-    void refreshHistory();
+    if (!skip) void refreshHistory();
 
     return () => {
       pollTokenRef.current += 1;

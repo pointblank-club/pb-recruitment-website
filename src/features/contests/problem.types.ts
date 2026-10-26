@@ -54,4 +54,5 @@ export interface Contest {
   name: string;
   start_time: number;
   end_time: number;
+  is_registered?: boolean;
 }
