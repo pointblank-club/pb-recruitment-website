@@ -58,18 +58,33 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
 
         {/* Call to action buttons */}
         <div className="flex items-center gap-3 mt-4">
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-all ${
-              contest.isRegistrationOpen()
-                ? "bg-green text-black hover:bg-green-600"
-                : "bg-gray-700 text-gray-400 cursor-not-allowed"
-            }`}
-            disabled={!contest.isRegistrationOpen()}
-          >
-            {contest.isRegistrationOpen() ? "Register" : "Registration Closed"}
-          </motion.button>
+          {Date.now() >= new Date(contest.end_time).getTime() ? (
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/contests/${contest.id}/problems`);
+              }}
+              className="flex-1 py-2 px-4 rounded-lg font-semibold transition-all bg-green text-black hover:bg-green-600"
+            >
+              View Problems
+            </motion.button>
+          ) : (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-all ${
+                contest.isRegistrationOpen()
+                  ? "bg-green text-black hover:bg-green-600"
+                  : "bg-gray-700 text-gray-400 cursor-not-allowed"
+              }`}
+              disabled={!contest.isRegistrationOpen()}
+            >
+              {contest.isRegistrationOpen() ? "Register" : "Registration Closed"}
+            </motion.button>
+          )}
           <motion.button
             type="button"
             whileHover={{ scale: 1.05 }}
