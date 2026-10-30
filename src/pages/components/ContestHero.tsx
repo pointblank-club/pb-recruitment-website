@@ -35,11 +35,10 @@ const ContestHero: React.FC<ContestHeroProps> = ({ contest }) => {
           className="grid grid-cols-1 md:grid-cols-3 gap-8"
         >
           {/* Main Info */}
-          <motion.div variants={slideUp} className="md:col-span-2">
-            <h1 className="text-4xl md:text-5xl font-anton text-beige mb-4 leading-tight">
+          <motion.div variants={slideUp} className="md:col-span-2 flex flex-col justify-center">
+            <h1 className="text-4xl md:text-5xl font-anton text-beige leading-tight">
               {contest.name}
             </h1>
-            <p className="text-gray-300 text-lg mb-6">{contest.description}</p>
           </motion.div>
 
           {/* Quick Stats Card */}
