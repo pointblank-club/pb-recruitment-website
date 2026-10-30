@@ -49,7 +49,6 @@ export interface ProblemScore {
   solved_at?: number;
 }
 
-
 export interface Contest {
   id: string;
   name: string;

@@ -1,3 +1,16 @@
+export const formatEligibleYears = (years?: number[]): string => {
+    if (!years || years.length === 0) {
+        return "All Years";
+    }
+    const suffixes: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th" };
+    const sorted = [...years].sort((a, b) => a - b);
+    if (sorted.length === 1) {
+        return `${suffixes[sorted[0]] || sorted[0] + "th"} Year`;
+    }
+    const formatted = sorted.map(y => suffixes[y] || `${y}th`);
+    return `${formatted.slice(0, -1).join(", ")} & ${formatted[formatted.length - 1]} Year`;
+};
+
 export class Contest {
     id: string;
     name: string;
@@ -46,5 +59,9 @@ export class Contest {
         const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
         const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
         return `${durationHours}h ${durationMinutes}m`;
+    }
+
+    formatEligibleYears(): string {
+        return formatEligibleYears(this.eligible_to);
     }
 }

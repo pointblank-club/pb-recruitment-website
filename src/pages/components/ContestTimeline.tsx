@@ -5,7 +5,8 @@ import { ChevronRight } from "lucide-react";
 import type { Contest } from "@/models/contest";
 import { contestApi } from "@/services/api/contestApi";
 import { Popup } from "@/components/ui/popup";
-import { getAuth } from "firebase/auth";
+import { useAuth } from "@/lib/AuthContext";
+import { getContestSubmitted } from "@/lib/contestStorage";
 
 interface ContestTimelineProps {
   contest: Contest;
@@ -13,6 +14,7 @@ interface ContestTimelineProps {
 
 const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [isRegistered, setIsRegistered] = React.useState<boolean>(
     contest.is_registered ?? false
   );
@@ -48,46 +50,41 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
     setIsRegistered(contest.is_registered ?? false);
   }, [contest.id, contest.is_registered]);
 
-  // Countdown timer effect
   useEffect(() => {
-  if (!isRegistered) return;
+    if (!isRegistered) return;
 
-  const updateCountdown = () => {
-  const now = new Date().getTime();
-  const startTime = new Date(contest.start_time).getTime();
-  const distance = startTime - now;
-    console.log('Current time:', new Date(now).toLocaleString('en-IN'));
-    console.log('Contest start time:', new Date(contest.start_time).toLocaleString('en-IN'));
-    console.log('Distance (ms):', distance);
+    const updateCountdown = () => {
+      const now = new Date().getTime();
+      const distance = new Date(contest.start_time).getTime() - now;
 
-    if (distance < 0) {
-      setContestStarted(true);
-      setCountdown("");
-      return;
-    }
+      if (distance < 0) {
+        setContestStarted(true);
+        setCountdown("");
+        return;
+      }
 
-    const hours = Math.floor(distance / (1000 * 60 * 60));
-    const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+      const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
 
-    setCountdown(
-      `${hours.toString().padStart(2, "0")}:${minutes
-        .toString()
-        .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
-    );
-    setContestStarted(false);
-  };
+      setCountdown(
+        `${days}d ${hours.toString().padStart(2, "0")}:${minutes
+          .toString()
+          .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+      );
+      setContestStarted(false);
+    };
 
-  updateCountdown();
-  const interval = setInterval(updateCountdown, 1000);
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
 
-  return () => clearInterval(interval);
+    return () => clearInterval(interval);
   }, [isRegistered, contest.start_time]);
 
-  const handleRegister = async () => {
-    const auth = getAuth();
-    const user = auth.currentUser;
+  const eligibleYearsText = contest.formatEligibleYears();
 
+  const handleRegister = async () => {
     if (!user) {
       navigate("/login");
       return;
@@ -101,51 +98,67 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
         type: "success",
         message: "Successfully registered for the contest!",
       });
-      } catch (err: any) {
-        let message = "Failed to register. Please try again.";
+    } catch (err: unknown) {
+      let message = "Failed to register. Please try again.";
 
-        if (err?.response?.status) {
-          switch (err.response.status) {
-            case 403:
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
+      if (axiosErr?.response?.status) {
+        switch (axiosErr.response.status) {
+          case 403: {
+            const errText = (axiosErr.response.data?.error || "").toLowerCase();
+            if (
+              errText === "invalid year" ||
+              errText.includes("year") ||
+              errText.includes("eligible")
+            ) {
+              message = `You are not eligible for this contest based on your academic year. This contest is only open to students in ${eligibleYearsText}.`;
+            } else {
               message =
-                err.response.data?.error ||
+                axiosErr.response.data?.error ||
                 "Registration is closed or you are not eligible.";
-              break;
-
-            case 404:
-              message =
-                err.response.data?.error || "Contest or user not found.";
-              break;
-
-            case 409:
-              message = "You are already registered.";
-              setIsRegistered(true);
-              break;
-
-            case 500:
-              message = "Server error. Please try again later.";
-              break;
-
-            default:
-              message = "Unexpected error occurred.";
+            }
+            break;
           }
-        }
 
-        setPopup({
-          isOpen: true,
-          type: "error",
-          message,
-        });
+          case 404:
+            message =
+              axiosErr.response.data?.error || "Contest or user not found.";
+            break;
+
+          case 409:
+            message = "You are already registered.";
+            setIsRegistered(true);
+            break;
+
+          case 500:
+            message = "Server error. Please try again later.";
+            break;
+
+          default:
+            message = "Unexpected error occurred.";
+        }
       }
-    };
+
+      setPopup({
+        isOpen: true,
+        type: "error",
+        message,
+      });
+    }
+  };
+
+  const isContestEnded = Date.now() > contest.end_time;
+  const isSubmittedEarly = Boolean(
+    user?.uid && getContestSubmitted(contest.id, user.uid)
+  );
 
   const handleStartContest = () => {
-  // Request fullscreen 
-  document.documentElement.requestFullscreen().catch(() => {});
+    // Request fullscreen 
+    document.documentElement.requestFullscreen().catch(() => {});
 
-  // Redirect to problems page
-  navigate(`/contests/${contest.id}/problems`);
-};
+    // Redirect to problems page
+    navigate(`/contests/${contest.id}/problems`);
+  };
   const closePopup = () => {
     setPopup(prev => ({ ...prev, isOpen: false }));
   };
@@ -182,7 +195,6 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
                     <div className="space-y-4 relative">
                     {/* Background vertical line */}
                     <div className="absolute left-1.5 top-0 bottom-0 w-1 bg-gray-600" style={{ height: "100%" }} />
-
                     {timelineEvents.map((event, index) => (
                         <div key={index} className="flex gap-4 items-start relative z-10">
                         <div className="flex flex-col items-center flex-shrink-0">
@@ -205,28 +217,51 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
             variants={slideUp}
             className="bg-gradient-to-br from-green-950/40 to-green-900/20 border border-green-500/40 rounded-xl p-8"
           >
-            <h2 className="text-2xl font-anton text-beige mb-4">Ready to compete?</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <h2 className="text-2xl font-anton text-beige">Ready to compete?</h2>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/30 text-green-400 text-xs font-semibold uppercase tracking-wider">
+                <span>Eligible:</span>
+                <span className="text-white normal-case font-bold">{eligibleYearsText}</span>
+              </span>
+            </div>
             <p className="text-gray-300 mb-6">
-              {contest.isRegistrationOpen()
+              {isSubmittedEarly
+                ? "You have already completed and submitted your test for this contest."
+                : isContestEnded
+                ? "This contest has ended. Check out the leaderboard to see final rankings!"
+                : contest.isRegistrationOpen()
                 ? "Register now and secure your spot in this exciting contest!"
                 : "Registration for this contest has closed."}
             </p>
             <motion.button
-              whileHover={contest.isRegistrationOpen() || contestStarted ? { scale: 1.05 } : {}}
-              whileTap={contest.isRegistrationOpen() || contestStarted ? { scale: 0.95 } : {}}
-              onClick={contestStarted ? handleStartContest : handleRegister}
-              disabled={(!contest.isRegistrationOpen() && !contestStarted) || (isRegistered && !contestStarted)}
+              whileHover={!isSubmittedEarly && (contest.isRegistrationOpen() || contestStarted) ? { scale: 1.05 } : {}}
+              whileTap={!isSubmittedEarly && (contest.isRegistrationOpen() || contestStarted) ? { scale: 0.95 } : {}}
+              onClick={
+                isSubmittedEarly || isContestEnded
+                  ? () => navigate(`/contests/${contest.id}/leaderboard`)
+                  : contestStarted
+                  ? handleStartContest
+                  : handleRegister
+              }
+              disabled={
+                (!contest.isRegistrationOpen() && !contestStarted && !isSubmittedEarly && !isContestEnded) ||
+                (isRegistered && !contestStarted && !isSubmittedEarly && !isContestEnded)
+              }
               className={`w-full py-3 px-6 rounded-lg font-bold text-lg transition-all flex items-center justify-center gap-2
                 ${
-                  (!contest.isRegistrationOpen() && !contestStarted) || (isRegistered && !contestStarted)
+                  isSubmittedEarly
+                    ? "bg-gray-800 text-green-400 border border-green-500/30 hover:bg-gray-750"
+                    : (!contest.isRegistrationOpen() && !contestStarted && !isContestEnded) || (isRegistered && !contestStarted && !isContestEnded)
                     ? "bg-gray-700 text-gray-400 cursor-not-allowed"
-                    : contestStarted
-                    ? "bg-green text-black hover:bg-green-600"
                     : "bg-green text-black hover:bg-green-600"
                 }
               `}
             >
-              {!contest.isRegistrationOpen() && !contestStarted
+              {isSubmittedEarly
+                ? "View Leaderboard"
+                : isContestEnded
+                ? "View Leaderboard"
+                : !contest.isRegistrationOpen() && !contestStarted
                 ? "Registration Closed"
                 : contestStarted
                 ? "Start Contest"
@@ -234,7 +269,7 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
                 ? "Already Registered"
                 : "Register"
               }
-              {(contest.isRegistrationOpen() || contestStarted) && <ChevronRight size={20} />}
+              <ChevronRight size={20} />
             </motion.button>
             {contest.isRegistrationOpen() && !isRegistered && (
               <p className="text-xs text-gray-400 mt-4 text-center">

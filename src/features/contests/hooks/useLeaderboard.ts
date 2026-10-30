@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import axios from "axios";
 import type { LeaderboardEntry, Contest } from "../problem.types";
 import { contestApi } from "@/services/api/contestApi";
 import { useAuth } from "@/lib/AuthContext";
@@ -14,6 +15,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
   const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(true);
   const [contestError, setContestError] = useState<string | null>(null);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+  const [hasStarted, setHasStarted] = useState<boolean>(true);
   const currentUserId = user?.uid;
 
   const requestGenRef = useRef(0);
@@ -32,6 +34,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
       setContest(null);
       setIsContestLoading(false);
       setContestError(null);
+      setHasStarted(true);
       return;
     }
 
@@ -113,12 +116,24 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
         setTotalParticipants(res.totalCount);
         setTotalPages(res.totalPages);
         setLeaderboardError(null);
+        setHasStarted(true);
         hasLoadedDataRef.current = true;
-      } catch (err) {
+      } catch (err: unknown) {
         if (generation !== requestGenRef.current) return;
-        // Suppress background errors only if valid data is already loaded and displayed
-        if (!isBackground || !hasLoadedDataRef.current) {
-          setLeaderboardError(err instanceof Error ? err.message : "Failed to fetch leaderboard");
+        let isNotStarted = false;
+        if (axios.isAxiosError(err)) {
+          const errorResponse = err.response?.data?.error;
+          const status = err.response?.status;
+          if (status === 403 && errorResponse === "contest has not started yet") {
+            isNotStarted = true;
+            setHasStarted(false);
+            setLeaderboard([]);
+          }
+        }
+        if (!isNotStarted) {
+          if (!isBackground || !hasLoadedDataRef.current) {
+            setLeaderboardError(err instanceof Error ? err.message : "Failed to fetch leaderboard");
+          }
         }
       } finally {
         if (generation === requestGenRef.current) {
@@ -157,7 +172,6 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
 
     const genRef = requestGenRef;
     return () => {
-      // Invalidate outstanding work during cleanup
       genRef.current++;
       clearInterval(interval);
     };
@@ -187,6 +201,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
     totalParticipants,
     isLoading,
     error,
+    hasStarted,
     refresh,
   };
 };

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { Clock, Cpu } from "lucide-react";
 import {
   adminApi,
   type AdminProblem,
@@ -18,6 +19,8 @@ interface ProblemFormData {
   options: string[];
   correctAnswer: number;
   testcases: ProblemTestCase[];
+  timeLimit: number;
+  memoryLimit: number;
 }
 
 interface ProblemManagerProps {
@@ -37,6 +40,8 @@ const initialFormData = (): ProblemFormData => ({
   options: ["", "", "", ""],
   correctAnswer: 0,
   testcases: [emptyTestCase()],
+  timeLimit: 1000,
+  memoryLimit: 256,
 });
 
 const formDataFromProblem = (problem: AdminProblem): ProblemFormData => ({
@@ -47,6 +52,8 @@ const formDataFromProblem = (problem: AdminProblem): ProblemFormData => ({
   options: problem.options.length > 0 ? problem.options : ["", "", "", ""],
   correctAnswer: problem.answer[0] ?? 0,
   testcases: problem.testcases.length > 0 ? problem.testcases : [emptyTestCase()],
+  timeLimit: problem.time_limit ?? 1000,
+  memoryLimit: problem.memory_limit ?? 256,
 });
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
@@ -108,7 +115,9 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
     const { name, value } = event.target;
     setFormData((current) => ({
       ...current,
-      [name]: name === "points" ? Number(value) : value,
+      [name]: ["points", "timeLimit", "memoryLimit"].includes(name)
+        ? (value === "" ? 0 : Number(value))
+        : value,
     }));
   };
 
@@ -177,9 +186,19 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
     event.preventDefault();
     setFormError("");
 
-    if (formData.type === "code" && formData.testcases.length === 0) {
-      setFormError("Add at least one testcase for a coding problem.");
-      return;
+    if (formData.type === "code") {
+      if (formData.testcases.length === 0) {
+        setFormError("Add at least one testcase for a coding problem.");
+        return;
+      }
+      if (!formData.timeLimit || formData.timeLimit <= 0) {
+        setFormError("Time limit must be greater than 0 ms.");
+        return;
+      }
+      if (!formData.memoryLimit || formData.memoryLimit <= 0) {
+        setFormError("Memory limit must be greater than 0 MB.");
+        return;
+      }
     }
 
     const basePayload = {
@@ -192,6 +211,8 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
           ...basePayload,
           type: "code",
           testcases: formData.testcases,
+          time_limit: formData.timeLimit,
+          memory_limit: formData.memoryLimit,
         }
       : {
           ...basePayload,
@@ -215,6 +236,8 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
         name: payload.name,
         score: payload.score,
         type: payload.type,
+        time_limit: payload.type === "code" ? payload.time_limit : undefined,
+        memory_limit: payload.type === "code" ? payload.memory_limit : undefined,
       });
       toast.success(editingProblemId ? "Problem updated." : "Problem created.");
       resetForm();
@@ -276,6 +299,18 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                     }`}>
                       {problem.type === "code" ? "CODE" : "MCQ"}
                     </span>
+                    {problem.type === "code" && problem.time_limit && (
+                      <span className="flex items-center gap-1 text-xs text-gray-400">
+                        <Clock size={14} />
+                        {problem.time_limit} ms
+                      </span>
+                    )}
+                    {problem.type === "code" && problem.memory_limit && (
+                      <span className="flex items-center gap-1 text-xs text-gray-400">
+                        <Cpu size={14} />
+                        {problem.memory_limit} MB
+                      </span>
+                    )}
                   </div>
                   <div className="text-sm">
                     <span className="text-gray-500">Problem ID:</span>
@@ -451,17 +486,51 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                 </div>
               )}
 
-              <div className="max-w-xs">
-                <label className="mb-2 block text-gray-400">Points</label>
-                <input
-                  type="number"
-                  name="points"
-                  value={formData.points}
-                  onChange={handleInputChange}
-                  min="1"
-                  className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
-                  required
-                />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="mb-2 block text-gray-400">Points</label>
+                  <input
+                    type="number"
+                    name="points"
+                    value={formData.points}
+                    onChange={handleInputChange}
+                    min="1"
+                    className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                    required
+                  />
+                </div>
+                {formData.type === "code" && (
+                  <>
+                    <div>
+                      <label className="mb-2 block text-gray-400">Time Limit (ms)</label>
+                      <input
+                        type="number"
+                        name="timeLimit"
+                        value={formData.timeLimit}
+                        onChange={handleInputChange}
+                        min="1"
+                        max="10000"
+                        placeholder="1000"
+                        className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-gray-400">Memory Limit (MB)</label>
+                      <input
+                        type="number"
+                        name="memoryLimit"
+                        value={formData.memoryLimit}
+                        onChange={handleInputChange}
+                        min="2"
+                        max="500"
+                        placeholder="256"
+                        className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                        required
+                      />
+                    </div>
+                  </>
+                )}
               </div>
 
               {formError && (

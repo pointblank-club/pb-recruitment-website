@@ -45,13 +45,15 @@ const VERDICT_LABELS: Record<SubmissionStatus, string> = {
 const PASSING_STATUSES = new Set(['accepted', 'completed', 'pass', 'passed']);
 const JUDGING_STATUSES = new Set(['pending', 'processing']);
 
-const formatVerdict = (status?: string) => {
+/* eslint-disable-next-line react-refresh/only-export-components */
+export const formatVerdict = (status?: string) => {
   if (!status) return 'Unknown';
   return VERDICT_LABELS[status as SubmissionStatus]
     || status.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase());
 };
 
-const getVerdictClasses = (status?: string) => {
+/* eslint-disable-next-line react-refresh/only-export-components */
+export const getVerdictClasses = (status?: string) => {
   if (status && PASSING_STATUSES.has(status)) return 'border-green-500/40 bg-green-500/10 text-green-300';
   if (status && JUDGING_STATUSES.has(status)) return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
   return 'border-red-500/40 bg-red-500/10 text-red-300';
