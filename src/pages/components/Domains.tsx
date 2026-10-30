@@ -23,21 +23,41 @@ const domains = [
     img: "https://img.icons8.com/?size=100&id=13816&format=png&color=000000",
   },
   {
-    name: "Flutter Development",
-    img: "https://img.icons8.com/?size=100&id=7I3BjCqe9rjG&format=png&color=000000",
-  },
-  {
-    name: "React Development",
-    img: "https://img.icons8.com/?size=100&id=123603&format=png&color=000000",
-  },
-  {
-    name: "Open Source Hackathon",
+    name: "Open Source",
     img: "https://img.icons8.com/?size=100&id=63655&format=png&color=000000",
   },
   {
     name: "Interview Prep",
     img: "https://img.icons8.com/?size=100&id=13724&format=png&color=000000",
   },
+  {
+    name: "Web Development",
+    img: "https://img.icons8.com/?size=100&id=l0UsZRTvcGel&format=png&color=000000",
+  },
+  {
+    name: "Competitive Programming",
+    img: "https://img.icons8.com/?size=100&id=0KLeTkP5UwuU&format=png&color=000000",
+  },
+  {
+    name: "Hackathons",
+    img: "https://img.icons8.com/?size=100&id=wgH2Qk7mFnEl&format=png&color=000000",
+  },
+  {
+    name: "AOSP",
+    img: "https://img.icons8.com/?size=100&id=5ZJheGjlWsoN&format=png&color=000000",
+  },
+  {
+    name: "Systems Engineering",
+    img: "https://img.icons8.com/?size=100&id=49431&format=png&color=000000",
+  },
+  {
+    name: "Cybersecurity",
+    img: "https://img.icons8.com/?size=100&id=nmUB18jDNOqA&format=png&color=000000",
+  },
+  {
+    name: "App Development",
+    img: "https://img.icons8.com/?size=100&id=MnBGc0np0Ond&format=png&color=000000",
+  }
 ];
 
 const Card = ({ img, name }: { img: string; name: string }) => {
