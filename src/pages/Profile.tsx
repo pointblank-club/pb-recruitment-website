@@ -53,10 +53,6 @@ export const Profile: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
   const handlePasswordChange = async () => {
     if (!passwordData.new || passwordData.new.length < 6) {
       setError("Password must be at least 6 characters");
@@ -88,12 +84,13 @@ export const Profile: React.FC = () => {
   };
 
   const handleBranchSelect = async (branch: string) => {
-    handleInputChange("branch", branch);
+    setFormData(prev => ({ ...prev, branch }));
     setShowBranchDropdown(false);
     if (user) {
       setProfileLoading(true);
       try {
-        await updateUserProfile(user.uid, { branch });
+        // The backend requires name and mobile alongside department.
+        await updateUserProfile(user.uid, { ...userProfile, branch });
         await refreshProfile();
         setPopup({
           isOpen: true,
@@ -102,6 +99,7 @@ export const Profile: React.FC = () => {
         });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Failed to update branch";
+        setFormData(prev => ({ ...prev, branch: userProfile?.branch }));
         setPopup({
           isOpen: true,
           type: "error",

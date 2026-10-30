@@ -415,8 +415,8 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                       key={index}
                       className="space-y-3 rounded-lg border border-gray-700 bg-gray-800/60 p-4"
                     >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                           <legend className="font-semibold text-gray-300">Testcase {index + 1}</legend>
                           <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
                             <input
@@ -426,6 +426,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                               className="h-4 w-4 rounded border-gray-600 bg-gray-900 text-green-500 focus:ring-green-500 focus:ring-offset-gray-900 cursor-pointer"
                             />
                             <span className={testcase.is_sample ? "font-medium text-green-400" : "text-gray-400"}>
+                              <span className="sr-only">Testcase {index + 1}: </span>
                               Sample Testcase (visible to participant)
                             </span>
                           </label>
