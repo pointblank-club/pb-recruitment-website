@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { contestApi } from '@/services/api/contestApi';
+import { useAuth } from '@/lib/AuthContext';
 import type { Problem } from '../problem.types';
 
 interface UseProblemDetailsResult {
@@ -15,27 +16,42 @@ export const useProblemDetails = (
   const [problem, setProblem] = useState<Problem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { loading: authLoading, user } = useAuth();
 
   useEffect(() => {
+    // Wait until Firebase auth finishes initializing before making the request.
+    // Otherwise on page refresh, auth.currentUser is temporarily null, sending no Bearer token
+    // to an open contest where the backend requires the user to be registered -> 403 Forbidden!
+    if (authLoading) {
+      return;
+    }
+
+    let isMounted = true;
+
     const fetchProblem = async () => {
       try {
         setIsLoading(true);
         setError(null);
         const data = await contestApi.getProblemById(contestId, problemId);
-        setProblem(data);
+        if (isMounted) setProblem(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load problem');
-        console.error('Error fetching problem:', err);
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Failed to load problem');
+          console.error('Error fetching problem:', err);
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     };
 
     if (contestId && problemId) {
-      fetchProblem();
+      void fetchProblem();
     }
-  }, [contestId, problemId]);
 
-  return { problem, isLoading, error };
+    return () => {
+      isMounted = false;
+    };
+  }, [authLoading, contestId, problemId, user]);
+
+  return { problem, isLoading: isLoading || authLoading, error };
 };
-
