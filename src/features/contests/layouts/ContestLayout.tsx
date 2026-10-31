@@ -174,7 +174,7 @@ export const ContestLayout = () => {
     );
   }
 
-  const canEnd = !isLeaderboardPage && timeRemaining > 0;
+  const canEnd = !!user && !isLeaderboardPage && timeRemaining > 0;
 
   return (
     <div className="w-full bg-black min-h-screen flex flex-col">
