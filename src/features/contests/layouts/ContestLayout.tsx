@@ -59,7 +59,8 @@ export const ContestLayout = () => {
       const startTime = contest.start_time;
       const totalDuration = endTime - startTime;
 
-      if (now >= startTime && now < endTime) {
+      // Only the problem pages count as participating; watching the leaderboard doesn't.
+      if (!isLeaderboardPage && now >= startTime && now < endTime) {
         wasLiveRef.current = true;
       }
 
@@ -174,10 +175,10 @@ export const ContestLayout = () => {
     );
   }
 
-  // Guests can browse ended contests; a live contest needs a login (upcoming ones redirect to details above).
+  // Guests can browse ended contests; a live contest needs a login (the effect above sends upcoming ones to details).
   const isLive = !!contest && Date.now() >= contest.start_time && Date.now() < contest.end_time;
   if (!user && isLive && !isLeaderboardPage) {
-    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
+    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}${location.hash}` }} />;
   }
 
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;

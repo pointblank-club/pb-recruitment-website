@@ -85,7 +85,7 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
 
       let message = "Failed to register. Please try again.";
 
-      if (axios.isAxiosError<{ error?: string }>(err)) {
+      if (axios.isAxiosError<{ error?: string }>(err) && err.response) {
         const serverError = err.response?.data?.error;
 
         switch (err.response?.status) {
