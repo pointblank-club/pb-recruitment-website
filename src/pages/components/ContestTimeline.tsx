@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import axios from "axios";
 import { ChevronRight } from "lucide-react";
 import type { Contest } from "@/models/contest";
 import { contestApi } from "@/services/api/contestApi";
@@ -28,13 +29,21 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
       message: "",
     });
 
-  const [countdown, setCountdown] = useState<string>("");
-  const [contestStarted, setContestStarted] = useState<boolean>(() => {
-    return Date.now() >= contest.start_time;
-  });
-  const [contestEnded, setContestEnded] = useState<boolean>(() => {
-    return Date.now() >= contest.end_time;
-  });
+  // Re-render every second so time-based state (start, end, registration window) stays current.
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const contestStarted = now >= contest.start_time;
+  const contestEnded = now >= contest.end_time;
+  const msToStart = contest.start_time - now;
+  const days = Math.floor(msToStart / 86_400_000);
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  const countdown = isRegistered && !contestStarted
+    ? `${days > 0 ? `${days}d ` : ""}${pad(Math.floor(msToStart / 3_600_000) % 24)}:${pad(Math.floor(msToStart / 60_000) % 60)}:${pad(Math.floor(msToStart / 1000) % 60)}`
+    : "";
   const slideUp = {
     hidden: { opacity: 0, y: 30 },
     show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
@@ -54,51 +63,6 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
   useEffect(() => {
     setIsRegistered(contest.is_registered ?? false);
   }, [contest.id, contest.is_registered]);
-
-  // Countdown and status effect
-  useEffect(() => {
-    const updateTimeStatus = () => {
-      const now = Date.now();
-      const startTime = contest.start_time;
-      const endTime = contest.end_time;
-
-      if (now >= endTime) {
-        setContestStarted(true);
-        setContestEnded(true);
-        setCountdown("");
-        return;
-      }
-
-      if (now >= startTime) {
-        setContestStarted(true);
-        setContestEnded(false);
-        setCountdown("");
-        return;
-      }
-
-      setContestStarted(false);
-      setContestEnded(false);
-
-      if (isRegistered) {
-        const distance = startTime - now;
-        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-        setCountdown(
-          `${days > 0 ? `${days}d ` : ""}${hours.toString().padStart(2, "0")}:${minutes
-            .toString()
-            .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
-        );
-      }
-    };
-
-    updateTimeStatus();
-    const interval = setInterval(updateTimeStatus, 1000);
-
-    return () => clearInterval(interval);
-  }, [isRegistered, contest.start_time, contest.end_time]);
 
   const eligibleYearsText = contest.formatEligibleYears();
 
@@ -121,30 +85,25 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
 
       let message = "Failed to register. Please try again.";
 
-      if (typeof err === "object" && err !== null && "response" in err) {
-        const axiosErr = err as {
-          response?: { status?: number; data?: { error?: string } };
-        };
+      if (axios.isAxiosError<{ error?: string }>(err)) {
+        const serverError = err.response?.data?.error;
 
-        switch (axiosErr.response?.status) {
+        switch (err.response?.status) {
           case 403: {
-            const errText = (axiosErr.response.data?.error || "").toLowerCase();
+            const errText = (serverError || "").toLowerCase();
             if (
               errText.includes("year") ||
               errText.includes("eligible")
             ) {
               message = `You are not eligible for this contest based on your academic year. This contest is only open to students in ${eligibleYearsText}.`;
             } else {
-              message =
-                axiosErr.response.data?.error ||
-                "Registration is closed or you are not eligible.";
+              message = serverError || "Registration is closed or you are not eligible.";
             }
             break;
           }
 
           case 404:
-            message =
-              axiosErr.response.data?.error || "Contest or user not found.";
+            message = serverError || "Contest or user not found.";
             break;
 
           case 409:

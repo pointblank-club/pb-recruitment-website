@@ -1,4 +1,4 @@
-import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { ContestHeader } from '../components/ContestHeader';
@@ -172,6 +172,12 @@ export const ContestLayout = () => {
         </div>
       </div>
     );
+  }
+
+  // Guests can browse ended contests; a live contest needs a login (upcoming ones redirect to details above).
+  const isLive = !!contest && Date.now() >= contest.start_time && Date.now() < contest.end_time;
+  if (!user && isLive && !isLeaderboardPage) {
+    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
   }
 
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;

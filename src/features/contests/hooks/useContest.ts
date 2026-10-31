@@ -61,5 +61,5 @@ export const useContest = (contestId: string): UseContestResult => {
     };
   }, [authLoading, contestId, user]);
 
-  return { contest, isLoading: isLoading || authLoading, error, refetch };
+  return { contest, isLoading, error, refetch };
 };

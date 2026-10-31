@@ -21,22 +21,26 @@ const ContestDetail: React.FC = () => {
   const [contest, setContest] = React.useState<Contest | null | undefined>(null);
   useEffect(() => {
     if (authLoading) return;
+    let isMounted = true;
     const fetchContest = async () => {
       try {
         setIsLoading(true);
         const data = await contestApi.getContestById(id!);
-        if (!data) setContest(undefined);
-        else setContest(data);
+        if (isMounted) setContest(data ?? undefined);
       } catch (error) {
+        if (!isMounted) return;
         console.error("Error fetching contest:", error);
         toast.error("Error fetching contest details. Please try again later. If problem persists, contact volunteers.");
         setContest(undefined);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     };
 
-    fetchContest();
+    void fetchContest();
+    return () => {
+      isMounted = false;
+    };
   }, [id, authLoading, user]);
 
   if (contest === undefined) {
