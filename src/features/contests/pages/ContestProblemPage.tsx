@@ -1,4 +1,6 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
+import { useAuth } from '@/lib/AuthContext';
+import type { ContestOutletContext } from '../layouts/ContestLayout';
 import { useProblemDetails } from '../hooks/useProblemDetails';
 import { CodeProblemView } from '../components/CodeProblemView';
 import { MCQProblemView } from '../components/MCQProblemView';
@@ -10,6 +12,9 @@ import { Button } from '@/components/ui/button';
 export const ContestProblemPage = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  // Guests only reach this page after the contest ends (the server returns 403 before that).
+  const { isEnded = false } = useOutletContext<ContestOutletContext>() || {};
 
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
   const {
@@ -24,7 +29,7 @@ export const ContestProblemPage = () => {
     retryPolling,
     refreshHistory,
     loadMoreHistory,
-  } = useProblemSubmissions(contestId || '', problemId || '');
+  } = useProblemSubmissions(contestId || '', problemId || '', { skip: !user });
 
   if (!contestId || !problemId) {
     return (
@@ -93,18 +98,18 @@ export const ContestProblemPage = () => {
           <CodeProblemView
             key={problem.id}
             problem={problem}
-            onSubmit={submitCode}
-            onRun={runCode}
+            onSubmit={user && !isEnded ? submitCode : undefined}
+            onRun={user ? runCode : undefined}
           />
         ) : (
           <MCQProblemView
             key={problem.id}
             problem={problem}
-            onSubmit={submitMCQ}
+            onSubmit={user && !isEnded ? submitMCQ : undefined}
           />
         )}
       </div>
-      <SubmissionPanel
+      {user && <SubmissionPanel
         problemType={problem.type}
         activeSubmission={activeSubmission}
         history={history}
@@ -114,7 +119,7 @@ export const ContestProblemPage = () => {
         onRetryPolling={retryPolling}
         onRefreshHistory={refreshHistory}
         onLoadMoreHistory={loadMoreHistory}
-      />
+      />}
     </div>
   );
 };

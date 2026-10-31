@@ -113,7 +113,7 @@ export const ContestLeaderboardPage = () => {
           <li className="text-gray-600">/</li>
           <li>
             <Link
-              to={`/contests/${contestId}/problems`}
+              to={`/contest/${contestId}`}
               className="text-green-400 hover:text-green-300"
             >
               {contest.name}

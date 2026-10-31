@@ -10,7 +10,7 @@ import type { Problem } from '../problem.types';
 interface CodeProblemViewProps {
   problem: Problem;
   onSubmit?: (code: string, language: string) => Promise<void>;
-  onRun: (code: string, language: string, stdin: string) => Promise<RunCodeResponse>;
+  onRun?: (code: string, language: string, stdin: string) => Promise<RunCodeResponse>;
 }
 
 const SUPPORTED_LANGUAGES = [
@@ -110,6 +110,7 @@ export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewPro
   }, [invalidateRun, selectedLanguage]);
 
   const handleRunCode = useCallback(async () => {
+    if (!onRun) return;
     if (!code.trim()) {
       setActiveTab('output');
       setRunError('Code cannot be empty');
@@ -138,11 +139,7 @@ export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewPro
   }, [code, selectedLanguage, customInput, onRun]);
 
   const handleSubmit = async () => {
-    if (!onSubmit) {
-      console.log('Submitting code:', { code, language: selectedLanguage });
-      alert('Submission will be integrated with backend API');
-      return;
-    }
+    if (!onSubmit) return;
 
     try {
       setIsSubmitting(true);
@@ -414,6 +411,7 @@ export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewPro
               ))}
             </select>
             <div className="flex items-center gap-2">
+              {onRun && (
               <Button
                 onClick={handleRunCode}
                 disabled={isRunning || !code.trim()}
@@ -433,6 +431,8 @@ export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewPro
                   </>
                 )}
               </Button>
+              )}
+              {onSubmit && (
               <Button
                 onClick={handleSubmit}
                 disabled={isSubmitting}
@@ -451,6 +451,7 @@ export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewPro
                   </>
                 )}
               </Button>
+              )}
             </div>
           </div>
 

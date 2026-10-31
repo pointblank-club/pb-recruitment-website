@@ -79,7 +79,7 @@ export const MCQProblemView = ({ problem, onSubmit }: MCQProblemViewProps) => {
                 This question has no answer options. Please contact the contest administrator.
               </p>
             ) : (
-              <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer}>
+              <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer} disabled={!onSubmit}>
                 <div className="space-y-2">
                   {options.map((option, index) => {
                     const optionValue = index.toString();
@@ -89,14 +89,14 @@ export const MCQProblemView = ({ problem, onSubmit }: MCQProblemViewProps) => {
                       <div
                         key={optionValue}
                         className={`
-                          flex items-center gap-4 p-4 rounded-lg border transition-all cursor-pointer
+                          flex items-center gap-4 p-4 rounded-lg border transition-all ${onSubmit ? 'cursor-pointer' : 'cursor-default'}
                           ${
                             selectedAnswer === optionValue
                               ? 'bg-green-900/20 border-green-500'
                               : 'bg-gray-900/30 border-gray-700 hover:bg-gray-900/50'
                           }
                         `}
-                        onClick={() => setSelectedAnswer(optionValue)}
+                        onClick={() => onSubmit && setSelectedAnswer(optionValue)}
                       >
                         <RadioGroupItem
                           value={optionValue}
@@ -137,6 +137,7 @@ export const MCQProblemView = ({ problem, onSubmit }: MCQProblemViewProps) => {
         </div>
       </div>
 
+      {onSubmit && (
       <div className="border-t border-gray-700 bg-black">
         <div className="max-w-4xl mx-auto px-6 py-4">
           <div className="flex items-center justify-end gap-3">
@@ -168,6 +169,7 @@ export const MCQProblemView = ({ problem, onSubmit }: MCQProblemViewProps) => {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };

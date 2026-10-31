@@ -1,4 +1,4 @@
-import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { ContestHeader } from '../components/ContestHeader';
@@ -9,6 +9,7 @@ import { getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
 
 export interface ContestOutletContext {
   openEndContestModal?: () => void;
+  isEnded?: boolean;
 }
 
 export const ContestLayout = () => {
@@ -58,7 +59,8 @@ export const ContestLayout = () => {
       const startTime = contest.start_time;
       const totalDuration = endTime - startTime;
 
-      if (now >= startTime && now < endTime) {
+      // Only the problem pages count as participating; watching the leaderboard doesn't.
+      if (!isLeaderboardPage && now >= startTime && now < endTime) {
         wasLiveRef.current = true;
       }
 
@@ -173,7 +175,13 @@ export const ContestLayout = () => {
     );
   }
 
-  const canEnd = !isLeaderboardPage && timeRemaining > 0;
+  // Guests can browse ended contests; a live contest needs a login (the effect above sends upcoming ones to details).
+  const isLive = !!contest && Date.now() >= contest.start_time && Date.now() < contest.end_time;
+  if (!user && isLive && !isLeaderboardPage) {
+    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}${location.hash}` }} />;
+  }
+
+  const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;
 
   return (
     <div className="w-full bg-black min-h-screen flex flex-col">
@@ -186,7 +194,7 @@ export const ContestLayout = () => {
       />
       
       <div className="flex-1 overflow-hidden">
-        <Outlet context={{ openEndContestModal: canEnd ? handleOpenEndModal : undefined } satisfies ContestOutletContext} />
+        <Outlet context={{ openEndContestModal: canEnd ? handleOpenEndModal : undefined, isEnded: !!contest && Date.now() >= contest.end_time } satisfies ContestOutletContext} />
       </div>
 
       <EndContestModal
