@@ -112,7 +112,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
       historyRequestRef.current += 1;
       if (scopeTokenRef.current === scopeToken) scopeTokenRef.current += 1;
     };
-  }, [problemId, refreshHistory]);
+  }, [problemId, refreshHistory, skip]);
 
   const loadMoreHistory = useCallback(async () => {
     if (!problemId || isHistoryLoading || !hasMoreHistory) return;

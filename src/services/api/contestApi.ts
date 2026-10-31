@@ -60,8 +60,10 @@ class ContestApiService {
 
     this.axiosInstance.interceptors.response.use(
       (response) => response,
-      (error: AxiosError) => {
-        // Pass through the original error so you can handle specific status codes manually
+      (error: AxiosError<{ error?: string }>) => {
+        // Surface the server's message (e.g. "user not registered") instead of axios' generic text.
+        const serverMessage = error.response?.data?.error;
+        if (typeof serverMessage === 'string' && serverMessage) error.message = serverMessage;
         return Promise.reject(error);
       }
     );

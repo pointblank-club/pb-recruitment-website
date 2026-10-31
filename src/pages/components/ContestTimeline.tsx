@@ -127,7 +127,7 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
         };
 
         switch (axiosErr.response?.status) {
-          case 400: {
+          case 403: {
             const errText = (axiosErr.response.data?.error || "").toLowerCase();
             if (
               errText.includes("year") ||
@@ -169,7 +169,7 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
     }
   };
 
-  const isContestEnded = contestEnded || Date.now() > contest.end_time;
+  const isContestEnded = contestEnded;
   const isSubmittedEarly = Boolean(
     user?.uid && getContestSubmitted(contest.id, user.uid)
   );
@@ -270,7 +270,7 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
                 <motion.button
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={handleStartContest}
+                  onClick={() => navigate(`/contests/${contest.id}/problems`)}
                   className="flex-1 py-3 px-6 rounded-lg font-bold text-lg bg-green text-black hover:bg-green-600 transition-all flex items-center justify-center gap-2"
                 >
                   View Problems

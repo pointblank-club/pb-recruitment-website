@@ -1,37 +1,23 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Save, ListChecks, CheckCircle2 } from 'lucide-react';
+import { Save, ListChecks } from 'lucide-react';
 import type { Problem } from '../problem.types';
 
 interface MCQProblemViewProps {
   problem: Problem;
   onSubmit?: (selectedOption: number) => Promise<void>;
   isContestEnded?: boolean;
-  /** hideIDE: unauthenticated or unregistered visitors – hide submission controls entirely */
-  hideIDE?: boolean;
-  /** submittedOption: option chosen by registered user before contest ended */
-  submittedOption?: number | null;
 }
 
 export const MCQProblemView = ({
   problem,
   onSubmit,
   isContestEnded = false,
-  hideIDE = false,
-  submittedOption = null,
 }: MCQProblemViewProps) => {
-  const [selectedAnswer, setSelectedAnswer] = useState<string>(
-    submittedOption !== null && submittedOption !== undefined ? submittedOption.toString() : ''
-  );
+  const [selectedAnswer, setSelectedAnswer] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (submittedOption !== null && submittedOption !== undefined) {
-      setSelectedAnswer(submittedOption.toString());
-    }
-  }, [submittedOption]);
 
   const handleClearResponse = useCallback(() => {
     setSelectedAnswer('');
@@ -94,12 +80,6 @@ export const MCQProblemView = ({
               <h2 className="text-lg font-semibold text-green-400 font-['DM_Sans']">
                 {isContestEnded ? 'Answer Options' : 'Select Your Answer'}
               </h2>
-              {isContestEnded && submittedOption !== null && submittedOption !== undefined && (
-                <span className="flex items-center gap-1.5 text-xs text-green-400 bg-green-950/60 border border-green-800/80 px-2.5 py-1 rounded-full">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Your submitted answer is highlighted
-                </span>
-              )}
             </div>
 
             {options.length === 0 ? (
@@ -147,11 +127,6 @@ export const MCQProblemView = ({
                             </span>
                             <span className="text-white">{option}</span>
                           </div>
-                          {isContestEnded && isUserChoice && (
-                            <span className="text-xs text-green-400 font-semibold uppercase tracking-wider bg-green-900/60 px-2 py-0.5 rounded border border-green-700">
-                              Your Choice
-                            </span>
-                          )}
                         </Label>
                       </div>
                     );
@@ -178,7 +153,7 @@ export const MCQProblemView = ({
         </div>
       </div>
 
-      {!isContestEnded && !hideIDE && (
+      {!isContestEnded && (
         <div className="border-t border-gray-700 bg-black">
           <div className="max-w-4xl mx-auto px-6 py-4">
             <div className="flex items-center justify-end gap-3">

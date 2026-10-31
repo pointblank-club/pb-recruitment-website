@@ -9,6 +9,7 @@ import { getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
 
 export interface ContestOutletContext {
   openEndContestModal?: () => void;
+  isEnded?: boolean;
 }
 
 export const ContestLayout = () => {
@@ -186,7 +187,7 @@ export const ContestLayout = () => {
       />
       
       <div className="flex-1 overflow-hidden">
-        <Outlet context={{ openEndContestModal: canEnd ? handleOpenEndModal : undefined } satisfies ContestOutletContext} />
+        <Outlet context={{ openEndContestModal: canEnd ? handleOpenEndModal : undefined, isEnded: !!contest && Date.now() >= contest.end_time } satisfies ContestOutletContext} />
       </div>
 
       <EndContestModal
