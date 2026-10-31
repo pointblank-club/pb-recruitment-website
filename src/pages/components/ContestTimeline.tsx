@@ -30,10 +30,10 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
 
   const [countdown, setCountdown] = useState<string>("");
   const [contestStarted, setContestStarted] = useState<boolean>(() => {
-    return Date.now() >= new Date(contest.start_time).getTime();
+    return Date.now() >= contest.start_time;
   });
   const [contestEnded, setContestEnded] = useState<boolean>(() => {
-    return Date.now() >= new Date(contest.end_time).getTime();
+    return Date.now() >= contest.end_time;
   });
   const slideUp = {
     hidden: { opacity: 0, y: 30 },
@@ -59,8 +59,8 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
   useEffect(() => {
     const updateTimeStatus = () => {
       const now = Date.now();
-      const startTime = new Date(contest.start_time).getTime();
-      const endTime = new Date(contest.end_time).getTime();
+      const startTime = contest.start_time;
+      const endTime = contest.end_time;
 
       if (now >= endTime) {
         setContestStarted(true);
@@ -169,7 +169,8 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
     }
   };
 
-  const isContestEnded = contestEnded;
+  const canStart = contestStarted && isRegistered;
+  const canRegister = !isRegistered && contest.isRegistrationOpen();
   const isSubmittedEarly = Boolean(
     user?.uid && getContestSubmitted(contest.id, user.uid)
   );
@@ -241,7 +242,7 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
           >
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <h2 className="text-2xl font-anton text-beige">
-                {isContestEnded
+                {contestEnded
                   ? "Contest Completed"
                   : contestStarted
                   ? "Contest is Live!"
@@ -255,17 +256,19 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
             <p className="text-gray-300 mb-6">
               {isSubmittedEarly
                 ? "You have already completed and submitted your test for this contest."
-                : isContestEnded
+                : contestEnded
                 ? "This contest has ended. You can view the problems and check out the final leaderboard."
                 : contestStarted
                 ? isRegistered
                   ? "The contest is currently in progress. Enter the contest to view and solve problems."
+                  : contest.isRegistrationOpen()
+                  ? "This contest is currently running. Register now to join."
                   : "This contest is currently running. Registration is now closed."
                 : contest.isRegistrationOpen()
                 ? "Register now and secure your spot in this exciting contest!"
                 : "Registration for this contest has closed."}
             </p>
-            {isContestEnded ? (
+            {contestEnded ? (
               <div className="flex flex-col sm:flex-row gap-3">
                 <motion.button
                   whileHover={{ scale: 1.03 }}
@@ -297,37 +300,35 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
               </motion.button>
             ) : (
               <motion.button
-                whileHover={contest.isRegistrationOpen() || (contestStarted && isRegistered) ? { scale: 1.05 } : {}}
-                whileTap={contest.isRegistrationOpen() || (contestStarted && isRegistered) ? { scale: 0.95 } : {}}
-                onClick={contestStarted ? handleStartContest : handleRegister}
-                disabled={(!contest.isRegistrationOpen() && !contestStarted) || (!isRegistered && contestStarted) || (isRegistered && !contestStarted)}
+                whileHover={canStart || canRegister ? { scale: 1.05 } : {}}
+                whileTap={canStart || canRegister ? { scale: 0.95 } : {}}
+                onClick={canStart ? handleStartContest : handleRegister}
+                disabled={!canStart && !canRegister}
                 className={`w-full py-3 px-6 rounded-lg font-bold text-lg transition-all flex items-center justify-center gap-2
                   ${
-                    (!contest.isRegistrationOpen() && !contestStarted) || (!isRegistered && contestStarted) || (isRegistered && !contestStarted)
+                    !canStart && !canRegister
                       ? "bg-gray-700 text-gray-400 cursor-not-allowed"
                       : "bg-green text-black hover:bg-green-600"
                   }
                 `}
               >
-                {contestStarted
-                  ? isRegistered
-                    ? "Start Contest"
-                    : "Registration Closed"
+                {canStart
+                  ? "Start Contest"
                   : isRegistered
                   ? "Already Registered"
-                  : contest.isRegistrationOpen()
+                  : canRegister
                   ? "Register"
                   : "Registration Closed"
                 }
-                {((contest.isRegistrationOpen() && !isRegistered && !contestStarted) || (contestStarted && isRegistered)) && <ChevronRight size={20} />}
+                {(canStart || canRegister) && <ChevronRight size={20} />}
               </motion.button>
             )}
-            {!isContestEnded && !isSubmittedEarly && contest.isRegistrationOpen() && !isRegistered && (
+            {!contestEnded && !isSubmittedEarly && contest.isRegistrationOpen() && !isRegistered && (
               <p className="text-xs text-gray-400 mt-4 text-center">
                 Free to register
               </p>
             )}
-            {isRegistered && !contestStarted && !isContestEnded && countdown && (
+            {isRegistered && !contestStarted && !contestEnded && countdown && (
               <div className="mt-4 text-center">
                 <p className="text-sm text-gray-400 mb-1">Starts in</p>
                 <p className="text-2xl font-bold text-green-400 font-mono tracking-wider">

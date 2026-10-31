@@ -8,14 +8,9 @@ import type { Problem } from '../problem.types';
 interface MCQProblemViewProps {
   problem: Problem;
   onSubmit?: (selectedOption: number) => Promise<void>;
-  isContestEnded?: boolean;
 }
 
-export const MCQProblemView = ({
-  problem,
-  onSubmit,
-  isContestEnded = false,
-}: MCQProblemViewProps) => {
+export const MCQProblemView = ({ problem, onSubmit }: MCQProblemViewProps) => {
   const [selectedAnswer, setSelectedAnswer] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -76,57 +71,46 @@ export const MCQProblemView = ({
           )}
 
           <div className="space-y-4 pt-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-green-400 font-['DM_Sans']">
-                {isContestEnded ? 'Answer Options' : 'Select Your Answer'}
-              </h2>
-            </div>
-
+            <h2 className="text-lg font-semibold text-green-400 font-['DM_Sans']">
+              Select Your Answer
+            </h2>
             {options.length === 0 ? (
               <p role="alert" className="rounded-lg border border-red-800 bg-red-950/50 p-4 text-red-300">
                 This question has no answer options. Please contact the contest administrator.
               </p>
             ) : (
-              <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer}>
+              <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer} disabled={!onSubmit}>
                 <div className="space-y-2">
                   {options.map((option, index) => {
                     const optionValue = index.toString();
-                    const optionLabel = String.fromCharCode(65 + index);
-                    const isUserChoice = selectedAnswer === optionValue;
-
-                    let borderBgClass = 'bg-gray-900/30 border-gray-700 hover:bg-gray-900/50';
-                    if (isUserChoice) {
-                      borderBgClass = isContestEnded
-                        ? 'bg-green-950/40 border-green-500/80 ring-1 ring-green-500/50'
-                        : 'bg-green-900/20 border-green-500';
-                    }
+                    const optionLabel = String.fromCharCode(65 + index); // A, B, C, D...
 
                     return (
                       <div
                         key={optionValue}
-                        className={`flex items-center gap-4 p-4 rounded-lg border transition-all ${borderBgClass} ${isContestEnded ? 'cursor-default' : 'cursor-pointer'}`}
-                        onClick={() => {
-                          if (!isContestEnded) {
-                            setSelectedAnswer(optionValue);
+                        className={`
+                          flex items-center gap-4 p-4 rounded-lg border transition-all ${onSubmit ? 'cursor-pointer' : 'cursor-default'}
+                          ${
+                            selectedAnswer === optionValue
+                              ? 'bg-green-900/20 border-green-500'
+                              : 'bg-gray-900/30 border-gray-700 hover:bg-gray-900/50'
                           }
-                        }}
+                        `}
+                        onClick={() => onSubmit && setSelectedAnswer(optionValue)}
                       >
                         <RadioGroupItem
                           value={optionValue}
                           id={`option-${optionValue}`}
-                          disabled={isContestEnded}
                           className="border-2"
                         />
                         <Label
                           htmlFor={`option-${optionValue}`}
-                          className="flex-1 cursor-pointer font-['DM_Sans'] text-base flex items-center justify-between"
+                          className="flex-1 cursor-pointer font-['DM_Sans'] text-base"
                         >
-                          <div>
-                            <span className="font-semibold text-green-400 mr-2">
-                              {optionLabel}.
-                            </span>
-                            <span className="text-white">{option}</span>
-                          </div>
+                          <span className="font-semibold text-green-400 mr-2">
+                            {optionLabel}.
+                          </span>
+                          <span className="text-white">{option}</span>
                         </Label>
                       </div>
                     );
@@ -153,39 +137,40 @@ export const MCQProblemView = ({
         </div>
       </div>
 
-      {!isContestEnded && (
-        <div className="border-t border-gray-700 bg-black">
-          <div className="max-w-4xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-end gap-3">
-              <Button
-                onClick={handleClearResponse}
-                variant="outline"
-                disabled={!selectedAnswer}
-                className="flex items-center gap-2 text-black"
-              >
-                Clear Response
-              </Button>
-              <Button
-                onClick={handleSubmit}
-                disabled={isSubmitting || !selectedAnswer || options.length === 0}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-700 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    Submit Answer
-                  </>
-                )}
-              </Button>
-            </div>
+      {onSubmit && (
+      <div className="border-t border-gray-700 bg-black">
+        <div className="max-w-4xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-end gap-3">
+            <Button
+              onClick={handleClearResponse}
+              variant="outline"
+              disabled={!selectedAnswer}
+              className="flex items-center gap-2 text-black"
+            >
+              Clear Response
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={isSubmitting || !selectedAnswer || options.length === 0}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-700 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Submit Answer
+                </>
+              )}
+            </Button>
           </div>
         </div>
+      </div>
       )}
     </div>
   );
 };
+

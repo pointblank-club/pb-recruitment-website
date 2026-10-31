@@ -105,8 +105,7 @@ export const ContestProblemPage = () => {
           <MCQProblemView
             key={problem.id}
             problem={problem}
-            onSubmit={submitMCQ}
-            isContestEnded={isEnded}
+            onSubmit={user && !isEnded ? submitMCQ : undefined}
           />
         )}
       </div>

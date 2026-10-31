@@ -10,14 +10,17 @@ import ContestDetails from "./components/ContestDetails";
 import type { Contest } from "@/models/contest";
 import { contestApi } from "@/services/api/contestApi";
 import { toast } from "react-toastify";
+import { useAuth } from "@/lib/AuthContext";
 
 const ContestDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { loading: authLoading, user } = useAuth();
 
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [contest, setContest] = React.useState<Contest | null | undefined>(null);
   useEffect(() => {
+    if (authLoading) return;
     const fetchContest = async () => {
       try {
         setIsLoading(true);
@@ -34,7 +37,7 @@ const ContestDetail: React.FC = () => {
     };
 
     fetchContest();
-  }, [id]);
+  }, [id, authLoading, user]);
 
   if (contest === undefined) {
     return (

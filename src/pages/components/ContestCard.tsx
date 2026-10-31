@@ -58,7 +58,7 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
 
         {/* Call to action buttons */}
         <div className="flex items-center gap-3 mt-4">
-          {Date.now() >= new Date(contest.end_time).getTime() ? (
+          {Date.now() >= contest.end_time ? (
             <motion.button
               type="button"
               whileHover={{ scale: 1.02 }}
