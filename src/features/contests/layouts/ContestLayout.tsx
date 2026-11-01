@@ -200,7 +200,7 @@ export const ContestLayout = () => {
         onSubmitContest={canEnd ? handleOpenEndModal : undefined}
       />
       
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+      <div className="flex-1 min-h-0 overflow-auto flex flex-col">
         <Outlet context={{
           contest,
           timeRemaining,

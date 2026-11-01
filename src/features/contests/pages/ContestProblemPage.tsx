@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
+import { useParams, useNavigate, useOutletContext, useLocation, Link } from 'react-router-dom';
 import { useProblemDetails } from '../hooks/useProblemDetails';
 import { CodeProblemView } from '../components/CodeProblemView';
 import { MCQProblemView } from '../components/MCQProblemView';
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 export const ContestProblemPage = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     isContestEnded = false,
     isAuthenticated = false,
@@ -26,8 +27,8 @@ export const ContestProblemPage = () => {
 
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
 
-  // During active contest: load and poll submissions.
-  // After contest ends: skip loading submission history completely to avoid redundant network calls.
+  // Always run for authenticated users; skip only for guests.
+  // After the contest ends, we reuse history[0] + getSubmissionDetails instead of a parallel fetch.
   const {
     activeSubmission,
     history,
@@ -41,89 +42,48 @@ export const ContestProblemPage = () => {
     refreshHistory,
     loadMoreHistory,
   } = useProblemSubmissions(contestId || '', problemId || '', {
-    skip: !isAuthenticated || isContestEnded,
+    skip: !isAuthenticated,
   });
 
-  // State to hold the registered user's latest submitted solution details (including code)
-  const [latestSubmission, setLatestSubmission] = useState<SubmissionDetailsResponse | null>(null);
-  const [isLoadingSubmission, setIsLoadingSubmission] = useState(false);
+  // Post-contest: fetch full details (including code) for the latest submission.
+  // Keyed on `id:status` so a pending verdict that later resolves triggers a refetch.
+  const latest = isContestEnded && isAuthenticated && isRegistered ? history[0] : undefined;
+  const detailsKey = latest ? `${latest.id}:${latest.status}` : undefined;
+
+  const [ownSubmission, setOwnSubmission] = useState<{
+    key: string;
+    data?: SubmissionDetailsResponse;
+    error?: string;
+  }>();
 
   useEffect(() => {
-    if (!isContestEnded || !isAuthenticated || !isRegistered || !problemId) {
-      return;
-    }
+    if (!detailsKey || !latest) return;
+    let live = true;
+    contestApi.getSubmissionDetails(latest.id).then(
+      (data) => live && setOwnSubmission({ key: detailsKey, data }),
+      (e) => live && setOwnSubmission({ key: detailsKey, error: e instanceof Error ? e.message : 'Could not load your submission.' }),
+    );
+    return () => { live = false; };
+  }, [detailsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const cacheKey = `submission_details_${problemId}`;
-
-    // 1. Try reading from sessionStorage immediately (0ms, 0 network requests)
-    try {
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed: SubmissionDetailsResponse = JSON.parse(cached);
-        if (parsed && (parsed.code || parsed.option)) {
-          setLatestSubmission(parsed);
-          return;
-        }
-      }
-    } catch {
-      // sessionStorage unavailable or parse error; continue to fetch
-    }
-
-    let isMounted = true;
-    setIsLoadingSubmission(true);
-
-    // Fetch user's latest submission directly
-    contestApi
-      .listUserSubmissions(problemId, 0)
-      .then(async (submissions) => {
-        if (!isMounted) return;
-        if (!submissions || submissions.length === 0) {
-          setLatestSubmission(null);
-          return;
-        }
-
-        const firstSub = submissions[0];
-        if (firstSub.code) {
-          setLatestSubmission(firstSub);
-          try {
-            sessionStorage.setItem(cacheKey, JSON.stringify(firstSub));
-          } catch {
-            // ignore
-          }
-          return;
-        }
-
-        // Fetch full code details if not present in the list item
-        try {
-          const details = await contestApi.getSubmissionDetails(firstSub.id);
-          if (!isMounted) return;
-          setLatestSubmission(details);
-          try {
-            sessionStorage.setItem(cacheKey, JSON.stringify(details));
-          } catch {
-            // ignore
-          }
-        } catch {
-          if (isMounted) setLatestSubmission(firstSub);
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to load user submission for problem:', err);
-      })
-      .finally(() => {
-        if (isMounted) setIsLoadingSubmission(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isContestEnded, isAuthenticated, isRegistered, problemId]);
+  // Only use details when the key matches (prevents stale cross-user data)
+  const shownSubmission = ownSubmission?.key === detailsKey ? ownSubmission : undefined;
+  const isLoadingSubmission = isHistoryLoading || (!!latest && !shownSubmission);
+  const submissionError = historyError || shownSubmission?.error;
 
   if (!contestId || !problemId) {
     return (
-      <div className="flex-1 flex items-center justify-center p-4">
-        <div className="text-center text-gray-400">
-          <p>Please select a problem from the list.</p>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto" />
+          <div className="text-red-400 font-['DM_Sans']">Invalid contest or problem ID</div>
+          <Button
+            onClick={() => navigate('/contests')}
+            variant="outline"
+            className="mt-4"
+          >
+            Back to Contests
+          </Button>
         </div>
       </div>
     );
@@ -133,8 +93,8 @@ export const ContestProblemPage = () => {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto text-green-500" />
-          <p className="text-gray-400">Loading problem details...</p>
+          <Loader2 className="w-12 h-12 text-green-400 animate-spin mx-auto" />
+          <div className="text-gray-400 font-['DM_Sans']">Loading problem details...</div>
         </div>
       </div>
     );
@@ -142,22 +102,30 @@ export const ContestProblemPage = () => {
 
   if (error || !problem) {
     return (
-      <div className="flex-1 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-red-950/20 border border-red-900/50 rounded-lg p-6 text-center space-y-4">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-          <div className="space-y-2">
-            <h3 className="text-lg font-semibold text-white">Failed to Load Problem</h3>
-            <p className="text-sm text-gray-400">
-              {error || 'Problem not found'}
-            </p>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4 max-w-md px-4">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto" />
+          <div className="text-red-400 font-['DM_Sans'] text-lg">
+            {error || 'Failed to load problem'}
           </div>
-          <Button
-            onClick={() => window.location.reload()}
-            variant="outline"
-            className="border-red-800 hover:bg-red-900/30 text-white"
-          >
-            Retry
-          </Button>
+          <p className="text-gray-400 text-sm">
+            The problem could not be loaded. Please try again or contact support if the issue
+            persists.
+          </p>
+          <div className="flex gap-3 justify-center pt-4">
+            <Button
+              onClick={() => navigate(`/contests/${contestId}/problems`)}
+              variant="outline"
+            >
+              Back to Problems
+            </Button>
+            <Button
+              onClick={() => window.location.reload()}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Retry
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -165,24 +133,26 @@ export const ContestProblemPage = () => {
 
   // Derive option index for MCQ if submitted
   const submittedOptionIndex =
-    latestSubmission?.option && latestSubmission.option.length > 0
-      ? latestSubmission.option[0]
+    shownSubmission?.data?.option && shownSubmission.data.option.length > 0
+      ? shownSubmission.data.option[0]
       : null;
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
       {/* Informational banners when contest has ended */}
       {isContestEnded && !isAuthenticated && (
         <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300">
           <Lock className="w-4 h-4 text-yellow-400 flex-shrink-0" />
           <span>
             This contest has ended.{' '}
-            <button
-              onClick={() => navigate('/login')}
+            {/* S5: pass return path so login redirects back here */}
+            <Link
+              to="/login"
+              state={{ from: location.pathname }}
               className="text-green-400 hover:underline"
             >
               Sign in
-            </button>{' '}
+            </Link>{' '}
             to view your contest details.
           </span>
         </div>
@@ -200,20 +170,22 @@ export const ContestProblemPage = () => {
       <div className="flex min-h-0 flex-1 h-full overflow-hidden">
         {problem.type === 'code' ? (
           isContestEnded && isAuthenticated && isRegistered ? (
-            /* Post-contest registered view: Exactly 50/50 uniform split */
+            /* Post-contest registered view: 50/50 split */
             <div className="flex-1 flex min-h-0 h-full overflow-hidden">
               <div className="w-1/2 min-h-0 h-full border-r border-gray-700 overflow-hidden flex flex-col">
                 <CodeProblemView
                   key={problem.id}
                   problem={problem}
-                  isContestEnded={true}
                   hideIDE={true}
                 />
               </div>
               <div className="w-1/2 min-h-0 h-full overflow-hidden flex flex-col">
                 <SubmittedSolutionViewer
-                  submission={latestSubmission}
+                  submission={shownSubmission?.data ?? null}
                   isLoading={isLoadingSubmission}
+                  error={submissionError}
+                  onRetry={refreshHistory}
+                  hasHistory={history.length > 0}
                 />
               </div>
             </div>
@@ -224,7 +196,6 @@ export const ContestProblemPage = () => {
               problem={problem}
               onSubmit={isAuthenticated && !isContestEnded ? submitCode : undefined}
               onRun={isAuthenticated && !isContestEnded ? runCode : undefined}
-              isContestEnded={isContestEnded}
               hideIDE={hideIDE}
             />
           )

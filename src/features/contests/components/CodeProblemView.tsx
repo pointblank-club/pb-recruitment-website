@@ -11,7 +11,6 @@ interface CodeProblemViewProps {
   problem: Problem;
   onSubmit?: (code: string, language: string) => Promise<void>;
   onRun?: (code: string, language: string, stdin: string) => Promise<RunCodeResponse>;
-  isContestEnded?: boolean;
   /** hideIDE: unauthenticated visitors – only show problem statement, hide the editor pane */
   hideIDE?: boolean;
 }
@@ -75,7 +74,6 @@ export const CodeProblemView = ({
   problem,
   onSubmit,
   onRun,
-  isContestEnded = false,
   hideIDE = false,
 }: CodeProblemViewProps) => {
   const [selectedLanguage, setSelectedLanguage] = useState('cpp');
@@ -118,11 +116,7 @@ export const CodeProblemView = ({
   }, [invalidateRun, selectedLanguage]);
 
   const handleRunCode = useCallback(async () => {
-    if (!onRun) {
-      setActiveTab('output');
-      setRunError('Running code is unavailable right now.');
-      return;
-    }
+    if (!onRun) return;
     if (!code.trim()) {
       setActiveTab('output');
       setRunError('Code cannot be empty');
@@ -425,51 +419,49 @@ export const CodeProblemView = ({
                 </option>
               ))}
             </select>
-            {!isContestEnded && (
-              <div className="flex items-center gap-2">
-                  {onRun && (
-                    <Button
-                      onClick={handleRunCode}
-                      disabled={isRunning || !code.trim()}
-                      size="sm"
-                      variant="outline"
-                      className="text-xs flex items-center gap-1 text-black hover:text-black"
-                    >
-                      {isRunning ? (
-                        <>
-                          <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
-                          Running...
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-3 h-3" />
-                          Run
-                        </>
-                      )}
-                    </Button>
+            <div className="flex items-center gap-2">
+              {onRun && (
+                <Button
+                  onClick={handleRunCode}
+                  disabled={isRunning || !code.trim()}
+                  size="sm"
+                  variant="outline"
+                  className="text-xs flex items-center gap-1 text-black hover:text-black"
+                >
+                  {isRunning ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                      Running...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3 h-3" />
+                      Run
+                    </>
                   )}
-                  {onSubmit && (
-                    <Button
-                      onClick={handleSubmit}
-                      disabled={isSubmitting}
-                      size="sm"
-                      className="text-xs flex items-center gap-1 bg-green-600 hover:bg-green-700"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
-                          Submitting...
-                        </>
-                      ) : (
-                        <>
-                          <Send className="w-3 h-3" />
-                          Submit
-                        </>
-                      )}
-                    </Button>
+                </Button>
+              )}
+              {onSubmit && (
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  size="sm"
+                  className="text-xs flex items-center gap-1 bg-green-600 hover:bg-green-700"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3 h-3" />
+                      Submit
+                    </>
                   )}
-                </div>
-            )}
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="border-b border-gray-700" style={{ height: `${editorHeightPct}%` }}>

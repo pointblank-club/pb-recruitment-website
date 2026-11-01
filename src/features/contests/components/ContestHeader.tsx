@@ -39,7 +39,7 @@ export const ContestHeader = ({
   return (
     <div className="w-full bg-black border-b border-gray-700 sticky top-0 z-50">
       <div className="px-4 py-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-4 md:gap-6">
             {contestId && (
               <Link

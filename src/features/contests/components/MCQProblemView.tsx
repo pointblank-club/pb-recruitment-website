@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -19,19 +19,16 @@ export const MCQProblemView = ({
   isContestEnded = false,
   submittedOption = null,
 }: MCQProblemViewProps) => {
-  const [selectedAnswer, setSelectedAnswer] = useState<string>(
-    submittedOption !== null && submittedOption !== undefined ? submittedOption.toString() : ''
-  );
+  const [userSelectedAnswer, setUserSelectedAnswer] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (submittedOption !== null && submittedOption !== undefined) {
-      setSelectedAnswer(submittedOption.toString());
-    }
-  }, [submittedOption]);
+  const selectedAnswer =
+    submittedOption !== null && submittedOption !== undefined
+      ? submittedOption.toString()
+      : userSelectedAnswer;
 
   const handleClearResponse = useCallback(() => {
-    setSelectedAnswer('');
+    setUserSelectedAnswer('');
   }, []);
 
   const handleSubmit = async () => {
@@ -104,7 +101,7 @@ export const MCQProblemView = ({
                 This question has no answer options. Please contact the contest administrator.
               </p>
             ) : (
-              <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer} disabled={!onSubmit}>
+              <RadioGroup value={selectedAnswer} onValueChange={setUserSelectedAnswer} disabled={!onSubmit || isContestEnded}>
                 <div className="space-y-2">
                   {options.map((option, index) => {
                     const optionValue = index.toString();
@@ -124,26 +121,25 @@ export const MCQProblemView = ({
                         className={`flex items-center gap-4 p-4 rounded-lg border transition-all ${borderBgClass} ${isContestEnded || !onSubmit ? 'cursor-default' : 'cursor-pointer'}`}
                         onClick={() => {
                           if (!isContestEnded && onSubmit) {
-                            setSelectedAnswer(optionValue);
+                            setUserSelectedAnswer(optionValue);
                           }
                         }}
                       >
                         <RadioGroupItem
                           value={optionValue}
                           id={`option-${optionValue}`}
-                          disabled={isContestEnded}
                           className="border-2"
                         />
                         <Label
                           htmlFor={`option-${optionValue}`}
                           className="flex-1 cursor-pointer font-['DM_Sans'] text-base flex items-center justify-between"
                         >
-                          <div>
+                          <span>
                             <span className="font-semibold text-green-400 mr-2">
                               {optionLabel}.
                             </span>
                             <span className="text-white">{option}</span>
-                          </div>
+                          </span>
                           {isContestEnded && isUserChoice && (
                             <span className="text-xs text-green-400 font-semibold uppercase tracking-wider bg-green-900/60 px-2 py-0.5 rounded border border-green-700">
                               Your Choice
