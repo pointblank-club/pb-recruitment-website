@@ -17,23 +17,29 @@ export const useProblemDetails = (
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchProblem = async () => {
       try {
         setIsLoading(true);
         setError(null);
         const data = await contestApi.getProblemById(contestId, problemId);
-        setProblem(data);
+        if (isMounted) setProblem(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load problem');
+        if (isMounted) setError(err instanceof Error ? err.message : 'Failed to load problem');
         console.error('Error fetching problem:', err);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     };
 
     if (contestId && problemId) {
-      fetchProblem();
+      void fetchProblem();
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [contestId, problemId]);
 
   return { problem, isLoading, error };

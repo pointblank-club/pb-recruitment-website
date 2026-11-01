@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
+import { ChevronLeft, LogOut } from 'lucide-react';
 
 interface ContestHeaderProps {
   timeRemaining: number;
@@ -39,8 +39,17 @@ export const ContestHeader = ({
   return (
     <div className="w-full bg-black border-b border-gray-700 sticky top-0 z-50">
       <div className="px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-4 md:gap-6">
+            {contestId && (
+              <Link
+                to={`/contest/${contestId}`}
+                className="flex items-center gap-1.5 text-sm font-semibold text-green hover:text-green-400 transition-colors py-1 px-2.5 rounded-md hover:bg-gray-800"
+              >
+                <ChevronLeft size={18} />
+                <span>Back to Contest</span>
+              </Link>
+            )}
             <h1 className="text-xl font-bold text-white font-['DM_Sans'] flex items-center h-full">{contestName}</h1>
             {contestId && (
               <nav className="flex items-center gap-2">

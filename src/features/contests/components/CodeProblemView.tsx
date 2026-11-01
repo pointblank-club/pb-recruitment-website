@@ -11,8 +11,9 @@ interface CodeProblemViewProps {
   problem: Problem;
   onSubmit?: (code: string, language: string) => Promise<void>;
   onRun?: (code: string, language: string, stdin: string) => Promise<RunCodeResponse>;
+  /** hideIDE: unauthenticated visitors – only show problem statement, hide the editor pane */
+  hideIDE?: boolean;
 }
-
 const SUPPORTED_LANGUAGES = [
   { value: 'cpp', label: 'C++ 17', monacoValue: 'cpp' },
   { value: 'python', label: 'Python 3', monacoValue: 'python' },
@@ -69,7 +70,12 @@ const getRunErrorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : 'Code execution failed. Please try again.';
 };
 
-export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewProps) => {
+export const CodeProblemView = ({
+  problem,
+  onSubmit,
+  onRun,
+  hideIDE = false,
+}: CodeProblemViewProps) => {
   const [selectedLanguage, setSelectedLanguage] = useState('cpp');
   const [codeByLanguage, setCodeByLanguage] = useState<Record<string, string>>(
     () => ({ ...DEFAULT_CODE_TEMPLATES }),
@@ -218,9 +224,9 @@ export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewPro
   }, [isResizing, resizeDirection]);
 
   return (
-    <div className="flex-1 flex flex-col bg-black text-white overflow-hidden">
-      <div ref={containerRef} className="flex-1 flex overflow-hidden">
-        <div className="overflow-y-auto border-r border-gray-700" style={{ width: `${leftPaneWidthPct}%` }}>
+    <div className="flex-1 flex flex-col h-full bg-black text-white overflow-hidden">
+      <div ref={containerRef} className="flex-1 flex h-full overflow-hidden">
+        <div className="overflow-y-auto h-full border-r border-gray-700" style={{ width: hideIDE ? '100%' : `${leftPaneWidthPct}%` }}>
           <div className="p-6 space-y-6">
             {problem.description && (
               <div className="space-y-2">
@@ -388,16 +394,19 @@ export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewPro
           </div>
         </div>
 
-        <div
-          onMouseDown={() => {
-            setIsResizing(true);
-            setResizeDirection('horizontal');
-          }}
-          className="w-1 cursor-ew-resize hover:bg-gray-700 bg-gray-800 flex-shrink-0"
-          aria-label="Resize panes"
-        />
+        {!hideIDE && (
+          <div
+            onMouseDown={() => {
+              setIsResizing(true);
+              setResizeDirection('horizontal');
+            }}
+            className="w-1 cursor-ew-resize hover:bg-gray-700 bg-gray-800 flex-shrink-0"
+            aria-label="Resize panes"
+          />
+        )}
 
-        <div ref={rightPaneRef} className="flex flex-col overflow-hidden flex-shrink-0" style={{ width: `${100 - leftPaneWidthPct}%` }}>
+        {!hideIDE && (
+          <div ref={rightPaneRef} className="flex flex-col overflow-hidden flex-shrink-0" style={{ width: `${100 - leftPaneWidthPct}%` }}>
           <div className="border-b border-gray-700 px-4 py-2 bg-gray-900/50 flex items-center justify-between">
             <select
               value={selectedLanguage}
@@ -412,45 +421,45 @@ export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewPro
             </select>
             <div className="flex items-center gap-2">
               {onRun && (
-              <Button
-                onClick={handleRunCode}
-                disabled={isRunning || !code.trim()}
-                size="sm"
-                variant="outline"
-                className="text-xs flex items-center gap-1 text-black hover:text-black"
-              >
-                {isRunning ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
-                    Running...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3 h-3" />
-                    Run
-                  </>
-                )}
-              </Button>
+                <Button
+                  onClick={handleRunCode}
+                  disabled={isRunning || !code.trim()}
+                  size="sm"
+                  variant="outline"
+                  className="text-xs flex items-center gap-1 text-black hover:text-black"
+                >
+                  {isRunning ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                      Running...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3 h-3" />
+                      Run
+                    </>
+                  )}
+                </Button>
               )}
               {onSubmit && (
-              <Button
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                size="sm"
-                className="text-xs flex items-center gap-1 bg-green-600 hover:bg-green-700"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-3 h-3" />
-                    Submit
-                  </>
-                )}
-              </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  size="sm"
+                  className="text-xs flex items-center gap-1 bg-green-600 hover:bg-green-700"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3 h-3" />
+                      Submit
+                    </>
+                  )}
+                </Button>
               )}
             </div>
           </div>
@@ -634,6 +643,7 @@ export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewPro
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

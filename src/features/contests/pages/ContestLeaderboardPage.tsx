@@ -101,7 +101,7 @@ export const ContestLeaderboardPage = () => {
   }
 
   return (
-    <div className="w-full px-4 py-6">
+    <div className="w-full px-4 py-6 flex-1 min-h-0 overflow-y-auto">
       {/* Breadcrumb */}
       <nav className="mb-6">
         <ol className="flex items-center space-x-2 text-sm font-['DM_Sans']">

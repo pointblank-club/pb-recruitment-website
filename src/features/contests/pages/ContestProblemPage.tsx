@@ -1,22 +1,29 @@
-import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
-import { useAuth } from '@/lib/AuthContext';
-import type { ContestOutletContext } from '../layouts/ContestLayout';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useOutletContext, useLocation, Link } from 'react-router-dom';
 import { useProblemDetails } from '../hooks/useProblemDetails';
 import { CodeProblemView } from '../components/CodeProblemView';
 import { MCQProblemView } from '../components/MCQProblemView';
 import { SubmissionPanel } from '../components/SubmissionPanel';
+import { SubmittedSolutionViewer } from '../components/SubmittedSolutionViewer';
 import { useProblemSubmissions } from '../hooks/useProblemSubmissions';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import type { ContestOutletContext } from '../layouts/ContestLayout';
+import { contestApi, type SubmissionDetailsResponse } from '@/services/api/contestApi';
+import { AlertCircle, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export const ContestProblemPage = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  // Guests only reach this page after the contest ends (the server returns 403 before that).
-  const { isEnded = false } = useOutletContext<ContestOutletContext>() || {};
+  const location = useLocation();
+  const {
+    isContestEnded = false,
+    isAuthenticated = false,
+    isRegistered = false,
+  } = useOutletContext<ContestOutletContext>() || {};
 
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
+
+  // After the contest ends only registered users need their history: history[0] is their last submission.
   const {
     activeSubmission,
     history,
@@ -24,12 +31,50 @@ export const ContestProblemPage = () => {
     isHistoryLoading,
     hasMoreHistory,
     submitCode,
-    runCode,
     submitMCQ,
+    runCode,
     retryPolling,
     refreshHistory,
     loadMoreHistory,
-  } = useProblemSubmissions(contestId || '', problemId || '', { skip: !user });
+  } = useProblemSubmissions(contestId || '', problemId || '', {
+    skip: !isAuthenticated || (isContestEnded && !isRegistered),
+  });
+
+  // Post-contest: fetch full details (including code) for the latest submission.
+  // Keyed on `id:status:attempt` so a resolved verdict or a Retry triggers a refetch.
+  // Snapshot at mount: anyone on this page when time runs out is redirected by ContestLayout,
+  // so don't fetch details for a page that is about to leave.
+  const [endedOnArrival] = useState(isContestEnded);
+  const showOwnSubmission = endedOnArrival && isAuthenticated && isRegistered;
+  const latest = showOwnSubmission ? history[0] : undefined;
+  const [attempt, setAttempt] = useState(0);
+  const detailsKey = latest ? `${latest.id}:${latest.status}:${attempt}` : undefined;
+  const retryOwnSubmission = () => {
+    setAttempt((n) => n + 1);
+    void refreshHistory();
+  };
+
+  const [ownSubmission, setOwnSubmission] = useState<{
+    key: string;
+    data?: SubmissionDetailsResponse;
+    error?: string;
+  }>();
+
+  useEffect(() => {
+    if (!detailsKey || !latest) return;
+    let live = true;
+    contestApi.getSubmissionDetails(latest.id).then(
+      (data) => live && setOwnSubmission({ key: detailsKey, data }),
+      (e) => live && setOwnSubmission({ key: detailsKey, error: e instanceof Error ? e.message : 'Could not load your submission.' }),
+    );
+    return () => { live = false; };
+  }, [detailsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ignore a result for an older submission/attempt. Users are kept apart by ContestLayout
+  // remounting this page whenever the signed-in user changes.
+  const shownSubmission = ownSubmission?.key === detailsKey ? ownSubmission : undefined;
+  const isLoadingSubmission = isHistoryLoading || (!!latest && !shownSubmission);
+  const submissionError = historyError || shownSubmission?.error;
 
   if (!contestId || !problemId) {
     return (
@@ -91,35 +136,113 @@ export const ContestProblemPage = () => {
     );
   }
 
+  const submittedOptionIndex = shownSubmission?.data?.option?.[0] ?? null;
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex min-h-0 flex-1">
+    <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
+      {/* Informational banners when contest has ended */}
+      {isContestEnded && !isAuthenticated && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300">
+          <Lock className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+          <span>
+            This contest has ended.{' '}
+            {/* S5: pass return path so login redirects back here */}
+            <Link
+              to="/login"
+              state={{ from: location.pathname }}
+              className="text-green-400 hover:underline"
+            >
+              Sign in
+            </Link>{' '}
+            to view your contest details.
+          </span>
+        </div>
+      )}
+
+      {isContestEnded && isAuthenticated && !isRegistered && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300">
+          <Lock className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+          <span>
+            This contest has ended. You were not registered for this contest, so only the problem statement is visible.
+          </span>
+        </div>
+      )}
+
+      {/* MCQ has no side pane, so its loading/error/empty states go here (code problems use the viewer) */}
+      {showOwnSubmission && problem.type === 'mcq' && (isLoadingSubmission || submissionError || history.length === 0) && (
+        <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300">
+          {isLoadingSubmission ? (
+            'Loading your answer…'
+          ) : submissionError ? (
+            <>
+              <span>Could not load your answer: {submissionError}</span>
+              <button type="button" onClick={retryOwnSubmission} className="text-green-400 hover:underline">
+                Retry
+              </button>
+            </>
+          ) : (
+            'You did not answer this question before the contest ended.'
+          )}
+        </div>
+      )}
+
+      <div className="flex min-h-0 flex-1 h-full overflow-hidden">
         {problem.type === 'code' ? (
-          <CodeProblemView
-            key={problem.id}
-            problem={problem}
-            onSubmit={user && !isEnded ? submitCode : undefined}
-            onRun={user ? runCode : undefined}
-          />
+          showOwnSubmission ? (
+            /* Post-contest registered view: 50/50 split */
+            <div className="flex-1 flex min-h-0 h-full overflow-hidden">
+              <div className="w-1/2 min-h-0 h-full border-r border-gray-700 overflow-hidden flex flex-col">
+                <CodeProblemView
+                  key={problem.id}
+                  problem={problem}
+                  hideIDE={true}
+                />
+              </div>
+              <div className="w-1/2 min-h-0 h-full overflow-hidden flex flex-col">
+                <SubmittedSolutionViewer
+                  submission={shownSubmission?.data ?? null}
+                  isLoading={isLoadingSubmission}
+                  error={submissionError}
+                  onRetry={retryOwnSubmission}
+                  hasHistory={history.length > 0}
+                />
+              </div>
+            </div>
+          ) : (
+            /* Active contest OR post-contest unauthenticated / unregistered */
+            <CodeProblemView
+              key={problem.id}
+              problem={problem}
+              onSubmit={isAuthenticated && !isContestEnded ? submitCode : undefined}
+              onRun={isAuthenticated && !isContestEnded ? runCode : undefined}
+              hideIDE={isContestEnded}
+            />
+          )
         ) : (
           <MCQProblemView
             key={problem.id}
             problem={problem}
-            onSubmit={user && !isEnded ? submitMCQ : undefined}
+            onSubmit={isAuthenticated && !isContestEnded ? submitMCQ : undefined}
+            isContestEnded={isContestEnded}
+            submittedOption={showOwnSubmission ? submittedOptionIndex : null}
           />
         )}
       </div>
-      {user && <SubmissionPanel
-        problemType={problem.type}
-        activeSubmission={activeSubmission}
-        history={history}
-        historyError={historyError}
-        isHistoryLoading={isHistoryLoading}
-        hasMoreHistory={hasMoreHistory}
-        onRetryPolling={retryPolling}
-        onRefreshHistory={refreshHistory}
-        onLoadMoreHistory={loadMoreHistory}
-      />}
+
+      {/* Submission panel: ONLY shown during active live contests */}
+      {isAuthenticated && !isContestEnded && (
+        <SubmissionPanel
+          problemType={problem.type}
+          activeSubmission={activeSubmission}
+          history={history}
+          historyError={historyError}
+          isHistoryLoading={isHistoryLoading}
+          hasMoreHistory={hasMoreHistory}
+          onRetryPolling={retryPolling}
+          onRefreshHistory={refreshHistory}
+          onLoadMoreHistory={loadMoreHistory}
+        />
+      )}
     </div>
   );
 };
