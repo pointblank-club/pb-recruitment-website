@@ -21,10 +21,6 @@ export const ContestProblemPage = () => {
     isRegistered = false,
   } = useOutletContext<ContestOutletContext>() || {};
 
-  // For ended contests: only registered + authenticated users see code/submissions.
-  // Guests and unregistered users see ONLY the problem statement (hideIDE = true).
-  const hideIDE = isContestEnded ? !(isAuthenticated && isRegistered) : !isAuthenticated;
-
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
 
   // After the contest ends only registered users need their history: history[0] is their last submission.
@@ -46,7 +42,10 @@ export const ContestProblemPage = () => {
 
   // Post-contest: fetch full details (including code) for the latest submission.
   // Keyed on `id:status:attempt` so a resolved verdict or a Retry triggers a refetch.
-  const showOwnSubmission = isContestEnded && isAuthenticated && isRegistered;
+  // Snapshot at mount: anyone on this page when time runs out is redirected by ContestLayout,
+  // so don't fetch details for a page that is about to leave.
+  const [endedOnArrival] = useState(isContestEnded);
+  const showOwnSubmission = endedOnArrival && isAuthenticated && isRegistered;
   const latest = showOwnSubmission ? history[0] : undefined;
   const [attempt, setAttempt] = useState(0);
   const detailsKey = latest ? `${latest.id}:${latest.status}:${attempt}` : undefined;
@@ -71,7 +70,8 @@ export const ContestProblemPage = () => {
     return () => { live = false; };
   }, [detailsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Only use details when the key matches (prevents stale cross-user data)
+  // Ignore a result for an older submission/attempt. Users are kept apart by ContestLayout
+  // remounting this page whenever the signed-in user changes.
   const shownSubmission = ownSubmission?.key === detailsKey ? ownSubmission : undefined;
   const isLoadingSubmission = isHistoryLoading || (!!latest && !shownSubmission);
   const submissionError = historyError || shownSubmission?.error;
@@ -215,7 +215,7 @@ export const ContestProblemPage = () => {
               problem={problem}
               onSubmit={isAuthenticated && !isContestEnded ? submitCode : undefined}
               onRun={isAuthenticated && !isContestEnded ? runCode : undefined}
-              hideIDE={hideIDE}
+              hideIDE={isContestEnded}
             />
           )
         ) : (

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Copy, Check, Code2, AlertCircle, RefreshCw } from 'lucide-react';
 import { decodeBase64 } from '@/lib/base64';
 import { formatVerdict, getVerdictClasses } from './SubmissionPanel';
@@ -24,10 +24,7 @@ export const SubmittedSolutionViewer = ({
 }: SubmittedSolutionViewerProps) => {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
 
-  const decodedCode = useMemo(() => {
-    if (!submission?.code) return '';
-    return decodeBase64(submission.code);
-  }, [submission?.code]);
+  const decodedCode = submission?.code ? decodeBase64(submission.code) : '';
 
   const handleCopy = async () => {
     if (!decodedCode) return;

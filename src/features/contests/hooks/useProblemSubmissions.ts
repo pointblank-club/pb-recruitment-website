@@ -104,6 +104,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
     setHistoryPage(0);
     setHasMoreHistory(false);
     setHistoryError(null);
+    setIsHistoryLoading(false);
 
     if (!skip) void refreshHistory();
 

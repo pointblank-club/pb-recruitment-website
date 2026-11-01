@@ -88,7 +88,7 @@ export const MCQProblemView = ({
               <h2 className="text-lg font-semibold text-green-400 font-['DM_Sans']">
                 {isContestEnded ? 'Answer Options' : 'Select Your Answer'}
               </h2>
-              {isContestEnded && submittedOption !== null && submittedOption !== undefined && (
+              {isContestEnded && submittedOption != null && submittedOption < options.length && (
                 <span className="flex items-center gap-1.5 text-xs text-green-400 bg-green-950/60 border border-green-800/80 px-2.5 py-1 rounded-full">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   Your submitted answer is highlighted
