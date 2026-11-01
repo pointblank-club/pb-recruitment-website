@@ -19,13 +19,22 @@ export interface ContestRegistration {
 }
 
 export interface PlagiarismReport {
-  status: 'pending' | 'processing' | 'queued' | 'running' | 'finished' | 'error' | 'failed' | 'skipped' | string;
+  status: string;
+  reports?: PlagiarismGroup[];
+  error?: string;
+}
+
+export interface PlagiarismGroup {
+  problem_id: string;
+  language: string;
+  status: string;
   report_url?: string;
   error?: string;
 }
 
 export interface PlagiarismPair {
   key: string;
+  report_id: string;
   left_file: string;
   left_user_id: string;
   left_name?: string;
@@ -269,13 +278,17 @@ class AdminApiService {
     return response.data;
   }
 
-  async getPlagiarismPairs(contestId: string): Promise<PlagiarismPair[]> {
-    const response = await this.axiosInstance.get<PlagiarismPair[]>(`/admin/contest/${contestId}/plagiarism/pairs`);
-    return response.data;
+  async getPlagiarismPairs(contestId: string, page = 0): Promise<{ pairs: PlagiarismPair[]; total: number; truncated: boolean }> {
+    const response = await this.axiosInstance.get<PlagiarismPair[]>(`/admin/contest/${contestId}/plagiarism/pairs`, { params: { page } });
+    return {
+      pairs: response.data,
+      total: Number(response.headers['x-total-count'] ?? response.data.length),
+      truncated: response.headers['x-truncated'] === 'true',
+    };
   }
 
-  async reviewPlagiarismPair(contestId: string, pairKey: string, status: PlagiarismPair['review_status'], note = ''): Promise<void> {
-    await this.axiosInstance.patch(`/admin/contest/${contestId}/plagiarism/pairs/${pairKey}`, { status, note });
+  async reviewPlagiarismPair(contestId: string, pair: PlagiarismPair, status: PlagiarismPair['review_status'], note = ''): Promise<void> {
+    await this.axiosInstance.patch(`/admin/contest/${contestId}/plagiarism/pairs/${pair.key}`, { status, note, report_id: pair.report_id });
   }
 
   async getContestById(contestId: string): Promise<Contest | null> {

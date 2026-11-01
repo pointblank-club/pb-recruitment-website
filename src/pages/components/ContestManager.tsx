@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { Contest } from "@/models/contest";
-import { adminApi, type PlagiarismPair } from "@/services/api/adminApi";
+import { adminApi } from "@/services/api/adminApi";
 import { toast } from "react-toastify";
 
 type RegistrationStatus = "upcoming" | "open" | "closed";
@@ -15,46 +15,6 @@ interface ContestManagerProps {
 
 const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }) => {
   const navigate = useNavigate();
-  const [plagiarism, setPlagiarism] = useState<Record<string, {status: string; report_url?: string; error?: string}>>({});
-  const [plagiarismPairs, setPlagiarismPairs] = useState<Record<string, PlagiarismPair[]>>({});
-
-  useEffect(() => {
-    let active = true;
-    const refresh = async () => {
-      const ended = contests.filter((contest) => contest.end_time <= Date.now());
-      const results = await Promise.all(ended.map(async (contest) => {
-        try {
-          const report = await adminApi.getPlagiarismReport(contest.id);
-          const pairs = report.status === 'finished' ? await adminApi.getPlagiarismPairs(contest.id) : null;
-          return [contest.id, report, pairs] as const;
-        }
-        catch { return [contest.id, null, null] as const; }
-      }));
-      if (active) {
-        const reports: Record<string, {status: string; report_url?: string; error?: string}> = {};
-        const pairsByContest: Record<string, PlagiarismPair[]> = {};
-        results.forEach(([id, report, pairs]) => {
-          if (report) reports[id] = report;
-          if (pairs) pairsByContest[id] = pairs;
-        });
-        setPlagiarism((current) => ({...current, ...reports}));
-        setPlagiarismPairs((current) => ({...current, ...pairsByContest}));
-      }
-    };
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 30000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [contests]);
-
-  const handlePairReview = async (contestId: string, pair: PlagiarismPair, status: PlagiarismPair['review_status']) => {
-    const note = status === 'cleared' ? (window.prompt('Reason for clearing this flag:', pair.review_note ?? '') ?? null) : (status === 'confirmed' ? (window.prompt('Admin review note (optional):', pair.review_note ?? '') ?? null) : '');
-    if (note === null) return;
-    try {
-      await adminApi.reviewPlagiarismPair(contestId, pair.key, status, note);
-      setPlagiarismPairs((current) => ({...current, [contestId]: (current[contestId] ?? []).map((item) => item.key === pair.key ? {...item, review_status: status, review_note: note} : item)}));
-    } catch { toast.error('Could not update plagiarism review.'); }
-  };
-
   const getRegistrationStatus = (contest: Contest): RegistrationStatus => {
     const now = Date.now();
     if (contest.registration_start_time > now) return "upcoming";
@@ -237,27 +197,7 @@ const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }
                     >
                       {consolidatingId === contest.id ? "Consolidating..." : "Consolidate & Rank"}
                     </button>
-                    {runStatus === "closed" && (
-                      <div className="rounded bg-gray-800 px-3 py-2 text-sm text-gray-300">
-                        <span>Plagiarism check: {plagiarism[contest.id]?.status ?? "pending"}</span>
-                        {plagiarism[contest.id]?.report_url && (
-                          <a className="ml-2 text-green-400 underline" href={plagiarism[contest.id]?.report_url} target="_blank" rel="noreferrer">Open Dolos report</a>
-                        )}
-                        {plagiarism[contest.id]?.error && <p className="mt-1 text-red-300">{plagiarism[contest.id]?.error}</p>}
-                        {(plagiarismPairs[contest.id] ?? []).map((pair) => (
-                          <div key={pair.key} className="mt-3 border-t border-gray-700 pt-3">
-                            <p className="text-gray-200">{pair.left_name || pair.left_user_id} ↔ {pair.right_name || pair.right_user_id}</p>
-                            <p className="text-xs text-gray-400">Similarity {(pair.similarity * 100).toFixed(1)}% · longest match {pair.longest_fragment} · overlap {pair.total_overlap} · {pair.review_status}</p>
-                            {pair.review_note && <p className="text-xs text-gray-400">Review note: {pair.review_note}</p>}
-                            <div className="mt-2 flex gap-2">
-                              <button onClick={() => void handlePairReview(contest.id, pair, 'cleared')} className="rounded bg-green-700 px-2 py-1 text-xs text-white">Clear flag</button>
-                              <button onClick={() => void handlePairReview(contest.id, pair, 'confirmed')} className="rounded bg-red-800 px-2 py-1 text-xs text-white">Confirm flag</button>
-                              <button onClick={() => void handlePairReview(contest.id, pair, 'unreviewed')} className="rounded bg-gray-700 px-2 py-1 text-xs text-white">Reset review</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {runStatus === "closed" && <button onClick={() => navigate(`/admin/contest/${contest.id}/plagiarism`)} className="w-full bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded transition-colors font-semibold">Review plagiarism</button>}
 
                   </div>
                 </div>
