@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
 import { Contest } from "@/models/contest";
 import { adminApi } from "@/services/api/adminApi";
@@ -10,7 +11,7 @@ import Footer from "./components/footer";
 const renderMarkdown = (markdown: string): string => {
   if (!markdown) return "";
   
-  let html = markdown
+  const html = markdown
     // Headers
     .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold text-green-400 mt-4 mb-2">$1</h3>')
     .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold text-green-400 mt-5 mb-3">$1</h2>')
@@ -33,6 +34,28 @@ const renderMarkdown = (markdown: string): string => {
     .replace(/\n/g, '<br/>');
   
   return html;
+};
+
+const getSaveErrorMessage = (error: unknown): string => {
+  if (axios.isAxiosError(error)) {
+    const data: unknown = error.response?.data;
+    if (typeof data === "object" && data !== null) {
+      const body = data as Record<string, unknown>;
+      if (typeof body.error === "string" && body.error.trim()) return body.error;
+      if (typeof body.message === "string" && body.message.trim()) return body.message;
+      if (Array.isArray(body.errors)) {
+        const messages = body.errors.flatMap((item) => {
+          if (typeof item !== "object" || item === null) return [];
+          const validation = item as Record<string, unknown>;
+          return typeof validation.message === "string"
+            ? [typeof validation.field === "string" ? `${validation.field}: ${validation.message}` : validation.message]
+            : [];
+        });
+        if (messages.length) return messages.join("; ");
+      }
+    }
+  }
+  return "Failed to save contest. Please try again.";
 };
 
 const AddContest: React.FC = () => {
@@ -157,10 +180,9 @@ const AddContest: React.FC = () => {
         toast.success("Contest created successfully!");
       }
       navigate("/admin");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error saving contest:", error);
-      const errorMessage = error?.response?.data?.message || "Failed to save contest";
-      toast.error(errorMessage);
+      toast.error(getSaveErrorMessage(error));
     } finally {
       setIsLoading(false);
     }

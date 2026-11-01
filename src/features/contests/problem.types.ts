@@ -49,10 +49,10 @@ export interface ProblemScore {
   solved_at?: number;
 }
 
-
 export interface Contest {
   id: string;
   name: string;
   start_time: number;
   end_time: number;
+  is_registered?: boolean;
 }

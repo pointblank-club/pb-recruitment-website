@@ -23,6 +23,8 @@ const ContestDetails: React.FC<ContestDetailsProps> = ({ contest }) => {
     },
   };
 
+  const eligibleYearsText = contest.formatEligibleYears();
+
   return (
     <section className="w-full px-4 md:px-8 py-12">
       <div className="max-w-6xl mx-auto">
@@ -45,10 +47,11 @@ const ContestDetails: React.FC<ContestDetailsProps> = ({ contest }) => {
                 </p>
               </div>
 
-              {/* Rules */}
+              {/* Rules & Eligibility */}
               <div>
-                <h2 className="text-2xl font-anton text-green-400 mb-4">Contest Rules</h2>
+                <h2 className="text-2xl font-anton text-green-400 mb-4">Contest Rules & Eligibility</h2>
                 <span className="text-gray-300 leading-relaxed block">
+                  • <strong className="text-white">Eligible Years:</strong> Open to students in <span className="text-green-400 font-semibold">{eligibleYearsText}</span>. <br />
                   • This is an individual contest. No collaboration is allowed. <br />
                   • You can use any programming language (C++, Python, Java, etc.). <br />
                   • External resources and search engines are not permitted during the contest. <br />

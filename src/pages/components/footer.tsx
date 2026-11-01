@@ -30,7 +30,7 @@ export default function Footer() {
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <motion.div variants={fadeInUp} className="flex flex-col items-start">
-            <Link to="/" className="flex items-center space-x-2">
+            <Link to="https://pointblank.club" className="flex items-center space-x-2">
               <img src={logo} alt="PB DSC Logo" className="h-6 mb-4 hover:scale-105 transition-transform" />
             </Link>
           </motion.div>
@@ -62,7 +62,7 @@ export default function Footer() {
             <h3 className="text-xl mb-4">Connect With Us</h3>
             <div className="flex space-x-4">
               <motion.a
-                href="https://x.com/pointblank_dsce"
+                href="https://x.com/pointblank_club"
                 target="_blank"
                 rel="noopener noreferrer"
                 whileHover={{ scale: 1.1 }}
@@ -72,7 +72,7 @@ export default function Footer() {
                 <Twitter size={24} />
               </motion.a>
               <motion.a
-                href="https://www.instagram.com/pointblank_dsce/"
+                href="https://www.instagram.com/pointblank_club_"
                 target="_blank"
                 rel="noopener noreferrer"
                 whileHover={{ scale: 1.1 }}
@@ -82,7 +82,7 @@ export default function Footer() {
                 <Instagram size={24} />
               </motion.a>
               <motion.a
-                href="https://www.linkedin.com/company/point-blank-d"
+                href="https://www.linkedin.com/company/pointblank-club/"
                 target="_blank"
                 rel="noopener noreferrer"
                 whileHover={{ scale: 1.1 }}

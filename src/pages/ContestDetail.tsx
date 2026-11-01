@@ -10,31 +10,38 @@ import ContestDetails from "./components/ContestDetails";
 import type { Contest } from "@/models/contest";
 import { contestApi } from "@/services/api/contestApi";
 import { toast } from "react-toastify";
+import { useAuth } from "@/lib/AuthContext";
 
 const ContestDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { loading: authLoading, user } = useAuth();
 
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [contest, setContest] = React.useState<Contest | null | undefined>(null);
   useEffect(() => {
+    if (authLoading) return;
+    let isMounted = true;
     const fetchContest = async () => {
       try {
         setIsLoading(true);
         const data = await contestApi.getContestById(id!);
-        if (!data) setContest(undefined);
-        else setContest(data);
+        if (isMounted) setContest(data ?? undefined);
       } catch (error) {
+        if (!isMounted) return;
         console.error("Error fetching contest:", error);
         toast.error("Error fetching contest details. Please try again later. If problem persists, contact volunteers.");
         setContest(undefined);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     };
 
-    fetchContest();
-  }, [id]);
+    void fetchContest();
+    return () => {
+      isMounted = false;
+    };
+  }, [id, authLoading, user]);
 
   if (contest === undefined) {
     return (

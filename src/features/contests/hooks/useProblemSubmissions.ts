@@ -6,6 +6,7 @@ import {
   type SubmissionResponse,
   type SubmissionStatus,
   type SubmissionType,
+  type RunCodeResponse,
 } from '@/services/api/contestApi';
 
 const FIRST_POLL_DELAY_MS = 1000;
@@ -62,7 +63,8 @@ const mergeSubmissions = (
   return Array.from(byId.values()).sort((left, right) => right.created_at - left.created_at);
 };
 
-export const useProblemSubmissions = (contestId: string, problemId: string) => {
+export const useProblemSubmissions = (contestId: string, problemId: string, options?: { skip?: boolean }) => {
+  const skip = options?.skip ?? false;
   const [activeSubmission, setActiveSubmission] = useState<ActiveSubmission>({ phase: 'idle' });
   const [history, setHistory] = useState<SubmissionDetailsResponse[]>([]);
   const [historyPage, setHistoryPage] = useState(0);
@@ -103,14 +105,14 @@ export const useProblemSubmissions = (contestId: string, problemId: string) => {
     setHasMoreHistory(false);
     setHistoryError(null);
 
-    void refreshHistory();
+    if (!skip) void refreshHistory();
 
     return () => {
       pollTokenRef.current += 1;
       historyRequestRef.current += 1;
       if (scopeTokenRef.current === scopeToken) scopeTokenRef.current += 1;
     };
-  }, [problemId, refreshHistory]);
+  }, [problemId, refreshHistory, skip]);
 
   const loadMoreHistory = useCallback(async () => {
     if (!problemId || isHistoryLoading || !hasMoreHistory) return;
@@ -289,6 +291,10 @@ export const useProblemSubmissions = (contestId: string, problemId: string) => {
     )
   ), [contestId, problemId, submit]);
 
+  const runCode = useCallback((code: string, language: string, stdin: string): Promise<RunCodeResponse> => (
+    contestApi.runCodeSolution(code, language, stdin)
+  ), []);
+
   const submitMCQ = useCallback((selectedOption: number) => (
     submit(
       () => contestApi.submitMCQAnswer(contestId, problemId, selectedOption),
@@ -323,6 +329,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string) => {
     isHistoryLoading,
     hasMoreHistory,
     submitCode,
+    runCode,
     submitMCQ,
     retryPolling,
     refreshHistory,

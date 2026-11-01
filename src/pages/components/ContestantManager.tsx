@@ -1,6 +1,8 @@
+import { adminApi } from "@/services/api/adminApi";
+import axios from "axios";
 import React, { useState } from "react";
 
-interface Contestant {
+export interface Contestant {
   id: string;
   name: string;
   email: string;
@@ -10,17 +12,62 @@ interface Contestant {
 }
 
 interface ContestantManagerProps {
+  contestId: string;
   contestants: Contestant[];
-  setContestants: (contestants: Contestant[]) => void;
+  setContestants: React.Dispatch<React.SetStateAction<Contestant[]>>;
 }
 
-const ContestantManager: React.FC<ContestantManagerProps> = ({ contestants, setContestants }) => {
+const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contestants, setContestants }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("All");
+  const [updatingMap, setUpdatingMap] = useState<Record<string, boolean>>({});
 
-  const handleStatusChange = (id: string, newStatus: "Active" | "Banned" | "Hidden") => {
-    const updated = contestants.map((c: Contestant) => (c.id === id ? { ...c, status: newStatus } as Contestant : c));
-    setContestants(updated);
+  const contestIdRef = React.useRef<string | null>(contestId);
+  React.useEffect(() => {
+    contestIdRef.current = contestId;
+    return () => {
+      contestIdRef.current = null;
+    };
+  }, [contestId]);
+
+  const handleStatusChange = async (id: string, newStatus: "Active" | "Banned" | "Hidden") => {
+    const targetContestId = contestId;
+    const current = contestants.find((c) => c.id === id);
+    const prevStatus = current?.status || "Active";
+    if (prevStatus === newStatus) return;
+
+    // Optimistically update ONLY this contestant
+    setContestants((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, status: newStatus } : c))
+    );
+    setUpdatingMap((prev) => ({ ...prev, [id]: true }));
+
+    try {
+      await adminApi.updateContestantStatus(targetContestId, id, newStatus);
+    } catch (err: unknown) {
+      console.error("Failed to update status:", err);
+      // Only roll back if the admin is still viewing the same contest
+      if (contestIdRef.current === targetContestId) {
+        setContestants((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, status: prevStatus } : c))
+        );
+        let errorMsg = "An unexpected error occurred";
+        if (axios.isAxiosError(err)) {
+          errorMsg = err.response?.data?.error || err.message;
+        } else if (err instanceof Error) {
+          errorMsg = err.message;
+        }
+        alert(`Failed to update status: ${errorMsg}`);
+      }
+    } finally {
+      if (contestIdRef.current === targetContestId) {
+        setUpdatingMap((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    }
   };
 
   const filteredContestants = contestants.filter((contestant) => {
@@ -47,6 +94,9 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestants, setC
 
   return (
     <div className="space-y-6">
+      <div className="bg-gray-800/60 border border-gray-700/80 rounded-lg p-3 text-xs text-gray-400">
+        💡 <span className="font-semibold text-gray-300">Note:</span> If this contest has already been consolidated, updating a contestant's moderation status requires re-running contest consolidation to recalculate and freeze the updated ranking snapshot.
+      </div>
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -121,13 +171,14 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestants, setC
                   <label className="block text-gray-400 text-sm mb-2">Change Status</label>
                   <select
                     value={contestant.status}
+                    disabled={Boolean(updatingMap[contestant.id])}
                     onChange={(e) =>
                       handleStatusChange(
                         contestant.id,
                         e.target.value as "Active" | "Banned" | "Hidden"
                       )
                     }
-                    className="bg-gray-900 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                    className={`bg-gray-900 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none ${updatingMap[contestant.id] ? "opacity-50 cursor-wait" : ""}`}
                   >
                     <option value="Active">Active</option>
                     <option value="Hidden">Hidden</option>

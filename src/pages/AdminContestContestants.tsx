@@ -3,29 +3,35 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/footer";
-import ContestantManager from "./components/ContestantManager";
+import ContestantManager, { type Contestant } from "./components/ContestantManager";
 import { adminApi } from "@/services/api/adminApi";
 
 const AdminContestContestants: React.FC = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
-  const [contestants, setContestants] = useState<any[]>([]);
+  const [contestants, setContestants] = useState<Contestant[]>([]);
   const [contestName, setContestName] = useState<string>("");
+  const [loadedContestId, setLoadedContestId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
 
   useEffect(() => {
+    let isCancelled = false;
+
     const fetchData = async () => {
       if (!contestId) return;
 
       try {
         setLoading(true);
         setError("");
+        setLoadedContestId(null);
         
         const [contest, registrations] = await Promise.all([
           adminApi.getContestById(contestId),
-          adminApi.getContestRegistrations(contestId).catch(() => []),
+          adminApi.getContestRegistrations(contestId),
         ]);
+
+        if (isCancelled) return;
 
         if (contest) {
           setContestName(contest.name);
@@ -33,27 +39,46 @@ const AdminContestContestants: React.FC = () => {
           setContestName(contestId);
         }
 
-        const mappedContestants = registrations.map((reg: any) => ({
-          id: reg.user_id,
-          name: reg.name,
-          email: reg.email,
-          status: "Active" as const,
-          registrationDate: reg.registered_at 
-            ? new Date(reg.registered_at * 1000).toLocaleDateString() 
-            : "N/A",
-          score: 0,
-        }));
+        const mappedContestants: Contestant[] = registrations.map((reg) => {
+          let status: "Active" | "Banned" | "Hidden" = "Active";
+          if (reg.disqualified) {
+            status = "Banned";
+          } else if (reg.hidden) {
+            status = "Hidden";
+          }
+
+          return {
+            id: reg.user_id,
+            name: reg.name,
+            email: reg.email,
+            status,
+            registrationDate: reg.registered_at
+              ? new Date(reg.registered_at * 1000).toLocaleDateString()
+              : "N/A",
+            score: reg.score ?? 0,
+          };
+        });
 
         setContestants(mappedContestants);
-      } catch (err: any) {
+        setLoadedContestId(contestId);
+      } catch (err: unknown) {
+        if (isCancelled) return;
         console.error("Error fetching contestants:", err);
-        setError(err.message || "Failed to load contestants");
+        setError(err instanceof Error ? err.message : "Failed to load contestants");
         setContestants([]);
+        setLoadedContestId(contestId);
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
+
     fetchData();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [contestId]);
 
   if (!contestId) {
@@ -88,12 +113,14 @@ const AdminContestContestants: React.FC = () => {
 
         {/* Contestant Manager */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-          {loading ? (
+          {loading || loadedContestId !== contestId ? (
             <p className="text-gray-400">Loading contestants...</p>
           ) : error ? (
             <p className="text-red-400">{error}</p>
           ) : (
             <ContestantManager
+              key={contestId}
+              contestId={contestId}
               contestants={contestants}
               setContestants={setContestants}
             />

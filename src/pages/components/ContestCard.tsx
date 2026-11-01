@@ -1,5 +1,7 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { Trophy } from "lucide-react";
 import type { Contest } from "@/models/contest";
 
 interface ContestCardProps {
@@ -8,6 +10,9 @@ interface ContestCardProps {
 }
 
 const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
+  const navigate = useNavigate();
+  const eligibleYearsText = contest.formatEligibleYears();
+
   return (
     <motion.div
       whileHover={{ y: -8, boxShadow: "0 20px 40px rgba(34, 197, 94, 0.1)" }}
@@ -43,19 +48,58 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
           </div>
         </div>
 
-        {/* Call to action button */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className={`w-full mt-4 py-2 px-4 rounded-lg font-semibold transition-all ${
-            contest.isRegistrationOpen()
-              ? "bg-green text-black hover:bg-green-600"
-              : "bg-gray-700 text-gray-400 cursor-not-allowed"
-          }`}
-          disabled={!contest.isRegistrationOpen()}
-        >
-          {contest.isRegistrationOpen() ? "Register" : "Registration Closed"}
-        </motion.button>
+        {/* Eligibility */}
+        <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+          <span>Eligible Years:</span>
+          <span className="text-green-400 font-medium">
+            {eligibleYearsText}
+          </span>
+        </div>
+
+        {/* Call to action buttons */}
+        <div className="flex items-center gap-3 mt-4">
+          {Date.now() >= contest.end_time ? (
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/contests/${contest.id}/problems`);
+              }}
+              className="flex-1 py-2 px-4 rounded-lg font-semibold transition-all bg-green text-black hover:bg-green-600"
+            >
+              View Problems
+            </motion.button>
+          ) : (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-all ${
+                contest.isRegistrationOpen()
+                  ? "bg-green text-black hover:bg-green-600"
+                  : "bg-gray-700 text-gray-400 cursor-not-allowed"
+              }`}
+              disabled={!contest.isRegistrationOpen()}
+            >
+              {contest.isRegistrationOpen() ? "Register" : "Registration Closed"}
+            </motion.button>
+          )}
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/contests/${contest.id}/leaderboard`);
+            }}
+            className="py-2 px-3 rounded-lg border border-gray-700 bg-gray-900 text-gray-300 hover:text-white hover:border-gray-500 transition-all text-sm font-semibold flex items-center gap-1.5"
+            title="View Contest Leaderboard"
+          >
+            <Trophy size={16} className="text-yellow-400" />
+            Leaderboard
+          </motion.button>
+        </div>
       </div>
     </motion.div>
   );

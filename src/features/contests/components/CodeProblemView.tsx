@@ -1,12 +1,16 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
+import axios from 'axios';
 import { Button } from '@/components/ui/button';
-import { Play, Send, Copy, Check } from 'lucide-react';
+import { Play, Send, Copy, Check, Clock, Cpu } from 'lucide-react';
+import type { RunCodeResponse } from '@/services/api/contestApi';
+import { formatVerdict, getVerdictClasses } from './SubmissionPanel';
 import type { Problem } from '../problem.types';
 
 interface CodeProblemViewProps {
   problem: Problem;
   onSubmit?: (code: string, language: string) => Promise<void>;
+  onRun?: (code: string, language: string, stdin: string) => Promise<RunCodeResponse>;
 }
 
 const SUPPORTED_LANGUAGES = [
@@ -50,13 +54,29 @@ int main() {
 }`,
 };
 
-export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => {
+const getRunErrorMessage = (error: unknown): string => {
+  if (axios.isAxiosError(error)) {
+    if (error.response?.status === 404) return 'Code execution service is currently disabled on the server.';
+    if (error.response?.status === 401) return 'You must be logged in to execute code.';
+    const responseData: unknown = error.response?.data;
+    if (typeof responseData === 'object' && responseData !== null) {
+      const data = responseData as Record<string, unknown>;
+      if (typeof data.error === 'string') return data.error;
+      if (typeof data.message === 'string') return data.message;
+    }
+    if (error.message) return error.message;
+  }
+  return error instanceof Error ? error.message : 'Code execution failed. Please try again.';
+};
+
+export const CodeProblemView = ({ problem, onSubmit, onRun }: CodeProblemViewProps) => {
   const [selectedLanguage, setSelectedLanguage] = useState('cpp');
   const [codeByLanguage, setCodeByLanguage] = useState<Record<string, string>>(
     () => ({ ...DEFAULT_CODE_TEMPLATES }),
   );
-  const [customInput, setCustomInput] = useState('');
-  const [output, setOutput] = useState('');
+  const [customInput, setCustomInput] = useState(() => problem.examples?.[0]?.input || '');
+  const [runResult, setRunResult] = useState<RunCodeResponse | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<'input' | 'output'>('input');
@@ -67,33 +87,59 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
   const [resizeDirection, setResizeDirection] = useState<'vertical' | 'horizontal' | null>(null);
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const inputRevisionRef = useRef(0);
   const code = codeByLanguage[selectedLanguage] || '';
 
-  const handleLanguageChange = useCallback((newLanguage: string) => {
-    setSelectedLanguage(newLanguage);
+  const invalidateRun = useCallback(() => {
+    inputRevisionRef.current += 1;
+    setRunResult(null);
+    setRunError(null);
   }, []);
 
+  const handleLanguageChange = useCallback((newLanguage: string) => {
+    invalidateRun();
+    setSelectedLanguage(newLanguage);
+  }, [invalidateRun]);
+
   const handleCodeChange = useCallback((value: string | undefined) => {
+    invalidateRun();
     setCodeByLanguage((current) => ({
       ...current,
       [selectedLanguage]: value || '',
     }));
-  }, [selectedLanguage]);
+  }, [invalidateRun, selectedLanguage]);
 
   const handleRunCode = useCallback(async () => {
-    setIsRunning(true);
-    setActiveTab('output');
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setOutput('Code execution will be implemented with backend API\n\nYour custom input:\n' + (customInput || '(no input provided)'));
-    setIsRunning(false);
-  }, [customInput]);
-
-  const handleSubmit = async () => {
-    if (!onSubmit) {
-      console.log('Submitting code:', { code, language: selectedLanguage });
-      alert('Submission will be integrated with backend API');
+    if (!onRun) return;
+    if (!code.trim()) {
+      setActiveTab('output');
+      setRunError('Code cannot be empty');
+      setRunResult(null);
       return;
     }
+
+    setIsRunning(true);
+    setActiveTab('output');
+    setRunError(null);
+    setRunResult(null);
+    const inputRevision = inputRevisionRef.current;
+
+    try {
+      const result = await onRun(code, selectedLanguage, customInput);
+
+      if (inputRevision !== inputRevisionRef.current) return;
+      setRunResult(result);
+    } catch (err: unknown) {
+      if (inputRevision !== inputRevisionRef.current) return;
+      console.error('Run code error:', err);
+      setRunError(getRunErrorMessage(err));
+    } finally {
+      setIsRunning(false);
+    }
+  }, [code, selectedLanguage, customInput, onRun]);
+
+  const handleSubmit = async () => {
+    if (!onSubmit) return;
 
     try {
       setIsSubmitting(true);
@@ -365,9 +411,10 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
               ))}
             </select>
             <div className="flex items-center gap-2">
+              {onRun && (
               <Button
                 onClick={handleRunCode}
-                disabled={isRunning}
+                disabled={isRunning || !code.trim()}
                 size="sm"
                 variant="outline"
                 className="text-xs flex items-center gap-1 text-black hover:text-black"
@@ -384,6 +431,8 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
                   </>
                 )}
               </Button>
+              )}
+              {onSubmit && (
               <Button
                 onClick={handleSubmit}
                 disabled={isSubmitting}
@@ -402,6 +451,7 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
                   </>
                 )}
               </Button>
+              )}
             </div>
           </div>
 
@@ -463,25 +513,115 @@ export const CodeProblemView = ({ problem, onSubmit }: CodeProblemViewProps) => 
             <div className="flex-1 overflow-hidden">
               {activeTab === 'input' ? (
                 <div className="h-full p-3 flex flex-col">
-                  <label className="text-xs text-gray-400 mb-2 font-['DM_Sans']">
-                    Custom Input:
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs text-gray-400 font-['DM_Sans']">
+                      Input (Custom or Sample):
+                    </label>
+                    {problem.examples && problem.examples.length > 0 && (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-gray-500 font-['DM_Sans']">Sample:</span>
+                        {problem.examples.map((ex, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              invalidateRun();
+                              setCustomInput(ex.input);
+                            }}
+                            className="px-1.5 py-0.5 text-[10px] rounded bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 font-mono transition-colors"
+                            title={`Load sample ${idx + 1}`}
+                          >
+                            #{idx + 1}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <textarea
                     value={customInput}
-                    onChange={(e) => setCustomInput(e.target.value)}
+                    onChange={(e) => {
+                      invalidateRun();
+                      setCustomInput(e.target.value);
+                    }}
                     placeholder="Enter your custom input here..."
                     className="flex-1 bg-gray-900 border border-gray-700 rounded p-2 text-xs font-mono text-white focus:outline-none focus:border-green-400 resize-none"
                   />
                 </div>
               ) : (
-                <div className="h-full p-3 flex flex-col">
-                  <label className="text-xs text-gray-400 mb-2 font-['DM_Sans']">
-                    Output:
-                  </label>
-                  {output ? (
-                    <pre className="flex-1 bg-black border border-gray-700 rounded p-2 text-xs font-mono text-green-300 overflow-auto">
-                      {output}
-                    </pre>
+                <div className="h-full p-3 flex flex-col overflow-hidden">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs text-gray-400 font-['DM_Sans']">
+                      Output:
+                    </label>
+                    {runResult && (
+                      <div className="flex items-center gap-3 text-xs text-gray-400 font-mono">
+                        <span className="flex items-center gap-1 text-[11px]">
+                          <Clock className="w-3 h-3 text-gray-400" />
+                          {runResult.runtime} ms
+                        </span>
+                        <span className="flex items-center gap-1 text-[11px]">
+                          <Cpu className="w-3 h-3 text-gray-400" />
+                          {runResult.memory} KiB
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${getVerdictClasses(runResult.status)}`}>
+                          {formatVerdict(runResult.status)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {isRunning ? (
+                    <div className="flex-1 bg-black border border-gray-700 rounded p-4 flex flex-col items-center justify-center gap-2">
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-green-400 border-t-transparent" />
+                      <p className="text-xs text-gray-400 font-['DM_Sans']">
+                        Running code against judge...
+                      </p>
+                    </div>
+                  ) : runError ? (
+                    <div className="flex-1 bg-black border border-red-900/60 rounded p-3 overflow-auto">
+                      <div className="text-xs font-semibold text-red-400 mb-1 font-['DM_Sans']">
+                        Execution Error
+                      </div>
+                      <pre className="text-xs font-mono text-red-300 whitespace-pre-wrap leading-relaxed">
+                        {runError}
+                      </pre>
+                    </div>
+                  ) : runResult ? (
+                    <div className="flex-1 bg-black border border-gray-700 rounded p-3 overflow-auto space-y-3">
+                      {runResult.compile_output && (
+                        <div className="space-y-1">
+                          <div className="text-[11px] font-semibold text-red-400 font-['DM_Sans'] uppercase tracking-wider">
+                            Compiler Output
+                          </div>
+                          <pre className="bg-red-950/20 border border-red-900/40 rounded p-2 text-xs font-mono text-red-300 whitespace-pre-wrap">
+                            {runResult.compile_output}
+                          </pre>
+                        </div>
+                      )}
+                      {runResult.stderr && (
+                        <div className="space-y-1">
+                          <div className="text-[11px] font-semibold text-yellow-400 font-['DM_Sans'] uppercase tracking-wider">
+                            Standard Error
+                          </div>
+                          <pre className="bg-yellow-950/20 border border-yellow-900/40 rounded p-2 text-xs font-mono text-yellow-300 whitespace-pre-wrap">
+                            {runResult.stderr}
+                          </pre>
+                        </div>
+                      )}
+                      {runResult.stdout ? (
+                        <div className="space-y-1">
+                          <div className="text-[11px] font-semibold text-gray-400 font-['DM_Sans'] uppercase tracking-wider">
+                            Standard Output
+                          </div>
+                          <pre className="bg-gray-950 border border-gray-800 rounded p-2 text-xs font-mono text-green-300 whitespace-pre-wrap">
+                            {runResult.stdout}
+                          </pre>
+                        </div>
+                      ) : !runResult.compile_output && !runResult.stderr ? (
+                        <div className="h-full flex items-center justify-center text-xs text-gray-500 font-mono italic">
+                          (No output)
+                        </div>
+                      ) : null}
+                    </div>
                   ) : (
                     <div className="flex-1 bg-gray-900 border border-gray-700 rounded p-4 flex items-center justify-center">
                       <p className="text-xs text-gray-500 font-['DM_Sans']">

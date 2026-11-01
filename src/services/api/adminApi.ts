@@ -9,7 +9,13 @@ export interface ContestRegistration {
   user_id: string;
   name: string;
   email: string;
+  usn?: string;
+  department?: string;
+  current_year?: number;
   registered_at?: number;
+  score?: number;
+  hidden?: boolean;
+  disqualified?: boolean;
 }
 
 export interface PlagiarismReport {
@@ -40,17 +46,20 @@ export interface AdminProblemSummary {
   name: string;
   score: number;
   type: AdminProblemType;
+  time_limit?: number;
+  memory_limit?: number;
 }
 
 export interface ProblemTestCase {
   input: string;
   expected_output: string;
+  is_sample: boolean;
 }
 
 interface ProblemTestCaseResponse {
-  index?: number;
   input: string;
   expected_output?: string;
+  is_sample?: boolean;
 }
 
 export interface AdminProblem extends AdminProblemSummary {
@@ -59,6 +68,8 @@ export interface AdminProblem extends AdminProblemSummary {
   answer: number[];
   options: string[];
   testcases: ProblemTestCase[];
+  time_limit?: number;
+  memory_limit?: number;
 }
 
 interface AdminProblemResponse {
@@ -73,6 +84,8 @@ interface AdminProblemResponse {
   options?: string[];
   testcases?: ProblemTestCaseResponse[];
   test_cases?: ProblemTestCaseResponse[];
+  time_limit?: number;
+  memory_limit?: number;
 }
 
 interface ProblemPayloadBase {
@@ -85,6 +98,8 @@ export type UpsertProblemPayload =
   | (ProblemPayloadBase & {
       type: 'code';
       testcases: ProblemTestCase[];
+      time_limit?: number;
+      memory_limit?: number;
     })
   | (ProblemPayloadBase & {
       type: 'mcq';
@@ -100,6 +115,8 @@ const normalizeProblemSummary = (
   name: problem.name,
   score: problem.score,
   type: problem.type,
+  time_limit: problem.time_limit,
+  memory_limit: problem.memory_limit,
 });
 
 class AdminApiService {
@@ -170,16 +187,19 @@ class AdminApiService {
         throw new Error('The backend did not return this problem\'s testcase inputs.');
       }
 
-      const answers = await this.getProblemAnswers(contestId, problemId);
-      const testcases = testcaseInputs.map((testcase, position) => {
+      const testcases = testcaseInputs.map((testcase) => {
         if (typeof testcase.input !== 'string') {
           throw new Error('The backend returned an invalid testcase input; editing was stopped.');
         }
-        const answer = answers[testcase.index ?? position];
+        const answer = testcase.expected_output;
         if (typeof answer !== 'string') {
           throw new Error('The backend returned incomplete testcase answers; editing was stopped.');
         }
-        return { input: testcase.input, expected_output: answer };
+        return {
+          input: testcase.input,
+          expected_output: answer,
+          is_sample: testcase.is_sample === true,
+        };
       });
 
       return {
@@ -187,6 +207,8 @@ class AdminApiService {
         answer: [],
         options: [],
         testcases,
+        time_limit: problem.time_limit,
+        memory_limit: problem.memory_limit,
       };
     }
 
@@ -211,13 +233,6 @@ class AdminApiService {
       options: problem.options,
       testcases: [],
     };
-  }
-
-  async getProblemAnswers(contestId: string, problemId: string): Promise<string[]> {
-    const response = await this.axiosInstance.get<string[]>(
-      `/admin/${contestId}/${problemId}/answers`,
-    );
-    return response.data;
   }
 
   async createProblem(contestId: string, problem: UpsertProblemPayload): Promise<AdminProblemSummary> {
@@ -287,6 +302,37 @@ class AdminApiService {
 
   async deleteContest(contestId: string): Promise<void> {
     await this.axiosInstance.delete(`/admin/contest/${contestId}`);
+  }
+
+  async updateContestantStatus(
+    contestId: string,
+    userId: string,
+    status: "Active" | "Hidden" | "Banned"
+  ): Promise<void> {
+    const payload = {
+      hidden: status === "Hidden",
+      disqualified: status === "Banned",
+    };
+    await this.axiosInstance.put(`/admin/${contestId}/leaderboard/${userId}`, payload);
+  }
+
+  async consolidateContest(
+    contestId: string,
+    options: { regrade?: boolean; force?: boolean } = {}
+  ): Promise<{
+    contest_id: string;
+    mcqs_graded: number;
+    participants_ranked: number;
+    processed_at: number;
+  }> {
+    const params = new URLSearchParams();
+    if (options.regrade) params.append("regrade", "true");
+    if (options.force) params.append("force", "true");
+
+    const response = await this.axiosInstance.post(
+      `/admin/contest/${contestId}/consolidate?${params.toString()}`
+    );
+    return response.data;
   }
 }
 

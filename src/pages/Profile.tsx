@@ -6,7 +6,6 @@ import { Popup } from "../components/ui/popup";
 import { useNavigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Footer from "./components/footer";
-import { Edit2 } from "lucide-react";
 
 import { BRANCHES } from "@/constants";
 
@@ -14,7 +13,6 @@ export const Profile: React.FC = () => {
   const { user, userProfile, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [formData, setFormData] = useState<Partial<UserProfile>>({});
-  const [editingField, setEditingField] = useState<string | null>(null);
   const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
   const [profileLoading, setProfileLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
@@ -55,47 +53,6 @@ export const Profile: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleSave = async (field: string) => {
-    if (!user) return;
-
-    setProfileLoading(true);
-    setError("");
-
-    try {
-      await updateUserProfile(user.uid, { [field]: formData[field as keyof UserProfile] });
-      await refreshProfile();
-      setEditingField(null);
-      setPopup({
-        isOpen: true,
-        type: "success",
-        message: "Profile updated successfully!",
-      });
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to update profile";
-      setError(errorMessage);
-      setPopup({
-        isOpen: true,
-        type: "error",
-        message: errorMessage,
-      });
-    } finally {
-      setProfileLoading(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setEditingField(null);
-    setError("");
-    if (userProfile) {
-      setFormData(userProfile);
-    }
-    setPasswordData({ current: "", new: "", confirm: "" });
-  };
-
   const handlePasswordChange = async () => {
     if (!passwordData.new || passwordData.new.length < 6) {
       setError("Password must be at least 6 characters");
@@ -108,7 +65,6 @@ export const Profile: React.FC = () => {
     try {
       await updateUserPassword(passwordData.current, passwordData.new);
       setPasswordData({ current: "", new: "", confirm: "" });
-      setEditingField(null);
       setPopup({
         isOpen: true,
         type: "success",
@@ -128,12 +84,13 @@ export const Profile: React.FC = () => {
   };
 
   const handleBranchSelect = async (branch: string) => {
-    handleInputChange("branch", branch);
+    setFormData(prev => ({ ...prev, branch }));
     setShowBranchDropdown(false);
     if (user) {
       setProfileLoading(true);
       try {
-        await updateUserProfile(user.uid, { branch });
+        // The backend requires name and mobile alongside department.
+        await updateUserProfile(user.uid, { ...userProfile, branch });
         await refreshProfile();
         setPopup({
           isOpen: true,
@@ -142,6 +99,7 @@ export const Profile: React.FC = () => {
         });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Failed to update branch";
+        setFormData(prev => ({ ...prev, branch: userProfile?.branch }));
         setPopup({
           isOpen: true,
           type: "error",
@@ -182,53 +140,21 @@ export const Profile: React.FC = () => {
               <p className="text-gray-400">Manage your account information</p>
             </div>
 
-            {/* Editable Fields */}
+            {/* Account Information */}
             <div className="space-y-6">
-              {/* Name */}
+              {/* Name & Year of Study */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label htmlFor="name" className="block text-sm font-medium text-gray-300">
                     Full Name:
                   </label>
-                  <div className="relative">
-                    <input
-                      id="name"
-                      type="text"
-                      value={formData.name || ""}
-                      onChange={(e) => handleInputChange("name", e.target.value)}
-                      readOnly={editingField !== "name"}
-                      className={`w-full px-4 py-3 border border-white rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 ${
-                        editingField !== "name" ? "bg-gray-800 cursor-not-allowed" : "bg-black"
-                      }`}
-                    />
-                    {editingField !== "name" ? (
-                      <button
-                        type="button"
-                        onClick={() => setEditingField("name")}
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-green-600 hover:text-green-500 transition-colors"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                    ) : (
-                      <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleSave("name")}
-                          disabled={profileLoading}
-                          className="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors disabled:opacity-50"
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCancel}
-                          className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <input
+                    id="name"
+                    type="text"
+                    value={formData.name || ""}
+                    readOnly
+                    className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
+                  />
                 </div>
 
                 {/* Year of Study */}
@@ -257,44 +183,12 @@ export const Profile: React.FC = () => {
               {/* Email */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-300">Email:</label>
-                <div className="relative">
-                  <input
-                    type="email"
-                    value={formData.email || ""}
-                    onChange={(e) => handleInputChange("email", e.target.value)}
-                    readOnly={editingField !== "email"}
-                    className={`w-full px-4 py-3 border border-white rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 ${
-                      editingField !== "email" ? "bg-gray-800 cursor-not-allowed" : "bg-black"
-                    }`}
-                  />
-                  {editingField !== "email" ? (
-                    <button
-                      type="button"
-                      onClick={() => setEditingField("email")}
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-green-600 hover:text-green-500 transition-colors"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleSave("email")}
-                        disabled={profileLoading}
-                        className="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors disabled:opacity-50"
-                      >
-                        Save
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCancel}
-                        className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <input
+                  type="email"
+                  value={formData.email || ""}
+                  readOnly
+                  className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
+                />
               </div>
 
               {/* Branch Dropdown */}
@@ -302,10 +196,12 @@ export const Profile: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-300">Branch:</label>
                 <div className="relative">
                   <div
-                    className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-pointer flex items-center justify-between hover:bg-gray-750 transition-colors"
-                    onClick={() => setShowBranchDropdown(!showBranchDropdown)}
+                    className={`w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white flex items-center justify-between transition-colors ${
+                      profileLoading ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-gray-750"
+                    }`}
+                    onClick={() => !profileLoading && setShowBranchDropdown(!showBranchDropdown)}
                   >
-                    <span>{formData.branch || "Select Branch"}</span>
+                    <span>{profileLoading ? "Updating branch..." : (formData.branch || "Select Branch")}</span>
                     <svg
                       className={`w-5 h-5 transition-transform ${
                         showBranchDropdown ? "rotate-180" : ""

@@ -6,6 +6,12 @@ import { Menu, X, User, LogOut } from "lucide-react";
 import Logo from "@/assets/logo.png";
 import { useAuth } from "@/lib/AuthContext";
 
+const authButtonBase =
+  "h-10 w-24 rounded-full px-5 font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-black";
+const loginButtonClass = `${authButtonBase} bg-green text-white hover:bg-green-700`;
+const signupButtonClass =
+  `${authButtonBase} border-2 border-green bg-transparent text-white hover:bg-green`;
+
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
@@ -120,14 +126,14 @@ export default function Navbar() {
             </div>
           ) : (
             <div className="flex gap-2">
-              <Button 
-                className="bg-green-600 text-white font-semibold px-5 py-2 rounded-full hover:bg-green-700 transition-colors"
+              <Button
+                className={loginButtonClass}
                 onClick={() => navigate("/login")}
               >
                 Log In
               </Button>
-              <Button 
-                className="border-2 border-green text-white font-semibold px-5 py-2 rounded-full hover:border-green-700 transition-colors"
+              <Button
+                className={signupButtonClass}
                 onClick={() => navigate("/signup")}
               >
                 Sign Up
@@ -195,14 +201,14 @@ export default function Navbar() {
                   </>
                 ) : (
                   <>
-                    <Button 
-                      className="w-full bg-green text-white font-semibold px-5 py-2 rounded-full hover:bg-green-700 transition-colors"
+                    <Button
+                      className={`w-full ${loginButtonClass}`}
                       onClick={() => navigate("/login")}
                     >
                       Log In
                     </Button>
-                    <Button 
-                      className="w-full border-2 border-green text-white font-semibold px-5 py-2 rounded-full hover:bg-green-700 transition-colors"
+                    <Button
+                      className={`w-full ${signupButtonClass}`}
                       onClick={() => navigate("/signup")}
                     >
                       Sign Up
