@@ -22,7 +22,7 @@ const errorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : "An unexpected error occurred.";
 };
 
-const AdminContestPlagiarism: React.FC = () => {
+const PlagiarismReview: React.FC = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
   const [contestName, setContestName] = useState("");
@@ -36,10 +36,13 @@ const AdminContestPlagiarism: React.FC = () => {
   const [pairsMessage, setPairsMessage] = useState("");
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const sequence = useRef(0);
+  // The page the admin last asked for; saves and polls reload this one, not a page captured earlier.
+  const wantedPage = useRef(0);
 
   const load = useCallback(async (requestedPage = 0) => {
     if (!contestId) return;
     const current = ++sequence.current;
+    wantedPage.current = requestedPage;
     setLoading(true);
     setError("");
     setPairsMessage("");
@@ -54,6 +57,10 @@ const AdminContestPlagiarism: React.FC = () => {
       if (groups.some((group) => group.status === "finished")) {
         try {
           const result = await adminApi.getPlagiarismPairs(contestId, requestedPage);
+          // The shortlist shrank below this page (regenerated or purged report): show its last page instead.
+          if (current === sequence.current && requestedPage > 0 && result.pairs.length === 0 && result.total > 0) {
+            return void load(Math.ceil(result.total / PAGE_SIZE) - 1);
+          }
           nextPairs = result.pairs;
           nextTotal = result.total;
           nextTruncated = result.truncated;
@@ -74,8 +81,8 @@ const AdminContestPlagiarism: React.FC = () => {
       setPage(requestedPage);
       setPairsMessage(message);
     } catch (loadError) {
-      // Keep the last loaded report and page on screen; the error says it may be out of date.
-      if (current === sequence.current) setError(errorMessage(loadError));
+      // Keep the last loaded report and page on screen, and say they may be out of date.
+      if (current === sequence.current) setError(`Refresh failed (showing last loaded data): ${errorMessage(loadError)}`);
     } finally {
       if (current === sequence.current) setLoading(false);
     }
@@ -94,9 +101,9 @@ const AdminContestPlagiarism: React.FC = () => {
 
   useEffect(() => {
     if (!isRunning(report)) return;
-    const timer = window.setInterval(() => void load(page), 30000);
+    const timer = window.setInterval(() => void load(wantedPage.current), 30000);
     return () => window.clearInterval(timer);
-  }, [report, page, load]);
+  }, [report, load]);
 
   const review = async (pair: PlagiarismPair, status: PlagiarismPair["review_status"]) => {
     const label = status === "cleared" ? "Reason for clearing this flag:" : "Admin review note (optional):";
@@ -106,7 +113,7 @@ const AdminContestPlagiarism: React.FC = () => {
     try {
       await adminApi.reviewPlagiarismPair(contestId!, pair, status, note);
       // Reloading also discards any load that started before this save committed.
-      void load(page);
+      void load(wantedPage.current);
       setPairs((current) => current.map((item) => item.report_id === pair.report_id && item.key === pair.key
         ? { ...item, review_status: status, review_note: note } : item));
     } catch (saveError) {
@@ -137,7 +144,7 @@ const AdminContestPlagiarism: React.FC = () => {
           <div className="space-y-2">{(report.reports ?? []).map((group, index) => <div key={`${group.problem_id}:${group.language}:${index}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-gray-800 pt-2 text-sm">
             <span>{group.problem_id} / {group.language}</span><span className="text-gray-400">{group.status}</span>
             {group.report_url && <a href={group.report_url} target="_blank" rel="noreferrer" aria-label={`Open Dolos report for ${group.problem_id} / ${group.language}`} className="text-green-400 underline">Open Dolos report</a>}
-            {group.error && <span className="text-red-300">{group.error}</span>}
+            {group.error && <span className={group.status === "skipped" ? "text-gray-400" : "text-red-300"}>{group.error}</span>}
           </div>)}</div>
         </section>}
         {pairsMessage && <p className="mb-4 text-gray-400">{pairsMessage}</p>}
@@ -156,5 +163,8 @@ const AdminContestPlagiarism: React.FC = () => {
     </div>
   );
 };
+
+// Remount when the contest changes so no state from another contest survives.
+const AdminContestPlagiarism: React.FC = () => <PlagiarismReview key={useParams<{ contestId: string }>().contestId} />;
 
 export default AdminContestPlagiarism;
