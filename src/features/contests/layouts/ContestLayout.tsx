@@ -6,11 +6,8 @@ import { EndContestModal } from '../components/EndContestModal';
 import { useContest } from '../hooks/useContest';
 import { useAuth } from '@/lib/AuthContext';
 import { getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
-import type { Contest } from '../problem.types';
 
 export interface ContestOutletContext {
-  contest: Contest | null;
-  timeRemaining: number;
   isContestEnded: boolean;
   isAuthenticated: boolean;
   isRegistered: boolean;
@@ -202,8 +199,6 @@ export const ContestLayout = () => {
       
       <div className="flex-1 min-h-0 overflow-auto flex flex-col">
         <Outlet context={{
-          contest,
-          timeRemaining,
           isContestEnded,
           isAuthenticated: !!user,
           isRegistered: contest?.is_registered ?? false,

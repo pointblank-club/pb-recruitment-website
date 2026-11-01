@@ -27,8 +27,7 @@ export const ContestProblemPage = () => {
 
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
 
-  // Always run for authenticated users; skip only for guests.
-  // After the contest ends, we reuse history[0] + getSubmissionDetails instead of a parallel fetch.
+  // After the contest ends only registered users need their history: history[0] is their last submission.
   const {
     activeSubmission,
     history,
@@ -42,13 +41,19 @@ export const ContestProblemPage = () => {
     refreshHistory,
     loadMoreHistory,
   } = useProblemSubmissions(contestId || '', problemId || '', {
-    skip: !isAuthenticated,
+    skip: !isAuthenticated || (isContestEnded && !isRegistered),
   });
 
   // Post-contest: fetch full details (including code) for the latest submission.
-  // Keyed on `id:status` so a pending verdict that later resolves triggers a refetch.
-  const latest = isContestEnded && isAuthenticated && isRegistered ? history[0] : undefined;
-  const detailsKey = latest ? `${latest.id}:${latest.status}` : undefined;
+  // Keyed on `id:status:attempt` so a resolved verdict or a Retry triggers a refetch.
+  const showOwnSubmission = isContestEnded && isAuthenticated && isRegistered;
+  const latest = showOwnSubmission ? history[0] : undefined;
+  const [attempt, setAttempt] = useState(0);
+  const detailsKey = latest ? `${latest.id}:${latest.status}:${attempt}` : undefined;
+  const retryOwnSubmission = () => {
+    setAttempt((n) => n + 1);
+    void refreshHistory();
+  };
 
   const [ownSubmission, setOwnSubmission] = useState<{
     key: string;
@@ -131,11 +136,7 @@ export const ContestProblemPage = () => {
     );
   }
 
-  // Derive option index for MCQ if submitted
-  const submittedOptionIndex =
-    shownSubmission?.data?.option && shownSubmission.data.option.length > 0
-      ? shownSubmission.data.option[0]
-      : null;
+  const submittedOptionIndex = shownSubmission?.data?.option?.[0] ?? null;
 
   return (
     <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
@@ -167,9 +168,27 @@ export const ContestProblemPage = () => {
         </div>
       )}
 
+      {/* MCQ has no side pane, so its loading/error/empty states go here (code problems use the viewer) */}
+      {showOwnSubmission && problem.type === 'mcq' && (isLoadingSubmission || submissionError || history.length === 0) && (
+        <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300">
+          {isLoadingSubmission ? (
+            'Loading your answer…'
+          ) : submissionError ? (
+            <>
+              <span>Could not load your answer: {submissionError}</span>
+              <button type="button" onClick={retryOwnSubmission} className="text-green-400 hover:underline">
+                Retry
+              </button>
+            </>
+          ) : (
+            'You did not answer this question before the contest ended.'
+          )}
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1 h-full overflow-hidden">
         {problem.type === 'code' ? (
-          isContestEnded && isAuthenticated && isRegistered ? (
+          showOwnSubmission ? (
             /* Post-contest registered view: 50/50 split */
             <div className="flex-1 flex min-h-0 h-full overflow-hidden">
               <div className="w-1/2 min-h-0 h-full border-r border-gray-700 overflow-hidden flex flex-col">
@@ -184,7 +203,7 @@ export const ContestProblemPage = () => {
                   submission={shownSubmission?.data ?? null}
                   isLoading={isLoadingSubmission}
                   error={submissionError}
-                  onRetry={refreshHistory}
+                  onRetry={retryOwnSubmission}
                   hasHistory={history.length > 0}
                 />
               </div>
@@ -205,7 +224,7 @@ export const ContestProblemPage = () => {
             problem={problem}
             onSubmit={isAuthenticated && !isContestEnded ? submitMCQ : undefined}
             isContestEnded={isContestEnded}
-            submittedOption={isContestEnded && isRegistered ? submittedOptionIndex : null}
+            submittedOption={showOwnSubmission ? submittedOptionIndex : null}
           />
         )}
       </div>

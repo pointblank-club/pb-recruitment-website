@@ -101,7 +101,7 @@ export const MCQProblemView = ({
                 This question has no answer options. Please contact the contest administrator.
               </p>
             ) : (
-              <RadioGroup value={selectedAnswer} onValueChange={setUserSelectedAnswer} disabled={!onSubmit || isContestEnded}>
+              <RadioGroup value={selectedAnswer} onValueChange={setUserSelectedAnswer} disabled={!onSubmit}>
                 <div className="space-y-2">
                   {options.map((option, index) => {
                     const optionValue = index.toString();
@@ -118,12 +118,8 @@ export const MCQProblemView = ({
                     return (
                       <div
                         key={optionValue}
-                        className={`flex items-center gap-4 p-4 rounded-lg border transition-all ${borderBgClass} ${isContestEnded || !onSubmit ? 'cursor-default' : 'cursor-pointer'}`}
-                        onClick={() => {
-                          if (!isContestEnded && onSubmit) {
-                            setUserSelectedAnswer(optionValue);
-                          }
-                        }}
+                        className={`flex items-center gap-4 p-4 rounded-lg border transition-all ${borderBgClass} ${onSubmit ? 'cursor-pointer' : 'cursor-default'}`}
+                        onClick={() => onSubmit && setUserSelectedAnswer(optionValue)}
                       >
                         <RadioGroupItem
                           value={optionValue}
@@ -171,7 +167,7 @@ export const MCQProblemView = ({
         </div>
       </div>
 
-      {onSubmit && !isContestEnded && (
+      {onSubmit && (
         <div className="border-t border-gray-700 bg-black">
           <div className="max-w-4xl mx-auto px-6 py-4">
             <div className="flex items-center justify-end gap-3">
