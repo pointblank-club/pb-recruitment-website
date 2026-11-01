@@ -10,9 +10,14 @@ import { toast } from "react-toastify";
 const PAGE_SIZE = 100;
 const inProgress = new Set(["pending", "processing", "queued", "running"]);
 
+const isRunning = (report: PlagiarismReport | null) =>
+  !!report && (inProgress.has(report.status) || (report.reports ?? []).some((group) => inProgress.has(group.status)));
+
 const errorMessage = (error: unknown): string => {
-  if (axios.isAxiosError<{ error?: string }>(error)) {
-    return error.response?.data?.error || error.message;
+  if (axios.isAxiosError<{ error?: string; errors?: { field?: string; message?: string }[] }>(error)) {
+    const data = error.response?.data;
+    const field = data?.errors?.[0];
+    return data?.error || (field ? `${field.field}: ${field.message}` : error.message);
   }
   return error instanceof Error ? error.message : "An unexpected error occurred.";
 };
@@ -31,10 +36,6 @@ const AdminContestPlagiarism: React.FC = () => {
   const [pairsMessage, setPairsMessage] = useState("");
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const sequence = useRef(0);
-  const pageRef = useRef(0);
-  const reportRef = useRef<PlagiarismReport | null>(null);
-  pageRef.current = page;
-  reportRef.current = report;
 
   const load = useCallback(async (requestedPage = 0) => {
     if (!contestId) return;
@@ -57,13 +58,12 @@ const AdminContestPlagiarism: React.FC = () => {
           nextTotal = result.total;
           nextTruncated = result.truncated;
         } catch (pairsError) {
-          if (axios.isAxiosError(pairsError) && pairsError.response?.status === 409) {
-            message = "Pairs are not ready yet. Refresh shortly.";
-          } else {
-            throw pairsError;
-          }
+          // Keep the group list visible when only the pairs request fails.
+          message = axios.isAxiosError(pairsError) && pairsError.response?.status === 409
+            ? "Pairs are not ready yet. Refresh shortly."
+            : `Pairs could not be loaded: ${errorMessage(pairsError)}`;
         }
-      } else {
+      } else if (nextReport.status !== "skipped") {
         message = "No finished groups have pairs available yet.";
       }
       if (current !== sequence.current) return;
@@ -71,18 +71,15 @@ const AdminContestPlagiarism: React.FC = () => {
       setPairs(nextPairs);
       setTotal(nextTotal);
       setTruncated(nextTruncated);
+      setPage(requestedPage);
       setPairsMessage(message);
     } catch (loadError) {
-      if (current !== sequence.current) return;
-      setReport(null);
-      setPairs([]);
-      setTotal(0);
-      setTruncated(false);
-      setError(errorMessage(loadError));
+      // Keep the last loaded report and page on screen; the error says it may be out of date.
+      if (current === sequence.current) setError(errorMessage(loadError));
     } finally {
       if (current === sequence.current) setLoading(false);
     }
-    }, [contestId]);
+  }, [contestId]);
 
   useEffect(() => {
     if (!contestId) return;
@@ -90,17 +87,16 @@ const AdminContestPlagiarism: React.FC = () => {
       adminApi.getContestById(contestId).catch(() => null),
       load(0),
     ]).then(([contest]) => setContestName(contest?.name ?? contestId));
-    const timer = window.setInterval(() => {
-      const currentReport = reportRef.current;
-      const isRunning = inProgress.has(currentReport?.status ?? "")
-        || (currentReport?.reports ?? []).some((group) => inProgress.has(group.status));
-      if (isRunning) void load(pageRef.current);
-    }, 30000);
     return () => {
       sequence.current += 1;
-      window.clearInterval(timer);
     };
   }, [contestId, load]);
+
+  useEffect(() => {
+    if (!isRunning(report)) return;
+    const timer = window.setInterval(() => void load(page), 30000);
+    return () => window.clearInterval(timer);
+  }, [report, page, load]);
 
   const review = async (pair: PlagiarismPair, status: PlagiarismPair["review_status"]) => {
     const label = status === "cleared" ? "Reason for clearing this flag:" : "Admin review note (optional):";
@@ -109,7 +105,8 @@ const AdminContestPlagiarism: React.FC = () => {
     setSaving((current) => new Set(current).add(pair.key));
     try {
       await adminApi.reviewPlagiarismPair(contestId!, pair, status, note);
-      sequence.current += 1;
+      // Reloading also discards any load that started before this save committed.
+      void load(page);
       setPairs((current) => current.map((item) => item.report_id === pair.report_id && item.key === pair.key
         ? { ...item, review_status: status, review_note: note } : item));
     } catch (saveError) {
@@ -136,13 +133,12 @@ const AdminContestPlagiarism: React.FC = () => {
         {error && <p className="mb-4 text-red-300">{error}</p>}
         {report && <section className="mb-6 rounded border border-gray-800 bg-gray-900 p-4">
           <h2 className="mb-3 font-semibold">Report status: {report.status}</h2>
-          {(report.reports ?? []).length === 0 && <p className="text-sm text-gray-400">Group details are not available yet.</p>}
+          {(report.reports ?? []).length === 0 && <p className="text-sm text-gray-400">{report.status === "skipped" ? "Nothing to compare: no problem had code submissions from at least two participants." : "Group details are not available yet."}</p>}
           <div className="space-y-2">{(report.reports ?? []).map((group, index) => <div key={`${group.problem_id}:${group.language}:${index}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-gray-800 pt-2 text-sm">
             <span>{group.problem_id} / {group.language}</span><span className="text-gray-400">{group.status}</span>
-            {group.report_url && <a href={group.report_url} target="_blank" rel="noreferrer" className="text-green-400 underline">Open Dolos report</a>}
+            {group.report_url && <a href={group.report_url} target="_blank" rel="noreferrer" aria-label={`Open Dolos report for ${group.problem_id} / ${group.language}`} className="text-green-400 underline">Open Dolos report</a>}
             {group.error && <span className="text-red-300">{group.error}</span>}
           </div>)}</div>
-          {report.error && <p className="mt-3 text-sm text-red-300">{report.error}</p>}
         </section>}
         {pairsMessage && <p className="mb-4 text-gray-400">{pairsMessage}</p>}
         {truncated && <p className="mb-4 rounded bg-amber-950 p-3 text-amber-200">The backend truncated the pair results. Open the group reports for the full evidence.</p>}
@@ -154,7 +150,7 @@ const AdminContestPlagiarism: React.FC = () => {
           {pair.review_note && <p className="mt-1 text-sm text-gray-400">Review note: {pair.review_note}</p>}
           <div className="mt-3 flex flex-wrap gap-2">{(["cleared", "confirmed", "unreviewed"] as const).map((status) => <button key={status} disabled={saving.has(pair.key)} onClick={() => void review(pair, status)} className="rounded bg-gray-700 px-3 py-1 text-sm text-white disabled:opacity-50">{status === "cleared" ? "Clear flag" : status === "confirmed" ? "Confirm flag" : "Reset review"}</button>)}</div>
         </article>)}</section>
-        {pageCount > 1 && <div className="mt-5 flex items-center justify-between"><button disabled={page === 0 || loading} onClick={() => { const next = page - 1; setPage(next); void load(next); }} className="rounded bg-gray-700 px-4 py-2 disabled:opacity-50">Previous</button><span>Page {page + 1} of {pageCount}</span><button disabled={page + 1 >= pageCount || loading} onClick={() => { const next = page + 1; setPage(next); void load(next); }} className="rounded bg-gray-700 px-4 py-2 disabled:opacity-50">Next</button></div>}
+        {pageCount > 1 && <div className="mt-5 flex items-center justify-between"><button disabled={page === 0 || loading} onClick={() => void load(page - 1)} className="rounded bg-gray-700 px-4 py-2 disabled:opacity-50">Previous</button><span>Page {page + 1} of {pageCount}</span><button disabled={page + 1 >= pageCount || loading} onClick={() => void load(page + 1)} className="rounded bg-gray-700 px-4 py-2 disabled:opacity-50">Next</button></div>}
       </main>
       <Footer />
     </div>
