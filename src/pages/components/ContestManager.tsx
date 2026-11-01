@@ -15,7 +15,6 @@ interface ContestManagerProps {
 
 const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }) => {
   const navigate = useNavigate();
-
   const getRegistrationStatus = (contest: Contest): RegistrationStatus => {
     const now = Date.now();
     if (contest.registration_start_time > now) return "upcoming";
@@ -198,6 +197,8 @@ const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }
                     >
                       {consolidatingId === contest.id ? "Consolidating..." : "Consolidate & Rank"}
                     </button>
+                    {runStatus === "closed" && <button onClick={() => navigate(`/admin/contest/${contest.id}/plagiarism`)} className="w-full bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded transition-colors font-semibold">Review plagiarism</button>}
+
                   </div>
                 </div>
               </div>

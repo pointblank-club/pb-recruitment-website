@@ -18,6 +18,36 @@ export interface ContestRegistration {
   disqualified?: boolean;
 }
 
+export interface PlagiarismReport {
+  status: string;
+  reports?: PlagiarismGroup[];
+  error?: string;
+}
+
+export interface PlagiarismGroup {
+  problem_id: string;
+  language: string;
+  status: string;
+  report_url?: string;
+  error?: string;
+}
+
+export interface PlagiarismPair {
+  key: string;
+  report_id: string;
+  left_file: string;
+  left_user_id: string;
+  left_name?: string;
+  right_file: string;
+  right_user_id: string;
+  right_name?: string;
+  similarity: number;
+  longest_fragment: number;
+  total_overlap: number;
+  review_status: 'unreviewed' | 'cleared' | 'confirmed';
+  review_note?: string;
+}
+
 export type AdminProblemType = 'code' | 'mcq';
 
 export interface AdminProblemSummary {
@@ -241,6 +271,24 @@ class AdminApiService {
   async getContestRegistrations(contestId: string): Promise<ContestRegistration[]> {
     const response = await this.axiosInstance.get<ContestRegistration[]>(`/admin/contests/${contestId}/registrations`);
     return response.data;
+  }
+
+  async getPlagiarismReport(contestId: string): Promise<PlagiarismReport> {
+    const response = await this.axiosInstance.get<PlagiarismReport>(`/admin/contest/${contestId}/plagiarism`);
+    return response.data;
+  }
+
+  async getPlagiarismPairs(contestId: string, page = 0): Promise<{ pairs: PlagiarismPair[]; total: number; truncated: boolean }> {
+    const response = await this.axiosInstance.get<PlagiarismPair[]>(`/admin/contest/${contestId}/plagiarism/pairs`, { params: { page } });
+    return {
+      pairs: response.data,
+      total: Number(response.headers['x-total-count'] ?? response.data.length),
+      truncated: response.headers['x-truncated'] === 'true',
+    };
+  }
+
+  async reviewPlagiarismPair(contestId: string, pair: PlagiarismPair, status: PlagiarismPair['review_status'], note = ''): Promise<void> {
+    await this.axiosInstance.patch(`/admin/contest/${contestId}/plagiarism/pairs/${pair.key}`, { status, note, report_id: pair.report_id });
   }
 
   async getContestById(contestId: string): Promise<Contest | null> {
