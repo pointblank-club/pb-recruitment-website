@@ -6,10 +6,15 @@ import { EndContestModal } from '../components/EndContestModal';
 import { useContest } from '../hooks/useContest';
 import { useAuth } from '@/lib/AuthContext';
 import { getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
+import type { Contest } from '../problem.types';
 
 export interface ContestOutletContext {
+  contest: Contest | null;
+  timeRemaining: number;
+  isContestEnded: boolean;
+  isAuthenticated: boolean;
+  isRegistered: boolean;
   openEndContestModal?: () => void;
-  isEnded?: boolean;
 }
 
 export const ContestLayout = () => {
@@ -147,7 +152,7 @@ export const ContestLayout = () => {
 
   if (!contestId) {
     return (
-      <div className="w-full bg-black min-h-screen flex flex-col">
+      <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
         <ContestHeader 
           timeRemaining={0}
           progress={0}
@@ -162,11 +167,12 @@ export const ContestLayout = () => {
 
   if (isContestLoading) {
     return (
-      <div className="w-full bg-black min-h-screen flex flex-col">
+      <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
         <ContestHeader 
           timeRemaining={0}
           progress={0}
           contestName="Loading..."
+          contestId={contestId}
         />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-gray-400">Loading contest...</div>
@@ -181,10 +187,11 @@ export const ContestLayout = () => {
     return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}${location.hash}` }} />;
   }
 
+  const isContestEnded = contest ? Date.now() >= contest.end_time : false;
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;
 
   return (
-    <div className="w-full bg-black min-h-screen flex flex-col">
+    <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
       <ContestHeader 
         timeRemaining={timeRemaining}
         progress={progress}
@@ -193,8 +200,15 @@ export const ContestLayout = () => {
         onSubmitContest={canEnd ? handleOpenEndModal : undefined}
       />
       
-      <div className="flex-1 overflow-hidden">
-        <Outlet context={{ openEndContestModal: canEnd ? handleOpenEndModal : undefined, isEnded: !!contest && Date.now() >= contest.end_time } satisfies ContestOutletContext} />
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <Outlet context={{
+          contest,
+          timeRemaining,
+          isContestEnded,
+          isAuthenticated: !!user,
+          isRegistered: contest?.is_registered ?? false,
+          openEndContestModal: canEnd ? handleOpenEndModal : undefined,
+        } satisfies ContestOutletContext} />
       </div>
 
       <EndContestModal

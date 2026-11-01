@@ -123,3 +123,11 @@
     @apply bg-background text-foreground;
   }
 }
+/* Full-height layout: required for contest pages to stretch to viewport corners */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}

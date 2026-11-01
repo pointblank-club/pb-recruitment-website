@@ -38,7 +38,7 @@ export const ContestProblemsPage = () => {
   }
 
   return (
-    <div className="px-6 py-6">
+    <div className="px-6 py-6 flex-1 min-h-0 overflow-y-auto">
       <ProblemList problems={problems} contestId={contestId} />
 
       {openEndContestModal && problems.length > 0 && (

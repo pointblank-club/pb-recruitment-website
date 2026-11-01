@@ -56,10 +56,11 @@ export const useContest = (contestId: string): UseContestResult => {
       void fetchContest();
     }
 
+
     return () => {
       isMounted = false;
     };
   }, [authLoading, contestId, user]);
 
-  return { contest, isLoading, error, refetch };
+  return { contest, isLoading: isLoading || authLoading, error, refetch };
 };
