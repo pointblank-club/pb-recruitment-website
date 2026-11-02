@@ -65,7 +65,6 @@ export const ContestHeader = ({
                 </Link>
                 <Link
                   to={`/contests/${contestId}/leaderboard`}
-                  target="_blank"
                   rel="noopener noreferrer"
                   className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                     location.pathname.includes('/leaderboard')
