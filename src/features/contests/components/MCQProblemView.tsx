@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Save, ListChecks, CheckCircle2 } from 'lucide-react';
+import { Save, ListChecks, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Problem } from '../problem.types';
 
 interface MCQProblemViewProps {
@@ -11,6 +12,12 @@ interface MCQProblemViewProps {
   isContestEnded?: boolean;
   /** submittedOption: option chosen by registered user before contest ended */
   submittedOption?: number | null;
+  contestId?: string;
+  prevProblemId?: string | null;
+  nextProblemId?: string | null;
+  mcqIndex?: number;
+  totalMcqs?: number;
+  onNavigate?: (targetProblemId: string) => void;
 }
 
 export const MCQProblemView = ({
@@ -18,6 +25,12 @@ export const MCQProblemView = ({
   onSubmit,
   isContestEnded = false,
   submittedOption = null,
+  contestId,
+  prevProblemId,
+  nextProblemId,
+  mcqIndex,
+  totalMcqs,
+  onNavigate,
 }: MCQProblemViewProps) => {
   const [userSelectedAnswer, setUserSelectedAnswer] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,7 +73,18 @@ export const MCQProblemView = ({
         <div className="max-w-4xl mx-auto p-6 space-y-6">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-bold font-['DM_Sans']">{problem.name}</h1>
+              <div className="flex items-center gap-2.5">
+                {contestId && (
+                  <Link
+                    to={`/contests/${contestId}/problems`}
+                    className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-gray-800 transition-colors flex items-center justify-center"
+                    title="Back to Problems"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </Link>
+                )}
+                <h1 className="text-2xl font-bold font-['DM_Sans']">{problem.name}</h1>
+              </div>
               <div className="flex items-center gap-4 text-sm">
                 <span className="text-gray-400">Score: {problem.score} points</span>
                 <span className="px-2 py-1 bg-blue-900/50 text-blue-300 rounded text-xs font-semibold">
@@ -167,36 +191,68 @@ export const MCQProblemView = ({
         </div>
       </div>
 
-      {onSubmit && (
+      {(onSubmit || prevProblemId !== undefined || nextProblemId !== undefined) && (
         <div className="border-t border-gray-700 bg-black">
-          <div className="max-w-4xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-end gap-3">
-              <Button
-                onClick={handleClearResponse}
-                variant="outline"
-                disabled={!selectedAnswer}
-                className="flex items-center gap-2 text-black"
+          <div className="max-w-4xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+            {/* MCQ Navigation buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={!prevProblemId}
+                onClick={() => prevProblemId && onNavigate?.(prevProblemId)}
+                className="h-8 px-3 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#141b29] disabled:hover:text-slate-200"
               >
-                Clear Response
-              </Button>
-              <Button
-                onClick={handleSubmit}
-                disabled={isSubmitting || !selectedAnswer || options.length === 0}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-700 disabled:cursor-not-allowed"
+                <ChevronLeft className="w-4 h-4" />
+                <span>Previous</span>
+              </button>
+              <button
+                type="button"
+                disabled={!nextProblemId}
+                onClick={() => nextProblemId && onNavigate?.(nextProblemId)}
+                className="h-8 px-3 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#141b29] disabled:hover:text-slate-200"
               >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    Submit Answer
-                  </>
-                )}
-              </Button>
+                <span>Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              {totalMcqs !== undefined && totalMcqs > 1 && mcqIndex !== undefined && (
+                <span className="text-xs text-gray-400 font-mono ml-2">
+                  Question {mcqIndex} of {totalMcqs}
+                </span>
+              )}
             </div>
+
+            {/* Answer submission actions */}
+            {onSubmit && (
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleClearResponse}
+                  variant="outline"
+                  size="sm"
+                  disabled={!selectedAnswer}
+                  className="flex items-center gap-2 text-xs text-black"
+                >
+                  Clear Response
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  size="sm"
+                  disabled={isSubmitting || !selectedAnswer || options.length === 0}
+                  className="flex items-center gap-2 text-xs bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-700 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      Submit Answer
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}

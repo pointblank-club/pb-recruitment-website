@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useOutletContext, useLocation, Link } from 'react-router-dom';
 import { useProblemDetails } from '../hooks/useProblemDetails';
+import { useContestProblems } from '../hooks/useContestProblems';
 import { CodeProblemView } from '../components/CodeProblemView';
 import { MCQProblemView } from '../components/MCQProblemView';
 import { SubmittedSolutionViewer } from '../components/SubmittedSolutionViewer';
@@ -26,6 +27,15 @@ export const ContestProblemPage = () => {
   const isLocked = isContestEnded;
 
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
+  const { problems } = useContestProblems(contestId || '');
+
+  const mcqProblems = problems.filter((p) => p.type === 'mcq');
+  const currentMcqIndex = mcqProblems.findIndex((p) => p.id === problemId);
+  const prevMcq = currentMcqIndex > 0 ? mcqProblems[currentMcqIndex - 1] : null;
+  const nextMcq =
+    currentMcqIndex >= 0 && currentMcqIndex < mcqProblems.length - 1
+      ? mcqProblems[currentMcqIndex + 1]
+      : null;
 
   // Always run for authenticated users; skip only for guests or unregistered post-contest users.
   const {
@@ -244,6 +254,12 @@ export const ContestProblemPage = () => {
             onSubmit={isAuthenticated && !isLocked ? submitMCQ : undefined}
             isContestEnded={isContestEnded}
             submittedOption={showOwnSubmission ? submittedOptionIndex : null}
+            contestId={contestId}
+            prevProblemId={prevMcq?.id}
+            nextProblemId={nextMcq?.id}
+            mcqIndex={currentMcqIndex >= 0 ? currentMcqIndex + 1 : undefined}
+            totalMcqs={mcqProblems.length > 0 ? mcqProblems.length : undefined}
+            onNavigate={(targetId) => navigate(`/contests/${contestId}/problems/${targetId}`)}
           />
         )}
       </div>

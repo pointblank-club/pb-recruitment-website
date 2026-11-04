@@ -7,6 +7,7 @@ interface ContestHeaderProps {
   contestName?: string;
   contestId?: string;
   onSubmitContest?: () => void;
+  isContestEnded?: boolean;
 }
 
 export const ContestHeader = ({ 
@@ -15,6 +16,7 @@ export const ContestHeader = ({
   contestName = 'Point Blank Recruitment Test 2025',
   contestId,
   onSubmitContest,
+  isContestEnded = false,
 }: ContestHeaderProps) => {
   const location = useLocation();
 
@@ -77,33 +79,43 @@ export const ContestHeader = ({
               </nav>
             )}
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right flex flex-col justify-center">
-              <div className="text-xs text-gray-400 font-['DM_Sans']">Time remaining</div>
-              <div className={`text-xl font-['DM_Sans'] font-mono ${getTimeColor()}`}>
-                {timeRemaining > 0 ? formatTime(timeRemaining) : 'Time Up!'}
-              </div>
+          {isContestEnded ? (
+            <div className="flex items-center">
+              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-800 text-gray-400 border border-gray-700 font-['DM_Sans']">
+                Contest Ended
+              </span>
             </div>
-            {onSubmitContest && (
-              <button
-                type="button"
-                onClick={onSubmitContest}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white font-['DM_Sans'] text-xs font-semibold tracking-wide transition-all shadow-md shadow-red-600/20 hover:shadow-red-600/40"
-              >
-                <LogOut size={14} />
-                End Contest
-              </button>
-            )}
-          </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <div className="text-right flex flex-col justify-center">
+                <div className="text-xs text-gray-400 font-['DM_Sans']">Time remaining</div>
+                <div className={`text-xl font-['DM_Sans'] font-mono ${getTimeColor()}`}>
+                  {timeRemaining > 0 ? formatTime(timeRemaining) : 'Time Up!'}
+                </div>
+              </div>
+              {onSubmitContest && (
+                <button
+                  type="button"
+                  onClick={onSubmitContest}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white font-['DM_Sans'] text-xs font-semibold tracking-wide transition-all shadow-md shadow-red-600/20 hover:shadow-red-600/40"
+                >
+                  <LogOut size={14} />
+                  End Contest
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
       
-      <div className="w-full bg-green h-1">
-        <div 
-          className="bg-white h-1 transition-all duration-1000 ease-linear"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+      {!isContestEnded && (
+        <div className="w-full bg-green h-1">
+          <div 
+            className="bg-white h-1 transition-all duration-1000 ease-linear"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 };
