@@ -1,19 +1,49 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
-import { Play, Send, Copy, Check, Clock, Cpu } from 'lucide-react';
-import type { RunCodeResponse } from '@/services/api/contestApi';
-import { formatVerdict, getVerdictClasses } from './SubmissionPanel';
+import {
+  Play,
+  Send,
+  Copy,
+  Check,
+  Lock,
+  RotateCcw,
+  Maximize2,
+  Minimize2,
+  FileText,
+  History,
+  Activity,
+} from 'lucide-react';
 import type { Problem } from '../problem.types';
+import type {
+  RunCodeResponse,
+  SubmissionDetailsResponse,
+} from '@/services/api/contestApi';
+import type { ActiveSubmission } from '../hooks/useProblemSubmissions';
+import { formatVerdict, getVerdictClasses } from '../submissionUtils';
+import { ProblemStatementTab } from './workspace/ProblemStatementTab';
+import { ProblemSubmissionsTab } from './workspace/ProblemSubmissionsTab';
+import { ProblemVerdictTab } from './workspace/ProblemVerdictTab';
+import { WorkspaceConsoleDrawer, type ConsoleRunResult } from './workspace/WorkspaceConsoleDrawer';
 
 interface CodeProblemViewProps {
   problem: Problem;
   onSubmit?: (code: string, language: string) => Promise<void>;
   onRun?: (code: string, language: string, stdin: string) => Promise<RunCodeResponse>;
-  /** hideIDE: unauthenticated visitors – only show problem statement, hide the editor pane */
+  isContestEnded?: boolean;
   hideIDE?: boolean;
+  isLocked?: boolean;
+  activeSubmission?: ActiveSubmission;
+  history?: SubmissionDetailsResponse[];
+  historyError?: string | null;
+  isHistoryLoading?: boolean;
+  hasMoreHistory?: boolean;
+  onRetryPolling?: () => void;
+  onRefreshHistory?: () => void;
+  onLoadMoreHistory?: () => void;
 }
+
 const SUPPORTED_LANGUAGES = [
   { value: 'cpp', label: 'C++ 17', monacoValue: 'cpp' },
   { value: 'python', label: 'Python 3', monacoValue: 'python' },
@@ -70,36 +100,59 @@ const getRunErrorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : 'Code execution failed. Please try again.';
 };
 
-export const CodeProblemView = ({
+export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   problem,
   onSubmit,
   onRun,
   hideIDE = false,
-}: CodeProblemViewProps) => {
+  isLocked = false,
+  activeSubmission = { phase: 'idle' },
+  history = [],
+  historyError = null,
+  isHistoryLoading = false,
+  hasMoreHistory = false,
+  onRetryPolling,
+  onRefreshHistory,
+  onLoadMoreHistory,
+}) => {
+  // Language & Code state
   const [selectedLanguage, setSelectedLanguage] = useState('cpp');
   const [codeByLanguage, setCodeByLanguage] = useState<Record<string, string>>(
     () => ({ ...DEFAULT_CODE_TEMPLATES }),
   );
-  const [customInput, setCustomInput] = useState(() => problem.examples?.[0]?.input || '');
-  const [runResult, setRunResult] = useState<RunCodeResponse | null>(null);
-  const [runError, setRunError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
-  const [activeTab, setActiveTab] = useState<'input' | 'output'>('input');
-  const [copiedText, setCopiedText] = useState<string | null>(null);
-  const [editorHeightPct, setEditorHeightPct] = useState<number>(55);
-  const [leftPaneWidthPct, setLeftPaneWidthPct] = useState<number>(50);
-  const [isResizing, setIsResizing] = useState<boolean>(false);
-  const [resizeDirection, setResizeDirection] = useState<'vertical' | 'horizontal' | null>(null);
-  const rightPaneRef = useRef<HTMLDivElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const inputRevisionRef = useRef(0);
   const code = codeByLanguage[selectedLanguage] || '';
+
+  // Left Pane State (Statement | Submissions | Latest Result)
+  const [leftTab, setLeftTab] = useState<'statement' | 'submissions' | 'latest_result'>('statement');
+  const [isLeftMaximized, setIsLeftMaximized] = useState(false);
+
+  // Right Pane Console Drawer State (Input | Output | Latest Result)
+  const [consoleTab, setConsoleTab] = useState<'input' | 'output' | 'latest_result'>('input');
+  const [isConsoleCollapsed, setIsConsoleCollapsed] = useState(false);
+  const [consoleHeight, setConsoleHeight] = useState(230);
+
+  // Custom Input & Run state
+  const [customInput, setCustomInput] = useState('');
+  const [runResult, setRunResult] = useState<ConsoleRunResult | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Editor cursor tracking & clipboard feedback
+  const [cursorPos, setCursorPos] = useState({ lineNumber: 1, column: 1 });
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Pane resizing
+  const [leftPaneWidthPct, setLeftPaneWidthPct] = useState<number>(46);
+  const [isResizingH, setIsResizingH] = useState(false);
+  const [isResizingV, setIsResizingV] = useState(false);
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const rightPaneRef = useRef<HTMLDivElement | null>(null);
+  const inputRevisionRef = useRef(0);
 
   const invalidateRun = useCallback(() => {
     inputRevisionRef.current += 1;
     setRunResult(null);
-    setRunError(null);
   }, []);
 
   const handleLanguageChange = useCallback((newLanguage: string) => {
@@ -115,40 +168,75 @@ export const CodeProblemView = ({
     }));
   }, [invalidateRun, selectedLanguage]);
 
+  const handleResetCode = useCallback(() => {
+    if (isLocked) return;
+    const defaultTemplate = DEFAULT_CODE_TEMPLATES[selectedLanguage] || '';
+    handleCodeChange(defaultTemplate);
+  }, [handleCodeChange, isLocked, selectedLanguage]);
+
+  const handleCopy = useCallback((text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, []);
+
+  const handleLoadSampleIntoCustomInput = useCallback((input: string) => {
+    setCustomInput(input);
+    setConsoleTab('input');
+    setIsConsoleCollapsed(false);
+  }, []);
+
+  // Run Code logic
   const handleRunCode = useCallback(async () => {
-    if (!onRun) return;
     if (!code.trim()) {
-      setActiveTab('output');
-      setRunError('Code cannot be empty');
-      setRunResult(null);
+      setRunResult({ errorText: 'Code is empty.' });
+      setConsoleTab('output');
+      setIsConsoleCollapsed(false);
+      return;
+    }
+    if (!onRun) {
+      setRunResult({ errorText: 'Code execution is unavailable right now.' });
+      setConsoleTab('output');
+      setIsConsoleCollapsed(false);
       return;
     }
 
     setIsRunning(true);
-    setActiveTab('output');
-    setRunError(null);
+    setConsoleTab('output');
+    setIsConsoleCollapsed(false);
     setRunResult(null);
     const inputRevision = inputRevisionRef.current;
 
     try {
       const result = await onRun(code, selectedLanguage, customInput);
-
       if (inputRevision !== inputRevisionRef.current) return;
-      setRunResult(result);
-    } catch (err: unknown) {
+      setRunResult({
+        status: result.status,
+        runtime: result.runtime,
+        memory: result.memory,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        compile_output: result.compile_output,
+      });
+    } catch (error) {
       if (inputRevision !== inputRevisionRef.current) return;
-      console.error('Run code error:', err);
-      setRunError(getRunErrorMessage(err));
+      setRunResult({ errorText: getRunErrorMessage(error) });
     } finally {
       setIsRunning(false);
     }
-  }, [code, selectedLanguage, customInput, onRun]);
+  }, [code, customInput, onRun, selectedLanguage]);
 
+  // Submit Code logic
   const handleSubmit = async () => {
-    if (!onSubmit) return;
+    if (!onSubmit) {
+      console.log('Submitting code:', { code, language: selectedLanguage });
+      return;
+    }
 
     try {
       setIsSubmitting(true);
+      setIsConsoleCollapsed(false);
+      setConsoleTab('latest_result');
       await onSubmit(code, selectedLanguage);
     } catch (error) {
       console.error('Submission error:', error);
@@ -157,62 +245,29 @@ export const CodeProblemView = ({
     }
   };
 
-  const handleCopy = useCallback((text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedText(id);
-    setTimeout(() => setCopiedText(null), 2000);
-  }, []);
-
+  // Horizontal Pane Split Drag (Left vs Right)
   useEffect(() => {
-    if (!isResizing || resizeDirection !== 'vertical') return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!rightPaneRef.current) return;
-      const bounds = rightPaneRef.current.getBoundingClientRect();
-      const relativeY = e.clientY - bounds.top;
-      const pct = (relativeY / bounds.height) * 100;
-      const clamped = Math.max(30, Math.min(80, pct));
-      setEditorHeightPct(clamped);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-      setResizeDirection(null);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'ns-resize';
-    document.body.style.userSelect = 'none';
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizing, resizeDirection]);
-
-  useEffect(() => {
-    if (!isResizing || resizeDirection !== 'horizontal') return;
+    if (!isResizingH) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!containerRef.current) return;
       const bounds = containerRef.current.getBoundingClientRect();
       const relativeX = e.clientX - bounds.left;
       const pct = (relativeX / bounds.width) * 100;
-      const clamped = Math.max(25, Math.min(75, pct));
+      const clamped = Math.max(25, Math.min(72, pct));
       setLeftPaneWidthPct(clamped);
+      setIsLeftMaximized(false);
     };
 
     const handleMouseUp = () => {
-      setIsResizing(false);
-      setResizeDirection(null);
+      setIsResizingH(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'ew-resize';
+    document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
 
     return () => {
@@ -221,428 +276,356 @@ export const CodeProblemView = ({
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [isResizing, resizeDirection]);
+  }, [isResizingH]);
+
+  // Vertical Console Drawer Drag (Editor vs Drawer)
+  useEffect(() => {
+    if (!isResizingV) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!rightPaneRef.current) return;
+      const bounds = rightPaneRef.current.getBoundingClientRect();
+      const relativeY = bounds.bottom - e.clientY;
+      const clamped = Math.max(80, Math.min(bounds.height - 120, relativeY));
+      setConsoleHeight(clamped);
+      if (isConsoleCollapsed) setIsConsoleCollapsed(false);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingV(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isConsoleCollapsed, isResizingV]);
+
+  const toggleMaximizeLeft = () => {
+    if (isLeftMaximized) {
+      setLeftPaneWidthPct(46);
+      setIsLeftMaximized(false);
+    } else {
+      setLeftPaneWidthPct(68);
+      setIsLeftMaximized(true);
+    }
+  };
+
+  const sample1 = problem.examples && problem.examples.length > 0 ? problem.examples[0] : null;
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-black text-white overflow-hidden">
-      <div ref={containerRef} className="flex-1 flex h-full overflow-hidden">
-        <div className="overflow-y-auto h-full border-r border-gray-700" style={{ width: hideIDE ? '100%' : `${leftPaneWidthPct}%` }}>
-          <div className="p-6 space-y-6">
-            {problem.description && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-semibold text-white font-['DM_Sans']">
-                    Problem Statement
-                  </h2>
-                  <div className="flex items-center gap-3 text-xs text-gray-400">
-                    <span className="px-2 py-1  text-white rounded font-semibold">
-                      {problem.score} points
+    <div className="flex-1 min-h-0 flex flex-col bg-[#05070a] text-slate-200 overflow-hidden font-['DM_Sans'] select-text">
+      {/* Main Split Workspace Container */}
+      <div
+        ref={containerRef}
+        id="workspaceContainer"
+        className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden"
+      >
+        {/* ========================================================= */}
+        {/* LEFT PANE: Tabbed Problem Context                         */}
+        {/* ========================================================= */}
+        <div
+          className="flex flex-col min-h-0 overflow-hidden bg-[#090d14] border-r border-[#1e2636] flex-shrink-0"
+          style={{ width: hideIDE ? '100%' : `${leftPaneWidthPct}%` }}
+        >
+          {/* Left Pane Top Tab Bar */}
+          <div className="h-10 bg-[#0b0f17] border-b border-[#1e2636] flex items-center justify-between px-2 flex-shrink-0">
+            <div className="flex items-center gap-1 h-full">
+              {/* Tab 1: Statement */}
+              <button
+                type="button"
+                onClick={() => setLeftTab('statement')}
+                className={`relative px-3.5 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                  leftTab === 'statement' ? 'text-white' : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Statement</span>
+                {leftTab === 'statement' && (
+                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#10b981]" />
+                )}
+              </button>
+
+              {/* Tab 2: Submissions */}
+              {!hideIDE && (
+                <button
+                  type="button"
+                  onClick={() => setLeftTab('submissions')}
+                  className={`relative px-3.5 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                    leftTab === 'submissions' ? 'text-white' : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Submissions</span>
+                  {history.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-[#141b29] text-[#10b981] border border-[#1e2636]">
+                      {history.length}
                     </span>
-                    {problem.time_limit && (
-                      <span className="flex items-center text-white gap-1">
-                        {problem.time_limit} ms
-                      </span>
-                    )}
-                    {problem.memory_limit && (
-                      <span className="flex items-center text-white gap-1">
-                        {problem.memory_limit} MB
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <p className="text-gray-300 leading-relaxed whitespace-pre-line font-['DM_Sans'] text-sm">
-                  {problem.description}
-                </p>
-              </div>
+                  )}
+                  {leftTab === 'submissions' && (
+                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#10b981]" />
+                  )}
+                </button>
+              )}
+
+              {/* Tab 3: Latest Result */}
+              {!hideIDE && (
+                <button
+                  type="button"
+                  onClick={() => setLeftTab('latest_result')}
+                  className={`relative px-3.5 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                    leftTab === 'latest_result' ? 'text-white' : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <Activity className="w-3.5 h-3.5" />
+                  <span>Latest Result</span>
+                  {activeSubmission.status && (
+                    <span
+                      className={`px-1.5 py-0.2 rounded text-[10px] font-semibold border ${getVerdictClasses(
+                        activeSubmission.status,
+                      )}`}
+                    >
+                      {formatVerdict(activeSubmission.status)}
+                    </span>
+                  )}
+                  {leftTab === 'latest_result' && (
+                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#10b981]" />
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Maximize / Restore width toggle */}
+            {!hideIDE && (
+              <button
+                type="button"
+                onClick={toggleMaximizeLeft}
+                title={isLeftMaximized ? 'Restore Width' : 'Maximize Statement Width'}
+                className="p-1.5 rounded hover:bg-[#141b29] text-gray-400 hover:text-white transition-colors"
+              >
+                {isLeftMaximized ? (
+                  <Minimize2 className="w-3.5 h-3.5 text-[#10b981]" />
+                ) : (
+                  <Maximize2 className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Left Pane Content Area */}
+          <div className="flex-1 overflow-y-auto p-5">
+            {leftTab === 'statement' && (
+              <ProblemStatementTab
+                problem={problem}
+                hideIDE={hideIDE}
+                copiedId={copiedId}
+                onCopy={handleCopy}
+                onLoadSample={handleLoadSampleIntoCustomInput}
+              />
             )}
 
-            {problem.input_format && (
-              <div className="space-y-2">
-                <h2 className="text-base font-semibold text-white font-['DM_Sans']">
-                  Input Format
-                </h2>
-                <p className="text-gray-300 font-mono text-xs whitespace-pre-line leading-relaxed">
-                  {problem.input_format}
-                </p>
-              </div>
+            {leftTab === 'submissions' && (
+              <ProblemSubmissionsTab
+                history={history}
+                historyError={historyError}
+                isHistoryLoading={isHistoryLoading}
+                hasMoreHistory={hasMoreHistory}
+                onRefreshHistory={onRefreshHistory}
+                onLoadMoreHistory={onLoadMoreHistory}
+              />
             )}
 
-            {problem.output_format && (
-              <div className="space-y-2">
-                <h2 className="text-base font-semibold text-white font-['DM_Sans']">
-                  Output Format
-                </h2>
-                <p className="text-gray-300 font-mono text-xs whitespace-pre-line leading-relaxed">
-                  {problem.output_format}
-                </p>
-              </div>
-            )}
-
-            {problem.constraints && problem.constraints.length > 0 && (
-              <div className="space-y-2">
-                <h2 className="text-base font-semibold text-white font-['DM_Sans']">
-                  Constraints
-                </h2>
-                <ul className="space-y-1 text-gray-300 text-xs">
-                  {problem.constraints.map((constraint, index) => (
-                    <li key={index} className="font-mono flex items-start gap-2">
-                      <span className="text-green-400 mt-0.5">•</span>
-                      <span>{constraint}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {problem.examples && problem.examples.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-white font-['DM_Sans']">
-                  Sample:
-                </h3>
-
-                <div className="border border-gray-700 rounded-lg overflow-hidden bg-gray-900/30">
-                  <div className="grid grid-cols-2 bg-gray-800/50 border-b border-gray-700">
-                    <div className="flex items-center justify-between px-3 py-2 border-r border-gray-700">
-                      <span className="text-xs font-medium text-gray-300 font-['DM_Sans']">
-                        Input
-                      </span>
-                      <button
-                        onClick={() => handleCopy(problem.examples?.map(e => e.input).join('\n\n') || '', 'all-inputs')}
-                        className="text-gray-400 hover:text-white transition-colors"
-                        title="Copy all inputs"
-                      >
-                        {copiedText === 'all-inputs' ? (
-                          <Check className="w-3.5 h-3.5 text-green-400" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between px-3 py-2">
-                      <span className="text-xs font-medium text-gray-300 font-['DM_Sans']">
-                        Output
-                      </span>
-                      <button
-                        onClick={() => handleCopy(problem.examples?.map(e => e.output).join('\n\n') || '', 'all-outputs')}
-                        className="text-gray-400 hover:text-white transition-colors"
-                        title="Copy all outputs"
-                      >
-                        {copiedText === 'all-outputs' ? (
-                          <Check className="w-3.5 h-3.5 text-green-400" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2">
-                    <div className="border-r border-gray-700 px-3 py-3">
-                      <pre className="text-xs font-mono text-gray-200 whitespace-pre-wrap break-words">
-                        {problem.examples.map((example, index) => (
-                          <span key={`input-${index}`}>
-                            {index > 0 && '\n\n'}
-                            {example.input}
-                          </span>
-                        ))}
-                      </pre>
-                    </div>
-
-                    <div className="px-3 py-3">
-                      <pre className="text-xs font-mono text-gray-200 whitespace-pre-wrap break-words">
-                        {problem.examples.map((example, index) => (
-                          <span key={`output-${index}`}>
-                            {index > 0 && '\n\n'}
-                            {example.output}
-                          </span>
-                        ))}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-white font-['DM_Sans']">
-                    Explanation:
-                  </h3>
-                  {problem.examples.map((example, index) => (
-                    example.explanation && (
-                      <div key={`explanation-${index}`} className="space-y-2">
-                        <h4 className="text-xs font-semibold text-gray-300 font-['DM_Sans']">
-                          Test case {index + 1}:
-                        </h4>
-                        <div className="text-xs text-gray-400 leading-relaxed space-y-1 pl-2">
-                          {example.explanation.split('\n').map((line, lineIndex) => (
-                            <p key={lineIndex} className="flex items-start gap-2">
-                              {line.trim().startsWith('•') || line.trim().startsWith('-') ? (
-                                <>
-                                  <span className="text-gray-500 mt-0.5">•</span>
-                                  <span>{line.replace(/^[•-]\s*/, '')}</span>
-                                </>
-                              ) : line.trim() ? (
-                                <span>{line}</span>
-                              ) : null}
-                            </p>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  ))}
-                </div>
-              </div>
+            {leftTab === 'latest_result' && (
+              <ProblemVerdictTab
+                activeSubmission={activeSubmission}
+                onRetryPolling={onRetryPolling}
+                compact={false}
+              />
             )}
           </div>
         </div>
 
+        {/* ========================================================= */}
+        {/* VERTICAL DRAG RESIZER (Left vs Right)                     */}
+        {/* ========================================================= */}
         {!hideIDE && (
           <div
-            onMouseDown={() => {
-              setIsResizing(true);
-              setResizeDirection('horizontal');
-            }}
-            className="w-1 cursor-ew-resize hover:bg-gray-700 bg-gray-800 flex-shrink-0"
-            aria-label="Resize panes"
+            onMouseDown={() => setIsResizingH(true)}
+            className="hidden md:flex w-[5px] cursor-col-resize hover:bg-[#10b981] active:bg-[#10b981] bg-[#1e2636] transition-colors flex-shrink-0 z-10"
+            title="Drag to resize split"
           />
         )}
 
+        {/* ========================================================= */}
+        {/* RIGHT PANE: CodeChef-Style IDE & Collapsible Drawer       */}
+        {/* ========================================================= */}
         {!hideIDE && (
-          <div ref={rightPaneRef} className="flex flex-col overflow-hidden flex-shrink-0" style={{ width: `${100 - leftPaneWidthPct}%` }}>
-          <div className="border-b border-gray-700 px-4 py-2 bg-gray-900/50 flex items-center justify-between">
-            <select
-              value={selectedLanguage}
-              onChange={(e) => handleLanguageChange(e.target.value)}
-              className="bg-gray-800 border border-gray-600 text-white rounded px-3 py-1.5 text-xs focus:outline-none focus:border-green-400 font-['DM_Sans']"
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang.value} value={lang.value}>
-                  {lang.label}
-                </option>
-              ))}
-            </select>
-            <div className="flex items-center gap-2">
-              {onRun && (
-                <Button
-                  onClick={handleRunCode}
-                  disabled={isRunning || !code.trim()}
-                  size="sm"
-                  variant="outline"
-                  className="text-xs flex items-center gap-1 text-black hover:text-black"
+          <div
+            ref={rightPaneRef}
+            className="flex-1 flex flex-col min-h-0 min-w-[320px] overflow-hidden bg-[#090d14]"
+          >
+            {/* Top Toolbar */}
+            <div className="h-12 bg-[#0b0f17] border-b border-[#1e2636] px-4 flex items-center justify-between flex-shrink-0">
+              {/* Left side: Language selector & helpers */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => handleLanguageChange(e.target.value)}
+                  disabled={isLocked}
+                  className="bg-[#141b29] border border-[#28354d] text-white rounded px-3 py-1.5 text-xs focus:outline-none focus:border-[#10b981] font-mono cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {isRunning ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
-                      Running...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-3 h-3" />
-                      Run
-                    </>
-                  )}
-                </Button>
-              )}
-              {onSubmit && (
-                <Button
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                  size="sm"
-                  className="text-xs flex items-center gap-1 bg-green-600 hover:bg-green-700"
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <option key={lang.value} value={lang.value}>
+                      {lang.label}
+                    </option>
+                  ))}
+                </select>
+
+                {!isLocked && (
+                  <button
+                    type="button"
+                    onClick={handleResetCode}
+                    title="Reset to default template"
+                    className="p-1.5 rounded hover:bg-[#141b29] text-gray-400 hover:text-white transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handleCopy(code, 'editor-code')}
+                  title="Copy code"
+                  className="p-1.5 rounded hover:bg-[#141b29] text-gray-400 hover:text-white transition-colors"
                 >
-                  {isSubmitting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
-                      Submitting...
-                    </>
+                  {copiedId === 'editor-code' ? (
+                    <Check className="w-3.5 h-3.5 text-[#10b981]" />
                   ) : (
-                    <>
-                      <Send className="w-3 h-3" />
-                      Submit
-                    </>
+                    <Copy className="w-3.5 h-3.5" />
                   )}
-                </Button>
-              )}
-            </div>
-          </div>
+                </button>
+              </div>
 
-          <div className="border-b border-gray-700" style={{ height: `${editorHeightPct}%` }}>
-            <Editor
-              height="100%"
-              language={
-                SUPPORTED_LANGUAGES.find((l) => l.value === selectedLanguage)
-                  ?.monacoValue || 'cpp'
-              }
-              theme="vs-dark"
-              value={code}
-              onChange={handleCodeChange}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 13,
-                lineNumbers: 'on',
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                tabSize: 4,
-                wordWrap: 'on',
-                padding: { top: 10, bottom: 10 },
-              }}
-            />
-          </div>
-
-          <div className="flex flex-col overflow-hidden" style={{ height: `${100 - editorHeightPct}%` }}>
-            <div
-              onMouseDown={() => {
-                setIsResizing(true);
-                setResizeDirection('vertical');
-              }}
-              className="h-1.5 bg-gray-700 hover:bg-gray-500 cursor-ns-resize"
-              aria-label="Resize editor"
-            />
-            <div className="flex border-b border-gray-700 bg-gray-900/30">
-              <button
-                onClick={() => setActiveTab('input')}
-                className={`px-4 py-2 text-xs font-semibold font-['DM_Sans'] ${
-                  activeTab === 'input'
-                    ? 'text-green-400 border-b-2 border-green-400'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Input
-              </button>
-              <button
-                onClick={() => setActiveTab('output')}
-                className={`px-4 py-2 text-xs font-semibold font-['DM_Sans'] ${
-                  activeTab === 'output'
-                    ? 'text-green-400 border-b-2 border-green-400'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Output
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-hidden">
-              {activeTab === 'input' ? (
-                <div className="h-full p-3 flex flex-col">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs text-gray-400 font-['DM_Sans']">
-                      Input (Custom or Sample):
-                    </label>
-                    {problem.examples && problem.examples.length > 0 && (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-gray-500 font-['DM_Sans']">Sample:</span>
-                        {problem.examples.map((ex, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => {
-                              invalidateRun();
-                              setCustomInput(ex.input);
-                            }}
-                            className="px-1.5 py-0.5 text-[10px] rounded bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 font-mono transition-colors"
-                            title={`Load sample ${idx + 1}`}
-                          >
-                            #{idx + 1}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <textarea
-                    value={customInput}
-                    onChange={(e) => {
-                      invalidateRun();
-                      setCustomInput(e.target.value);
-                    }}
-                    placeholder="Enter your custom input here..."
-                    className="flex-1 bg-gray-900 border border-gray-700 rounded p-2 text-xs font-mono text-white focus:outline-none focus:border-green-400 resize-none"
-                  />
+              {/* Right side: Action buttons */}
+              {isLocked ? (
+                <div className="flex items-center gap-1.5 text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/30 px-3 py-1 rounded">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Contest Ended · Read Only</span>
                 </div>
               ) : (
-                <div className="h-full p-3 flex flex-col overflow-hidden">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs text-gray-400 font-['DM_Sans']">
-                      Output:
-                    </label>
-                    {runResult && (
-                      <div className="flex items-center gap-3 text-xs text-gray-400 font-mono">
-                        <span className="flex items-center gap-1 text-[11px]">
-                          <Clock className="w-3 h-3 text-gray-400" />
-                          {runResult.runtime} ms
-                        </span>
-                        <span className="flex items-center gap-1 text-[11px]">
-                          <Cpu className="w-3 h-3 text-gray-400" />
-                          {runResult.memory} KiB
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${getVerdictClasses(runResult.status)}`}>
-                          {formatVerdict(runResult.status)}
-                        </span>
-                      </div>
+                <div className="flex items-center gap-2.5">
+                  <Button
+                    onClick={handleRunCode}
+                    disabled={isRunning || !code.trim()}
+                    size="sm"
+                    className="h-8 px-3.5 text-xs font-semibold bg-[#ffffff] hover:bg-slate-200 text-[#090d14] flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    {isRunning ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3 w-3 border-2 border-[#090d14] border-t-transparent" />
+                        <span>Running…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-[#090d14]" />
+                        <span>Run</span>
+                      </>
                     )}
-                  </div>
-                  {isRunning ? (
-                    <div className="flex-1 bg-black border border-gray-700 rounded p-4 flex flex-col items-center justify-center gap-2">
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-green-400 border-t-transparent" />
-                      <p className="text-xs text-gray-400 font-['DM_Sans']">
-                        Running code against judge...
-                      </p>
-                    </div>
-                  ) : runError ? (
-                    <div className="flex-1 bg-black border border-red-900/60 rounded p-3 overflow-auto">
-                      <div className="text-xs font-semibold text-red-400 mb-1 font-['DM_Sans']">
-                        Execution Error
-                      </div>
-                      <pre className="text-xs font-mono text-red-300 whitespace-pre-wrap leading-relaxed">
-                        {runError}
-                      </pre>
-                    </div>
-                  ) : runResult ? (
-                    <div className="flex-1 bg-black border border-gray-700 rounded p-3 overflow-auto space-y-3">
-                      {runResult.compile_output && (
-                        <div className="space-y-1">
-                          <div className="text-[11px] font-semibold text-red-400 font-['DM_Sans'] uppercase tracking-wider">
-                            Compiler Output
-                          </div>
-                          <pre className="bg-red-950/20 border border-red-900/40 rounded p-2 text-xs font-mono text-red-300 whitespace-pre-wrap">
-                            {runResult.compile_output}
-                          </pre>
-                        </div>
-                      )}
-                      {runResult.stderr && (
-                        <div className="space-y-1">
-                          <div className="text-[11px] font-semibold text-yellow-400 font-['DM_Sans'] uppercase tracking-wider">
-                            Standard Error
-                          </div>
-                          <pre className="bg-yellow-950/20 border border-yellow-900/40 rounded p-2 text-xs font-mono text-yellow-300 whitespace-pre-wrap">
-                            {runResult.stderr}
-                          </pre>
-                        </div>
-                      )}
-                      {runResult.stdout ? (
-                        <div className="space-y-1">
-                          <div className="text-[11px] font-semibold text-gray-400 font-['DM_Sans'] uppercase tracking-wider">
-                            Standard Output
-                          </div>
-                          <pre className="bg-gray-950 border border-gray-800 rounded p-2 text-xs font-mono text-green-300 whitespace-pre-wrap">
-                            {runResult.stdout}
-                          </pre>
-                        </div>
-                      ) : !runResult.compile_output && !runResult.stderr ? (
-                        <div className="h-full flex items-center justify-center text-xs text-gray-500 font-mono italic">
-                          (No output)
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="flex-1 bg-gray-900 border border-gray-700 rounded p-4 flex items-center justify-center">
-                      <p className="text-xs text-gray-500 font-['DM_Sans']">
-                        Click "Run" to see the output
-                      </p>
-                    </div>
-                  )}
+                  </Button>
+
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
+                    size="sm"
+                    className="h-8 px-4 text-xs font-semibold bg-[#16a34a] hover:bg-[#15803d] text-white flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                        <span>Submitting…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Submit</span>
+                      </>
+                    )}
+                  </Button>
                 </div>
               )}
             </div>
+
+            {/* Monaco Code Editor */}
+            <div className="flex-1 min-h-0 relative bg-[#06080d]">
+              <Editor
+                height="100%"
+                language={
+                  SUPPORTED_LANGUAGES.find((l) => l.value === selectedLanguage)?.monacoValue || 'cpp'
+                }
+                value={code}
+                onChange={handleCodeChange}
+                theme="vs-dark"
+                options={{
+                  readOnly: isLocked,
+                  minimap: { enabled: false },
+                  fontSize: 13,
+                  lineNumbers: 'on',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 4,
+                  wordWrap: 'on',
+                  cursorBlinking: 'smooth',
+                  smoothScrolling: true,
+                  padding: { top: 12, bottom: 12 },
+                  contextmenu: true,
+                  folding: true,
+                }}
+                onMount={(editor) => {
+                  editor.onDidChangeCursorPosition((e: { position: { lineNumber: number; column: number } }) => {
+                    setCursorPos({
+                      lineNumber: e.position.lineNumber,
+                      column: e.position.column,
+                    });
+                  });
+                }}
+              />
+            </div>
+
+            {/* Horizontal Drag Resizer (Editor vs Console Drawer) */}
+            <div
+              onMouseDown={() => setIsResizingV(true)}
+              className="h-[5px] cursor-row-resize bg-[#1e2636] hover:bg-[#10b981] active:bg-[#10b981] transition-colors flex-shrink-0 z-10"
+              title="Drag to resize console drawer"
+            />
+
+            {/* Collapsible Bottom Console Drawer */}
+            <WorkspaceConsoleDrawer
+              consoleTab={consoleTab}
+              setConsoleTab={setConsoleTab}
+              isConsoleCollapsed={isConsoleCollapsed}
+              setIsConsoleCollapsed={setIsConsoleCollapsed}
+              consoleHeight={consoleHeight}
+              cursorPos={cursorPos}
+              customInput={customInput}
+              setCustomInput={setCustomInput}
+              isLocked={isLocked}
+              sampleInput={sample1?.input}
+              isRunning={isRunning}
+              runResult={runResult}
+              activeSubmission={activeSubmission}
+              onRetryPolling={onRetryPolling}
+              onInvalidateRun={invalidateRun}
+            />
           </div>
-        </div>
         )}
       </div>
     </div>
