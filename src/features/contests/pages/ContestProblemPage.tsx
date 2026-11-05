@@ -195,6 +195,7 @@ export const ContestProblemPage = () => {
                 <CodeProblemView
                   key={problem.id}
                   problem={problem}
+                  contestId={contestId}
                   hideIDE={true}
                 />
               </div>
@@ -213,6 +214,7 @@ export const ContestProblemPage = () => {
             <CodeProblemView
               key={problem.id}
               problem={problem}
+              contestId={contestId}
               onSubmit={isAuthenticated && !isContestEnded ? submitCode : undefined}
               onRun={isAuthenticated && !isContestEnded ? runCode : undefined}
               hideIDE={isContestEnded}
