@@ -1,13 +1,14 @@
-import type { Problem } from '../problem.types';
+import type { Problem, ProblemProgress } from '../problem.types';
 import { ProblemCard } from './ProblemCard';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface ProblemAccordionProps {
   problems: Problem[];
   contestId: string;
+  progress: Record<string, ProblemProgress>;
 }
 
-export const ProblemAccordion = ({ problems, contestId }: ProblemAccordionProps) => {
+export const ProblemAccordion = ({ problems, contestId, progress }: ProblemAccordionProps) => {
   if (problems.length === 0) {
     return (
       <div className="text-center py-8 text-gray-400 font-['DM_Sans']">
@@ -37,6 +38,7 @@ export const ProblemAccordion = ({ problems, contestId }: ProblemAccordionProps)
                     key={problem.id} 
                     problem={problem} 
                     contestId={contestId} 
+                    progress={progress[problem.id]}
                   />
                 ))}
               </div>
@@ -59,6 +61,7 @@ export const ProblemAccordion = ({ problems, contestId }: ProblemAccordionProps)
                     key={problem.id} 
                     problem={problem} 
                     contestId={contestId} 
+                    progress={progress[problem.id]}
                   />
                 ))}
               </div>

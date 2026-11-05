@@ -1,15 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useOutletContext, useLocation, Link } from 'react-router-dom';
 import { useProblemDetails } from '../hooks/useProblemDetails';
 import { CodeProblemView } from '../components/CodeProblemView';
 import { MCQProblemView } from '../components/MCQProblemView';
-import { SubmissionPanel } from '../components/SubmissionPanel';
+import { SubmissionPanel, formatVerdict } from '../components/SubmissionPanel';
 import { SubmittedSolutionViewer } from '../components/SubmittedSolutionViewer';
 import { useProblemSubmissions } from '../hooks/useProblemSubmissions';
 import type { ContestOutletContext } from '../layouts/ContestLayout';
 import { contestApi, type SubmissionDetailsResponse } from '@/services/api/contestApi';
 import { AlertCircle, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from 'react-toastify';
 
 export const ContestProblemPage = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
@@ -39,6 +40,24 @@ export const ContestProblemPage = () => {
   } = useProblemSubmissions(contestId || '', problemId || '', {
     skip: !isAuthenticated || (isContestEnded && !isRegistered),
   });
+
+  const notifiedSubmissionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeSubmission.phase === 'completed' && activeSubmission.id && activeSubmission.status) {
+      if (notifiedSubmissionRef.current === activeSubmission.id) return;
+      notifiedSubmissionRef.current = activeSubmission.id;
+      const verdict = formatVerdict(activeSubmission.status);
+      if (activeSubmission.status === 'accepted' || activeSubmission.status === 'completed') {
+        toast.success(`Submission successful: ${verdict}`);
+      } else {
+        toast.error(`Submission result: ${verdict}`);
+      }
+    } else if (activeSubmission.phase === 'error') {
+      toast.error(activeSubmission.message || 'Submission failed.');
+    } else if (activeSubmission.phase === 'timeout') {
+      toast.info(activeSubmission.message || 'Submission saved; verdict delayed.');
+    }
+  }, [activeSubmission]);
 
   // Post-contest: fetch full details (including code) for the latest submission.
   // Keyed on `id:status:attempt` so a resolved verdict or a Retry triggers a refetch.
