@@ -6,9 +6,12 @@ import { Play, Send, Copy, Check, Clock, Cpu } from 'lucide-react';
 import type { RunCodeResponse } from '@/services/api/contestApi';
 import { formatVerdict, getVerdictClasses } from './SubmissionPanel';
 import type { Problem } from '../problem.types';
+import { useAuth } from '@/lib/AuthContext';
+import { useCodeDraft } from '../hooks/useCodeDraft';
 
 interface CodeProblemViewProps {
   problem: Problem;
+  contestId?: string;
   onSubmit?: (code: string, language: string) => Promise<void>;
   onRun?: (code: string, language: string, stdin: string) => Promise<RunCodeResponse>;
   /** hideIDE: unauthenticated visitors – only show problem statement, hide the editor pane */
@@ -72,15 +75,29 @@ const getRunErrorMessage = (error: unknown): string => {
 
 export const CodeProblemView = ({
   problem,
+  contestId,
   onSubmit,
   onRun,
   hideIDE = false,
 }: CodeProblemViewProps) => {
-  const [selectedLanguage, setSelectedLanguage] = useState('cpp');
-  const [codeByLanguage, setCodeByLanguage] = useState<Record<string, string>>(
-    () => ({ ...DEFAULT_CODE_TEMPLATES }),
-  );
-  const [customInput, setCustomInput] = useState(() => problem.examples?.[0]?.input || '');
+  const { user } = useAuth();
+  const effectiveContestId = contestId || problem.contest_id || 'general';
+
+  const {
+    selectedLanguage,
+    setSelectedLanguage,
+    codeByLanguage,
+    setCodeByLanguage,
+    customInput,
+    setCustomInput,
+  } = useCodeDraft({
+    contestId: effectiveContestId,
+    problemId: problem.id,
+    userId: user?.uid || 'guest',
+    defaultTemplates: DEFAULT_CODE_TEMPLATES,
+    defaultLanguage: 'cpp',
+    defaultInput: problem.examples?.[0]?.input || '',
+  });
   const [runResult, setRunResult] = useState<RunCodeResponse | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
