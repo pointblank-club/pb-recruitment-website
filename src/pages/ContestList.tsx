@@ -8,26 +8,40 @@ import type { Contest } from "@/models/contest";
 import { contestApi } from "@/services/api/contestApi";
 import { Loader2 } from "lucide-react";
 import { toast } from 'react-toastify';
+import { useAuth } from "@/lib/AuthContext";
 
 const ContestList: React.FC = () => {
   const [contests, setContests] = useState<Contest[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const { loading: authLoading, user } = useAuth();
 
   useEffect(() => {
+    if (authLoading) return;
+
+    let isMounted = true;
     const fetchContests = async () => {
       try {
         setIsLoading(true);
         const response = await contestApi.getContestsList();
-        setContests(response as Contest[]);
+        if (isMounted) {
+          setContests(response as Contest[]);
+        }
       } catch (error) {
-        toast.error("Error fetching contests. Please try again later. If problem persists, contact volunteers.");
+        if (isMounted) {
+          toast.error("Error fetching contests. Please try again later. If problem persists, contact volunteers.");
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
-    fetchContests();
-  }, []);
+    void fetchContests();
+    return () => {
+      isMounted = false;
+    };
+  }, [authLoading, user]);
 
   const navigate = useNavigate();
   const handleContestClick = (contestId: string) => {

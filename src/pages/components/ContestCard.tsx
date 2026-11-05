@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Trophy } from "lucide-react";
 import type { Contest } from "@/models/contest";
+import { useAuth } from "@/lib/AuthContext";
+import { getContestRegistered } from "@/lib/contestStorage";
 
 interface ContestCardProps {
   contest: Contest;
@@ -11,7 +13,13 @@ interface ContestCardProps {
 
 const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const eligibleYearsText = contest.formatEligibleYears();
+
+  const isRegistered = Boolean(
+    contest.is_registered || (user?.uid && getContestRegistered(contest.id, user.uid))
+  );
+  const isOngoing = contest.isContestOngoing();
 
   return (
     <motion.div
@@ -71,10 +79,43 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
             >
               View Problems
             </motion.button>
+          ) : isRegistered ? (
+            isOngoing ? (
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/contests/${contest.id}/problems`);
+                }}
+                className="flex-1 py-2 px-4 rounded-lg font-semibold transition-all bg-green text-black hover:bg-green-600"
+              >
+                Enter Contest
+              </motion.button>
+            ) : (
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClick();
+                }}
+                className="flex-1 py-2 px-4 rounded-lg font-semibold transition-all bg-green-950/60 text-green-400 border border-green-500/40 hover:bg-green-900/50"
+              >
+                Registered
+              </motion.button>
+            )
           ) : (
             <motion.button
+              type="button"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClick();
+              }}
               className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-all ${
                 contest.isRegistrationOpen()
                   ? "bg-green text-black hover:bg-green-600"

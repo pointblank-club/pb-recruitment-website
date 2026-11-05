@@ -7,7 +7,7 @@ import Footer from "./components/footer";
 import ContestHero from "./components/ContestHero";
 import ContestTimeline from "./components/ContestTimeline";
 import ContestDetails from "./components/ContestDetails";
-import type { Contest } from "@/models/contest";
+import { Contest } from "@/models/contest";
 import { contestApi } from "@/services/api/contestApi";
 import { toast } from "react-toastify";
 import { useAuth } from "@/lib/AuthContext";
@@ -95,7 +95,12 @@ const ContestDetail: React.FC = () => {
           </div>
 
           <ContestHero contest={contest!} />
-          <ContestTimeline contest={contest!} />
+          <ContestTimeline
+            contest={contest!}
+            onRegistered={() => {
+              setContest((prev) => (prev ? new Contest({ ...prev, is_registered: true }) : prev));
+            }}
+          />
           <ContestDetails contest={contest!} />
         </>
       )}

@@ -7,17 +7,18 @@ import type { Contest } from "@/models/contest";
 import { contestApi } from "@/services/api/contestApi";
 import { Popup } from "@/components/ui/popup";
 import { useAuth } from "@/lib/AuthContext";
-import { getContestSubmitted } from "@/lib/contestStorage";
+import { getContestSubmitted, getContestRegistered, setContestRegistered } from "@/lib/contestStorage";
 
 interface ContestTimelineProps {
   contest: Contest;
+  onRegistered?: () => void;
 }
 
-const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
+const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [isRegistered, setIsRegistered] = React.useState<boolean>(
-    contest.is_registered ?? false
+  const [isRegistered, setIsRegistered] = React.useState<boolean>(() =>
+    Boolean(contest.is_registered || (user?.uid && getContestRegistered(contest.id, user.uid)))
   );
   const [popup, setPopup] = useState<{
       isOpen: boolean;
@@ -61,8 +62,14 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
   };
 
   useEffect(() => {
-    setIsRegistered(contest.is_registered ?? false);
-  }, [contest.id, contest.is_registered]);
+    const registered = Boolean(
+      contest.is_registered || (user?.uid && getContestRegistered(contest.id, user.uid))
+    );
+    setIsRegistered(registered);
+    if (contest.is_registered && user?.uid) {
+      setContestRegistered(contest.id, user.uid);
+    }
+  }, [contest.id, contest.is_registered, user?.uid]);
 
   const eligibleYearsText = contest.formatEligibleYears();
 
@@ -75,6 +82,10 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
     try {
       await contestApi.registerForContest(contest.id);
       setIsRegistered(true);
+      if (user.uid) {
+        setContestRegistered(contest.id, user.uid);
+      }
+      onRegistered?.();
       setPopup({
         isOpen: true,
         type: "success",
@@ -109,6 +120,10 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
           case 409:
             message = "You are already registered.";
             setIsRegistered(true);
+            if (user.uid) {
+              setContestRegistered(contest.id, user.uid);
+            }
+            onRegistered?.();
             break;
 
           case 500:
