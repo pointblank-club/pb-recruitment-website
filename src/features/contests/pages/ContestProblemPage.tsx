@@ -55,8 +55,12 @@ export const ContestProblemPage = () => {
   });
 
   // Post-contest: fetch full details (including code) for the registered user's latest submission.
+  // Also fetch details for MCQ problems so the chosen option is known during active contests.
+  const isMcq = problem?.type === 'mcq';
   const showOwnSubmission = isContestEnded && isAuthenticated && isRegistered;
-  const latest = showOwnSubmission ? history[0] : undefined;
+  const shouldFetchSubmissionDetails =
+    showOwnSubmission || (isMcq && isAuthenticated && history.length > 0);
+  const latest = shouldFetchSubmissionDetails ? history[0] : undefined;
   const detailsKey = latest ? `${problemId}:${latest.id}:${latest.status}` : undefined;
 
   const [ownSubmission, setOwnSubmission] = useState<{
@@ -154,7 +158,14 @@ export const ContestProblemPage = () => {
   const submittedOptionIndex =
     shownSubmission?.data?.option && shownSubmission.data.option.length > 0
       ? shownSubmission.data.option[0]
+      : history[0]?.option && history[0].option.length > 0
+      ? history[0].option[0]
+      : activeSubmission.details?.option && activeSubmission.details.option.length > 0
+      ? activeSubmission.details.option[0]
       : null;
+
+  const hasSubmittedMCQ =
+    isMcq && (submittedOptionIndex !== null || history.length > 0 || !!activeSubmission.id);
 
   return (
     <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
@@ -251,9 +262,9 @@ export const ContestProblemPage = () => {
           <MCQProblemView
             key={problem.id}
             problem={problem}
-            onSubmit={isAuthenticated && !isLocked ? submitMCQ : undefined}
+            onSubmit={isAuthenticated && !isLocked && !hasSubmittedMCQ ? submitMCQ : undefined}
             isContestEnded={isContestEnded}
-            submittedOption={showOwnSubmission ? submittedOptionIndex : null}
+            submittedOption={submittedOptionIndex}
             contestId={contestId}
             prevProblemId={prevMcq?.id}
             nextProblemId={nextMcq?.id}

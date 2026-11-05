@@ -20,7 +20,6 @@ interface WorkspaceConsoleDrawerProps {
   isConsoleCollapsed: boolean;
   setIsConsoleCollapsed: (collapsed: boolean) => void;
   consoleHeight: number;
-  cursorPos?: { lineNumber: number; column: number };
   customInput: string;
   setCustomInput: (val: string) => void;
   isLocked: boolean;
@@ -38,7 +37,6 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
   isConsoleCollapsed,
   setIsConsoleCollapsed,
   consoleHeight,
-  cursorPos,
   customInput,
   setCustomInput,
   isLocked,
@@ -57,11 +55,10 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
       {/* Console Header Bar (36px) */}
       <div className="h-9 bg-[#0b0f17] border-b border-[#1e2636] px-3 flex items-center justify-between flex-shrink-0">
         {/* Left side: Console Tabs */}
-        <div className="flex items-center gap-1 h-full" role="tablist">
+        <div className="flex items-center gap-1 h-full min-w-0">
           <button
             type="button"
-            role="tab"
-            aria-selected={consoleTab === 'input' && !isConsoleCollapsed}
+            aria-pressed={consoleTab === 'input' && !isConsoleCollapsed}
             onClick={() => {
               setConsoleTab('input');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
@@ -81,8 +78,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
 
           <button
             type="button"
-            role="tab"
-            aria-selected={consoleTab === 'output' && !isConsoleCollapsed}
+            aria-pressed={consoleTab === 'output' && !isConsoleCollapsed}
             onClick={() => {
               setConsoleTab('output');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
@@ -106,8 +102,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
 
           <button
             type="button"
-            role="tab"
-            aria-selected={consoleTab === 'latest_result' && !isConsoleCollapsed}
+            aria-pressed={consoleTab === 'latest_result' && !isConsoleCollapsed}
             onClick={() => {
               setConsoleTab('latest_result');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
@@ -135,14 +130,8 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
           </button>
         </div>
 
-        {/* Right side: Cursor & Collapse Controls */}
-        <div className="flex items-center gap-3 text-xs text-gray-400 font-mono">
-          {cursorPos && (
-            <span className="hidden sm:inline text-[11px] text-gray-500">
-              Ln {cursorPos.lineNumber}, Col {cursorPos.column}
-            </span>
-          )}
-
+        {/* Right side: Collapse Controls */}
+        <div className="flex items-center gap-3 text-xs text-gray-400 font-mono shrink-0">
           <button
             type="button"
             onClick={() => setIsConsoleCollapsed(!isConsoleCollapsed)}
@@ -210,7 +199,9 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                           : 'border-rose-500/50 bg-rose-500/15 text-rose-300'
                       }`}
                     >
-                      {runResult.status
+                      {runResult.status === 'accepted'
+                        ? 'Finished'
+                        : runResult.status
                         ? formatVerdict(runResult.status)
                         : 'Error'}
                     </span>
@@ -253,7 +244,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                     </pre>
                   )}
 
-                  {/* Standard Output: only show stdout or show placeholder when no errors exist */}
+                  {/* Standard Output: only show stdout or show placeholder when status is accepted */}
                   {runResult.stdout ? (
                     <div className="space-y-1">
                       <span className="text-slate-400 text-[11px] uppercase font-semibold">Standard Output:</span>
@@ -261,7 +252,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                         {runResult.stdout}
                       </pre>
                     </div>
-                  ) : !runResult.compile_output?.trim() && !runResult.stderr?.trim() && !runResult.errorText ? (
+                  ) : runResult.status === 'accepted' ? (
                     <div className="space-y-1">
                       <span className="text-slate-400 text-[11px] uppercase font-semibold">Standard Output:</span>
                       <pre className="p-2.5 rounded bg-black/60 border border-[#1e2636] text-slate-400 overflow-x-auto whitespace-pre italic">

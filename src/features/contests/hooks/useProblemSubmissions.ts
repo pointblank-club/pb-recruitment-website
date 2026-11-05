@@ -34,6 +34,7 @@ export interface ActiveSubmission {
 interface SubmissionMetadata {
   type: SubmissionType;
   language?: string;
+  option?: number[];
 }
 
 const wait = (delay: number) => new Promise<void>((resolve) => {
@@ -182,6 +183,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
               ...response,
               id: response.id || summary.id,
               status,
+              option: response.option && response.option.length > 0 ? response.option : summary.option,
               score: response.score ?? statusResponse.score,
               max_score: response.max_score ?? statusResponse.max_score,
             };
@@ -261,6 +263,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
         problem_id: problemId,
         type: metadata.type,
         language: metadata.language,
+        option: metadata.option,
         status: 'pending',
         created_at: Math.floor(Date.now() / 1000),
       };
@@ -299,7 +302,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
   const submitMCQ = useCallback((selectedOption: number) => (
     submit(
       () => contestApi.submitMCQAnswer(contestId, problemId, selectedOption),
-      { type: 'mcq' },
+      { type: 'mcq', option: [selectedOption] },
     )
   ), [contestId, problemId, submit]);
 

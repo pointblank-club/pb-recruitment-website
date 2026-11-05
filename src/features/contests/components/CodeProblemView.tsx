@@ -180,11 +180,12 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   }, []);
 
   const handleLoadSampleIntoCustomInput = useCallback((input: string) => {
+    invalidateRun();
     setCustomInput(input);
     setRunResult(null);
     setConsoleTab('input');
     setIsConsoleCollapsed(false);
-  }, []);
+  }, [invalidateRun]);
 
   // Run Code logic
   const handleRunCode = useCallback(async () => {

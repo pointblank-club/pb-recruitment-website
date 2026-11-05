@@ -33,18 +33,29 @@ export const MCQProblemView = ({
   onNavigate,
 }: MCQProblemViewProps) => {
   const [userSelectedAnswer, setUserSelectedAnswer] = useState<string>('');
+  const [justSubmitted, setJustSubmitted] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const hasSubmitted =
+    (submittedOption !== null && submittedOption !== undefined) ||
+    justSubmitted !== null;
 
   const selectedAnswer =
     submittedOption !== null && submittedOption !== undefined
       ? submittedOption.toString()
+      : justSubmitted !== null
+      ? justSubmitted
       : userSelectedAnswer;
 
   const handleClearResponse = useCallback(() => {
-    setUserSelectedAnswer('');
-  }, []);
+    if (!hasSubmitted) {
+      setUserSelectedAnswer('');
+    }
+  }, [hasSubmitted]);
 
   const handleSubmit = async () => {
+    if (hasSubmitted) return;
+
     if (!selectedAnswer) {
       alert('Please select an answer before submitting.');
       return;
@@ -58,6 +69,7 @@ export const MCQProblemView = ({
     try {
       setIsSubmitting(true);
       await onSubmit(parseInt(selectedAnswer));
+      setJustSubmitted(selectedAnswer);
     } catch (error) {
       console.error('Submission error:', error);
     } finally {
@@ -110,14 +122,8 @@ export const MCQProblemView = ({
           <div className="space-y-4 pt-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-green-400 font-['DM_Sans']">
-                {isContestEnded ? 'Answer Options' : 'Select Your Answer'}
+                {isContestEnded || hasSubmitted ? 'Answer Options' : 'Select Your Answer'}
               </h2>
-              {isContestEnded && submittedOption != null && submittedOption < options.length && (
-                <span className="flex items-center gap-1.5 text-xs text-green-400 bg-green-950/60 border border-green-800/80 px-2.5 py-1 rounded-full">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Your submitted answer is highlighted
-                </span>
-              )}
             </div>
 
             {options.length === 0 ? (
@@ -125,7 +131,11 @@ export const MCQProblemView = ({
                 This question has no answer options. Please contact the contest administrator.
               </p>
             ) : (
-              <RadioGroup value={selectedAnswer} onValueChange={setUserSelectedAnswer} disabled={!onSubmit}>
+              <RadioGroup
+                value={selectedAnswer}
+                onValueChange={(val) => !hasSubmitted && setUserSelectedAnswer(val)}
+                disabled={hasSubmitted || !onSubmit}
+              >
                 <div className="space-y-2">
                   {options.map((option, index) => {
                     const optionValue = index.toString();
@@ -134,7 +144,7 @@ export const MCQProblemView = ({
 
                     let borderBgClass = 'bg-gray-900/30 border-gray-700 hover:bg-gray-900/50';
                     if (isUserChoice) {
-                      borderBgClass = isContestEnded
+                      borderBgClass = hasSubmitted
                         ? 'bg-green-950/40 border-green-500/80 ring-1 ring-green-500/50'
                         : 'bg-green-900/20 border-green-500';
                     }
@@ -142,17 +152,18 @@ export const MCQProblemView = ({
                     return (
                       <div
                         key={optionValue}
-                        className={`flex items-center gap-4 p-4 rounded-lg border transition-all ${borderBgClass} ${onSubmit ? 'cursor-pointer' : 'cursor-default'}`}
-                        onClick={() => onSubmit && setUserSelectedAnswer(optionValue)}
+                        className={`flex items-center gap-4 p-4 rounded-lg border transition-all ${borderBgClass} ${!hasSubmitted && onSubmit ? 'cursor-pointer' : 'cursor-default'}`}
+                        onClick={() => !hasSubmitted && onSubmit && setUserSelectedAnswer(optionValue)}
                       >
                         <RadioGroupItem
                           value={optionValue}
                           id={`option-${optionValue}`}
                           className="border-2"
+                          disabled={hasSubmitted || !onSubmit}
                         />
                         <Label
                           htmlFor={`option-${optionValue}`}
-                          className="flex-1 cursor-pointer font-['DM_Sans'] text-base flex items-center justify-between"
+                          className={`flex-1 font-['DM_Sans'] text-base flex items-center justify-between ${!hasSubmitted && onSubmit ? 'cursor-pointer' : 'cursor-default'}`}
                         >
                           <span>
                             <span className="font-semibold text-green-400 mr-2">
@@ -160,8 +171,9 @@ export const MCQProblemView = ({
                             </span>
                             <span className="text-white">{option}</span>
                           </span>
-                          {isContestEnded && isUserChoice && (
-                            <span className="text-xs text-green-400 font-semibold uppercase tracking-wider bg-green-900/60 px-2 py-0.5 rounded border border-green-700">
+                          {hasSubmitted && isUserChoice && (
+                            <span className="text-xs text-green-400 font-semibold uppercase tracking-wider bg-green-900/60 px-2 py-0.5 rounded border border-green-700 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
                               Your Choice
                             </span>
                           )}
@@ -191,7 +203,7 @@ export const MCQProblemView = ({
         </div>
       </div>
 
-      {(onSubmit || prevProblemId !== undefined || nextProblemId !== undefined) && (
+      {(onSubmit || hasSubmitted || prevProblemId !== undefined || nextProblemId !== undefined) && (
         <div className="border-t border-gray-700 bg-black">
           <div className="max-w-4xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3">
             {/* MCQ Navigation buttons */}
@@ -222,13 +234,18 @@ export const MCQProblemView = ({
             </div>
 
             {/* Answer submission actions */}
-            {onSubmit && (
+            {hasSubmitted ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-950/40 border border-green-800/60 text-green-300 text-xs font-medium">
+                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                <span>Answer Submitted</span>
+              </div>
+            ) : onSubmit ? (
               <div className="flex items-center gap-3">
                 <Button
                   onClick={handleClearResponse}
                   variant="outline"
                   size="sm"
-                  disabled={!selectedAnswer}
+                  disabled={!selectedAnswer || isSubmitting}
                   className="flex items-center gap-2 text-xs text-black"
                 >
                   Clear Response
@@ -252,7 +269,7 @@ export const MCQProblemView = ({
                   )}
                 </Button>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       )}
