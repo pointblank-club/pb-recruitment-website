@@ -1,6 +1,5 @@
 import React from 'react';
 import { CheckCircle2, Clock3, XCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import type { TestCaseResult } from '@/services/api/contestApi';
 import type { ActiveSubmission } from '../../hooks/useProblemSubmissions';
 import { formatVerdict, getVerdictClasses } from '../../submissionUtils';
@@ -16,7 +15,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
   onRetryPolling,
   compact = false,
 }) => {
-  if (activeSubmission.phase === 'idle' && !activeSubmission.details) {
+  if (activeSubmission.phase === 'idle') {
     return (
       <div className="border border-dashed border-[#1e2636] rounded-lg p-8 text-center text-xs text-slate-500 font-['DM_Sans']">
         Submit an answer to see its verdict here.
@@ -25,7 +24,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
   }
 
   return (
-    <div className={`space-y-4 font-['DM_Sans'] ${compact ? 'text-xs' : ''}`}>
+    <div className={`space-y-4 font-['DM_Sans'] ${compact ? 'text-xs' : ''}`} aria-live="polite">
       {!compact && (
         <div className="flex items-center justify-between pb-2 border-b border-[#1e2636]">
           <h2 className="text-sm font-semibold text-white">Latest Result</h2>
@@ -41,7 +40,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
       <div className="flex items-start gap-3 p-4 rounded-lg bg-[#0b1018] border border-[#192233]">
         {activeSubmission.status && ['accepted', 'completed'].includes(activeSubmission.status) ? (
           <CheckCircle2 className="w-5 h-5 text-[#10b981] shrink-0 mt-0.5" />
-        ) : activeSubmission.phase === 'polling' || activeSubmission.phase === 'submitting' ? (
+        ) : activeSubmission.phase === 'polling' || activeSubmission.phase === 'submitting' || activeSubmission.phase === 'received' ? (
           <div className="w-5 h-5 rounded-full border-2 border-[#10b981] border-t-transparent animate-spin shrink-0 mt-0.5" />
         ) : activeSubmission.phase === 'timeout' ? (
           <Clock3 className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
@@ -56,7 +55,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
             {activeSubmission.phase === 'polling' && 'Judging in progress…'}
             {activeSubmission.phase === 'completed' && formatVerdict(activeSubmission.status)}
             {activeSubmission.phase === 'timeout' && 'Verdict delayed'}
-            {activeSubmission.phase === 'error' && 'Execution error'}
+            {activeSubmission.phase === 'error' && 'Could not verify verdict'}
           </p>
           {activeSubmission.message && (
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
@@ -66,21 +65,19 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
         </div>
 
         {onRetryPolling && Boolean(activeSubmission.id) && (activeSubmission.phase === 'timeout' || activeSubmission.phase === 'error') && (
-          <Button
+          <button
             type="button"
-            size="sm"
-            variant="outline"
             onClick={onRetryPolling}
-            className="text-xs text-black"
+            className="px-2.5 py-1 text-xs rounded bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white transition-colors"
           >
             Check again
-          </Button>
+          </button>
         )}
       </div>
 
-      {/* Execution stats */}
-      {activeSubmission.details && (
-        <div className="grid grid-cols-3 gap-2">
+      {/* Execution stats: only show once judging is completed */}
+      {activeSubmission.phase === 'completed' && activeSubmission.details && (
+        <div className={`grid gap-2 ${activeSubmission.details.score !== undefined ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <div className="p-3 rounded bg-[#0b1018] border border-[#192233]">
             <span className="text-[10px] text-slate-500 uppercase font-semibold">Runtime</span>
             <p className="text-sm font-mono text-slate-200 mt-0.5">
@@ -93,13 +90,15 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
               {activeSubmission.details.memory !== undefined ? `${activeSubmission.details.memory} KB` : '—'}
             </p>
           </div>
-          <div className="p-3 rounded bg-[#0b1018] border border-[#192233]">
-            <span className="text-[10px] text-slate-500 uppercase font-semibold">Score</span>
-            <p className="text-sm font-mono text-[#10b981] mt-0.5 font-semibold">
-              {activeSubmission.details.score !== undefined ? `${activeSubmission.details.score}` : '0'}
-              {activeSubmission.details.max_score ? ` / ${activeSubmission.details.max_score}` : ''}
-            </p>
-          </div>
+          {activeSubmission.details.score !== undefined && (
+            <div className="p-3 rounded bg-[#0b1018] border border-[#192233]">
+              <span className="text-[10px] text-slate-500 uppercase font-semibold">Score</span>
+              <p className="text-sm font-mono text-[#10b981] mt-0.5 font-semibold">
+                {activeSubmission.details.score}
+                {activeSubmission.details.max_score ? ` / ${activeSubmission.details.max_score}` : ''}
+              </p>
+            </div>
+          )}
         </div>
       )}
 

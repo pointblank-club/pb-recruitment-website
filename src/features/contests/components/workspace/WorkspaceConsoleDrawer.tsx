@@ -20,7 +20,7 @@ interface WorkspaceConsoleDrawerProps {
   isConsoleCollapsed: boolean;
   setIsConsoleCollapsed: (collapsed: boolean) => void;
   consoleHeight: number;
-  cursorPos: { lineNumber: number; column: number };
+  cursorPos?: { lineNumber: number; column: number };
   customInput: string;
   setCustomInput: (val: string) => void;
   isLocked: boolean;
@@ -57,9 +57,11 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
       {/* Console Header Bar (36px) */}
       <div className="h-9 bg-[#0b0f17] border-b border-[#1e2636] px-3 flex items-center justify-between flex-shrink-0">
         {/* Left side: Console Tabs */}
-        <div className="flex items-center gap-1 h-full">
+        <div className="flex items-center gap-1 h-full" role="tablist">
           <button
             type="button"
+            role="tab"
+            aria-selected={consoleTab === 'input' && !isConsoleCollapsed}
             onClick={() => {
               setConsoleTab('input');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
@@ -79,6 +81,8 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
 
           <button
             type="button"
+            role="tab"
+            aria-selected={consoleTab === 'output' && !isConsoleCollapsed}
             onClick={() => {
               setConsoleTab('output');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
@@ -102,6 +106,8 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
 
           <button
             type="button"
+            role="tab"
+            aria-selected={consoleTab === 'latest_result' && !isConsoleCollapsed}
             onClick={() => {
               setConsoleTab('latest_result');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
@@ -115,9 +121,12 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
             <span>Latest Result</span>
             {activeSubmission.status && (
               <span
-                className={`px-1.5 py-0.2 rounded text-[10px] font-semibold border ${getVerdictClasses(activeSubmission.status)}`}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border max-w-[120px] truncate ${getVerdictClasses(
+                  activeSubmission.status,
+                )}`}
+                title={formatVerdict(activeSubmission.status)}
               >
-                {formatVerdict(activeSubmission.status)}
+                {activeSubmission.status === 'judge_error' ? 'Judge Error' : formatVerdict(activeSubmission.status)}
               </span>
             )}
             {consoleTab === 'latest_result' && !isConsoleCollapsed && (
@@ -128,9 +137,11 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
 
         {/* Right side: Cursor & Collapse Controls */}
         <div className="flex items-center gap-3 text-xs text-gray-400 font-mono">
-          <span className="hidden sm:inline text-[11px] text-gray-500">
-            Ln {cursorPos.lineNumber}, Col {cursorPos.column}
-          </span>
+          {cursorPos && (
+            <span className="hidden sm:inline text-[11px] text-gray-500">
+              Ln {cursorPos.lineNumber}, Col {cursorPos.column}
+            </span>
+          )}
 
           <button
             type="button"
@@ -153,8 +164,8 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
           {consoleTab === 'input' && (
             <div className="h-full flex flex-col space-y-1.5">
               <div className="flex items-center justify-between text-xs text-slate-400">
-                <label className="font-semibold text-slate-300">Custom Input:</label>
-                {sampleInput && (
+                <label htmlFor="custom-input-textarea" className="font-semibold text-slate-300">Custom Input:</label>
+                {sampleInput && !isLocked && (
                   <button
                     type="button"
                     onClick={() => {
@@ -168,9 +179,9 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                 )}
               </div>
               <textarea
+                id="custom-input-textarea"
                 value={customInput}
                 onChange={(e) => {
-                  if (isLocked) return;
                   onInvalidateRun();
                   setCustomInput(e.target.value);
                 }}
@@ -201,9 +212,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                     >
                       {runResult.status
                         ? formatVerdict(runResult.status)
-                        : runResult.errorText
-                        ? 'Error'
-                        : 'Finished'}
+                        : 'Error'}
                     </span>
                     {runResult.runtime !== undefined && (
                       <span className="text-slate-400">
@@ -244,15 +253,22 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                     </pre>
                   )}
 
-                  {/* Standard Output */}
-                  {runResult.stdout !== undefined && (
+                  {/* Standard Output: only show stdout or show placeholder when no errors exist */}
+                  {runResult.stdout ? (
                     <div className="space-y-1">
                       <span className="text-slate-400 text-[11px] uppercase font-semibold">Standard Output:</span>
                       <pre className="p-2.5 rounded bg-black/60 border border-[#1e2636] text-[#10b981] overflow-x-auto whitespace-pre">
-                        {runResult.stdout || '(Program completed without output)'}
+                        {runResult.stdout}
                       </pre>
                     </div>
-                  )}
+                  ) : !runResult.compile_output?.trim() && !runResult.stderr?.trim() && !runResult.errorText ? (
+                    <div className="space-y-1">
+                      <span className="text-slate-400 text-[11px] uppercase font-semibold">Standard Output:</span>
+                      <pre className="p-2.5 rounded bg-black/60 border border-[#1e2636] text-slate-400 overflow-x-auto whitespace-pre italic">
+                        (Program completed without output)
+                      </pre>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="flex-1 flex items-center justify-center text-slate-500 text-xs">

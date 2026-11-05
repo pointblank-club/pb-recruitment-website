@@ -1,5 +1,6 @@
 import React from 'react';
-import { ArrowUpRight, Copy, Check } from 'lucide-react';
+import { useParams, Link } from 'react-router-dom';
+import { ChevronLeft, ArrowUpRight, Copy, Check } from 'lucide-react';
 import type { Problem } from '../../problem.types';
 
 interface ProblemStatementTabProps {
@@ -17,13 +18,24 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
   onCopy,
   onLoadSample,
 }) => {
-  const sample1 = problem.examples && problem.examples.length > 0 ? problem.examples[0] : null;
+  const { contestId } = useParams<{ contestId: string }>();
 
   return (
     <div className="space-y-4 max-w-4xl mx-auto font-['DM_Sans']">
       {/* Header Row: Title & Metadata Badges */}
       <div className="pb-3 border-b border-[#192130] flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold text-white tracking-tight">{problem.name}</h1>
+        <div className="flex items-center gap-2">
+          {contestId && (
+            <Link
+              to={`/contests/${contestId}/problems`}
+              className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-[#141b29] border border-transparent hover:border-[#1e2636] transition-all flex items-center justify-center"
+              title="Back to Problems"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+          )}
+          <h1 className="text-xl font-bold text-white tracking-tight">{problem.name}</h1>
+        </div>
         <div className="flex items-center gap-2 text-xs">
           <span className="px-2.5 py-1 rounded bg-[#10b981]/15 text-[#10b981] font-semibold border border-[#10b981]/30">
             {problem.score} points
@@ -58,26 +70,6 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
           </div>
         )}
 
-        {/* Input format */}
-        {problem.input_format && (
-          <div className="space-y-1.5">
-            <h3 className="text-sm font-semibold text-white">Input</h3>
-            <p className="text-xs text-slate-300 whitespace-pre-line font-mono bg-[#06080d] p-3 rounded border border-[#192233]">
-              {problem.input_format}
-            </p>
-          </div>
-        )}
-
-        {/* Output format */}
-        {problem.output_format && (
-          <div className="space-y-1.5">
-            <h3 className="text-sm font-semibold text-white">Output</h3>
-            <p className="text-xs text-slate-300 whitespace-pre-line font-mono bg-[#06080d] p-3 rounded border border-[#192233]">
-              {problem.output_format}
-            </p>
-          </div>
-        )}
-
         {/* Constraints / Note */}
         {problem.constraints && problem.constraints.length > 0 && (
           <div className="space-y-2">
@@ -93,75 +85,68 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
           </div>
         )}
 
-        {/* Sample 1 side-by-side blocks with Copy & Load buttons */}
-        {sample1 && (
-          <div className="border-t border-[#192233] pt-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-[#10b981]">Sample 1</span>
-              {!hideIDE && (
-                <button
-                  type="button"
-                  onClick={() => onLoadSample(sample1.input)}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-[#10b981] transition-colors"
-                >
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                  <span>Load into Custom Input</span>
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* Sample Input */}
-              <div className="rounded border border-[#192233] bg-[#06080d] overflow-hidden">
-                <div className="h-8 px-3 bg-[#0c121c] border-b border-[#192233] flex items-center justify-between">
-                  <span className="text-[11px] font-mono text-slate-400 font-semibold">Input</span>
-                  <button
-                    type="button"
-                    onClick={() => onCopy(sample1.input, 'sample-in-1')}
-                    className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#141b29] transition-colors"
-                    title="Copy sample input"
-                  >
-                    {copiedId === 'sample-in-1' ? (
-                      <Check className="w-3 h-3 text-[#10b981]" />
-                    ) : (
-                      <Copy className="w-3 h-3" />
+        {/* Sample test cases */}
+        {problem.examples && problem.examples.length > 0 && (
+          <div className="space-y-4 pt-2">
+            {problem.examples.map((example, index) => {
+              const sampleNum = index + 1;
+              const inKey = `sample-in-${sampleNum}`;
+              const outKey = `sample-out-${sampleNum}`;
+              return (
+                <div key={index} className="border-t border-[#192233] pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[#10b981]">
+                      Sample {sampleNum}
+                    </span>
+                    {!hideIDE && (
+                      <button
+                        type="button"
+                        onClick={() => onLoadSample(example.input)}
+                        className="flex items-center gap-1 text-xs text-slate-400 hover:text-[#10b981] transition-colors"
+                      >
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                        <span>Load into Custom Input</span>
+                      </button>
                     )}
-                  </button>
-                </div>
-                <pre className="p-3 text-xs font-mono text-slate-200 overflow-x-auto whitespace-pre">
-                  {sample1.input}
-                </pre>
-              </div>
+                  </div>
 
-              {/* Sample Output */}
-              <div className="rounded border border-[#192233] bg-[#06080d] overflow-hidden">
-                <div className="h-8 px-3 bg-[#0c121c] border-b border-[#192233] flex items-center justify-between">
-                  <span className="text-[11px] font-mono text-slate-400 font-semibold">Output</span>
-                  <button
-                    type="button"
-                    onClick={() => onCopy(sample1.output, 'sample-out-1')}
-                    className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#141b29] transition-colors"
-                    title="Copy sample output"
-                  >
-                    {copiedId === 'sample-out-1' ? (
-                      <Check className="w-3 h-3 text-[#10b981]" />
-                    ) : (
-                      <Copy className="w-3 h-3" />
-                    )}
-                  </button>
-                </div>
-                <pre className="p-3 text-xs font-mono text-slate-200 overflow-x-auto whitespace-pre">
-                  {sample1.output}
-                </pre>
-              </div>
-            </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {[
+                      { label: 'Input', text: example.input, key: inKey },
+                      { label: 'Output', text: example.output, key: outKey },
+                    ].map((pane) => (
+                      <div key={pane.label} className="rounded border border-[#192233] bg-[#06080d] overflow-hidden">
+                        <div className="h-8 px-3 bg-[#0c121c] border-b border-[#192233] flex items-center justify-between">
+                          <span className="text-[11px] font-mono text-slate-400 font-semibold">{pane.label}</span>
+                          <button
+                            type="button"
+                            onClick={() => onCopy(pane.text, pane.key)}
+                            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#141b29] transition-colors"
+                            title={`Copy sample ${pane.label.toLowerCase()}`}
+                          >
+                            {copiedId === pane.key ? (
+                              <Check className="w-3 h-3 text-[#10b981]" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                        <pre className="p-3 text-xs font-mono text-slate-200 overflow-x-auto whitespace-pre">
+                          {pane.text}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
 
-            {sample1.explanation && (
-              <div className="p-3 rounded bg-[#06080d] border border-[#192233] text-xs text-slate-300">
-                <span className="font-semibold text-slate-200">Explanation: </span>
-                <span>{sample1.explanation}</span>
-              </div>
-            )}
+                  {example.explanation && (
+                    <div className="p-3 rounded bg-[#06080d] border border-[#192233] text-xs text-slate-300">
+                      <span className="font-semibold text-slate-200">Explanation: </span>
+                      <span>{example.explanation}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

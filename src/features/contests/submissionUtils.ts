@@ -31,7 +31,8 @@ export const getVerdictClasses = (status?: string) => {
   return 'border-rose-500/40 bg-rose-500/10 text-rose-300';
 };
 
-export const formatSubmittedAt = (timestamp: number) => {
+export const formatSubmittedAt = (timestamp?: number | null) => {
+  if (!timestamp || isNaN(timestamp)) return '—';
   const milliseconds = timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',

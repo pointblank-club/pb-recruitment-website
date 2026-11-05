@@ -1,6 +1,5 @@
 import React from 'react';
 import { History, RefreshCw, AlertTriangle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import type { SubmissionDetailsResponse } from '@/services/api/contestApi';
 import { formatVerdict, getVerdictClasses, formatSubmittedAt } from '../../submissionUtils';
 
@@ -48,19 +47,24 @@ export const ProblemSubmissionsTab: React.FC<ProblemSubmissionsTabProps> = ({
         </div>
       )}
 
-      {history.length === 0 && !isHistoryLoading && (
+      {isHistoryLoading && history.length === 0 && (
+        <div className="text-center py-12 text-slate-500 text-xs">
+          Loading submissions…
+        </div>
+      )}
+
+      {history.length === 0 && !isHistoryLoading && !historyError && (
         <div className="text-center py-12 text-slate-500 text-xs">
           No submissions for this problem yet.
         </div>
       )}
 
       {history.length > 0 && (
-        <div className="overflow-hidden rounded border border-[#1e2636] bg-[#0b1018]">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto rounded border border-[#1e2636] bg-[#0b1018]">
+          <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-[#0e1422] text-slate-400 uppercase text-[10px] tracking-wider border-b border-[#1e2636]">
               <tr>
                 <th className="py-2.5 px-3">Status</th>
-                <th className="py-2.5 px-3">Score</th>
                 <th className="py-2.5 px-3">Time</th>
                 <th className="py-2.5 px-3">Memory</th>
                 <th className="py-2.5 px-3">Lang</th>
@@ -74,9 +78,6 @@ export const ProblemSubmissionsTab: React.FC<ProblemSubmissionsTabProps> = ({
                     <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getVerdictClasses(sub.status)}`}>
                       {formatVerdict(sub.status)}
                     </span>
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-200 font-mono">
-                    {sub.score !== undefined ? `${sub.score}` : '—'}
                   </td>
                   <td className="py-2.5 px-3 text-slate-300 font-mono">
                     {sub.runtime !== undefined ? `${sub.runtime} ms` : '—'}
@@ -99,16 +100,14 @@ export const ProblemSubmissionsTab: React.FC<ProblemSubmissionsTabProps> = ({
 
       {hasMoreHistory && onLoadMoreHistory && (
         <div className="text-center pt-2">
-          <Button
+          <button
             type="button"
-            size="sm"
-            variant="outline"
             disabled={isHistoryLoading}
             onClick={onLoadMoreHistory}
-            className="text-xs text-black"
+            className="px-3 py-1 rounded text-xs bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white disabled:opacity-40 transition-colors"
           >
             {isHistoryLoading ? 'Loading…' : 'Load more'}
-          </Button>
+          </button>
         </div>
       )}
     </div>
