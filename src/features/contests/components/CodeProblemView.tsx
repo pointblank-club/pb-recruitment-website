@@ -137,8 +137,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Editor cursor tracking & clipboard feedback
-  const [cursorPos, setCursorPos] = useState({ lineNumber: 1, column: 1 });
+  // Clipboard feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Pane resizing
@@ -182,6 +181,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
 
   const handleLoadSampleIntoCustomInput = useCallback((input: string) => {
     setCustomInput(input);
+    setRunResult(null);
     setConsoleTab('input');
     setIsConsoleCollapsed(false);
   }, []);
@@ -589,14 +589,6 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                   contextmenu: true,
                   folding: true,
                 }}
-                onMount={(editor) => {
-                  editor.onDidChangeCursorPosition((e: { position: { lineNumber: number; column: number } }) => {
-                    setCursorPos({
-                      lineNumber: e.position.lineNumber,
-                      column: e.position.column,
-                    });
-                  });
-                }}
               />
             </div>
 
@@ -614,7 +606,6 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
               isConsoleCollapsed={isConsoleCollapsed}
               setIsConsoleCollapsed={setIsConsoleCollapsed}
               consoleHeight={consoleHeight}
-              cursorPos={cursorPos}
               customInput={customInput}
               setCustomInput={setCustomInput}
               isLocked={isLocked}
