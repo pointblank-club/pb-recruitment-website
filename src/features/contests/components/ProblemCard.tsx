@@ -8,7 +8,6 @@ interface ProblemCardProps {
 }
 
 const progressColors: Record<ProblemProgress, string> = {
-  loading: 'border-gray-700/60 bg-black hover:bg-gray-900',
   unsolved: 'border-gray-600/60 bg-gray-900/60 hover:bg-gray-800/70',
   attempted: 'border-amber-600/50 bg-amber-950/40 hover:bg-amber-950/60',
   judging: 'border-blue-600/50 bg-blue-950/40 hover:bg-blue-950/60',
@@ -18,7 +17,6 @@ const progressColors: Record<ProblemProgress, string> = {
 };
 
 const progressLabels: Record<ProblemProgress, string> = {
-  loading: 'Checking status',
   unsolved: 'Unsolved',
   attempted: 'Attempted',
   judging: 'Judging',

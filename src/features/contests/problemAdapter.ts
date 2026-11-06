@@ -1,10 +1,11 @@
-import type { Problem, ProblemType } from './problem.types';
+import type { Problem, ProblemProgress, ProblemType } from './problem.types';
 
 export interface ProblemOverviewResponse {
   id: string;
   name: string;
   score: number;
   type: string;
+  progress?: ProblemProgress;
 }
 
 interface ProblemTestCaseResponse {
@@ -14,7 +15,7 @@ interface ProblemTestCaseResponse {
   is_sample?: boolean;
 }
 
-export interface ProblemDetailsResponse extends Omit<ProblemOverviewResponse, 'id'> {
+export interface ProblemDetailsResponse extends Omit<ProblemOverviewResponse, 'id' | 'progress'> {
   problem_id: string;
   contest_id: string;
   description?: string;
