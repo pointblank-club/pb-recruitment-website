@@ -48,27 +48,30 @@ export const useCodeDraft = ({
       const codes: Record<string, string> = {};
       if (typeof codeByLanguage === 'object' && codeByLanguage !== null && !Array.isArray(codeByLanguage)) {
         for (const [lang, value] of Object.entries(codeByLanguage)) {
-          if (typeof value === 'string') {
+          if (typeof value === 'string' && Object.hasOwn(defaultTemplates, lang)) {
             codes[lang] = value;
           }
         }
       }
 
       return {
-        selectedLanguage: typeof selectedLanguage === 'string' ? selectedLanguage : '',
+        selectedLanguage:
+          typeof selectedLanguage === 'string' && Object.hasOwn(defaultTemplates, selectedLanguage)
+            ? selectedLanguage
+            : '',
         codeByLanguage: codes,
         customInput: typeof customInput === 'string' ? customInput : undefined,
       };
     } catch {
       return null;
     }
-  }, [storageKey]);
+  }, [storageKey, defaultTemplates]);
 
   // 1. Initialize states using saved draft if available, otherwise defaults
   const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
     if (!enabled) return defaultLanguage;
     const draft = loadSavedDraft();
-    return draft?.selectedLanguage && defaultTemplates[draft.selectedLanguage] !== undefined
+    return draft?.selectedLanguage && Object.hasOwn(defaultTemplates, draft.selectedLanguage)
       ? draft.selectedLanguage
       : defaultLanguage;
   });
@@ -105,7 +108,7 @@ export const useCodeDraft = ({
     const draft = loadSavedDraft();
     if (draft) {
       const lang =
-        draft.selectedLanguage && defaultTemplates[draft.selectedLanguage] !== undefined
+        draft.selectedLanguage && Object.hasOwn(defaultTemplates, draft.selectedLanguage)
           ? draft.selectedLanguage
           : defaultLanguage;
       const codes = {
@@ -141,7 +144,9 @@ export const useCodeDraft = ({
     try {
       const { selectedLanguage, codeByLanguage, customInput } = latestDraftRef.current;
       const changedCode = Object.fromEntries(
-        Object.entries(codeByLanguage).filter(([lang, code]) => code !== defaultTemplates[lang]),
+        Object.entries(codeByLanguage).filter(
+          ([lang, code]) => Object.hasOwn(defaultTemplates, lang) && code !== defaultTemplates[lang],
+        ),
       );
       const hasChangedCode = Object.keys(changedCode).length > 0;
       const hasChangedInput = customInput !== defaultInput;

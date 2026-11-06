@@ -37,4 +37,3 @@ export const removeContestRegistered = (contestId: string, userId: string): void
     // Ignore storage failure
   }
 };
-

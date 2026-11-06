@@ -8,16 +8,12 @@ import type { Contest } from "@/models/contest";
 import { contestApi } from "@/services/api/contestApi";
 import { Loader2 } from "lucide-react";
 import { toast } from 'react-toastify';
-import { useAuth } from "@/lib/AuthContext";
 
 const ContestList: React.FC = () => {
   const [contests, setContests] = useState<Contest[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const { loading: authLoading, user } = useAuth();
 
   useEffect(() => {
-    if (authLoading) return;
-
     let isMounted = true;
     const fetchContests = async () => {
       try {
@@ -41,7 +37,7 @@ const ContestList: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [authLoading, user]);
+  }, []);
 
   const navigate = useNavigate();
   const handleContestClick = (contestId: string) => {
