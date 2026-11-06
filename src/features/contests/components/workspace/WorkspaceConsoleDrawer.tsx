@@ -20,7 +20,6 @@ interface WorkspaceConsoleDrawerProps {
   isConsoleCollapsed: boolean;
   setIsConsoleCollapsed: (collapsed: boolean) => void;
   consoleHeight: number;
-  cursorPos?: { lineNumber: number; column: number };
   customInput: string;
   setCustomInput: (val: string) => void;
   isLocked: boolean;
@@ -30,6 +29,7 @@ interface WorkspaceConsoleDrawerProps {
   activeSubmission: ActiveSubmission;
   onRetryPolling?: () => void;
   onInvalidateRun: () => void;
+  isResizing?: boolean;
 }
 
 export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
@@ -38,7 +38,6 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
   isConsoleCollapsed,
   setIsConsoleCollapsed,
   consoleHeight,
-  cursorPos,
   customInput,
   setCustomInput,
   isLocked,
@@ -48,25 +47,36 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
   activeSubmission,
   onRetryPolling,
   onInvalidateRun,
+  isResizing = false,
 }) => {
   return (
     <div
-      className="flex flex-col bg-[#090d14] border-t border-[#1e2636] overflow-hidden flex-shrink-0 transition-[height] duration-150 ease-out font-['DM_Sans']"
+      className={`flex flex-col bg-[#090d14] border-t border-[#1e2636] overflow-hidden flex-shrink-0 font-['DM_Sans'] ${
+        isResizing ? '' : 'transition-[height] duration-150 ease-out'
+      }`}
       style={{ height: isConsoleCollapsed ? '36px' : `${consoleHeight}px` }}
     >
+      {/* Screen reader live announcement region for submission verdicts */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {activeSubmission.phase === 'submitting' && 'Sending submission'}
+        {activeSubmission.phase === 'received' && 'Submission received'}
+        {activeSubmission.phase === 'polling' && 'Judging in progress'}
+        {activeSubmission.phase === 'completed' && `Verdict: ${formatVerdict(activeSubmission.status)}`}
+        {activeSubmission.phase === 'timeout' && 'Verdict delayed'}
+        {activeSubmission.phase === 'error' && (activeSubmission.id ? 'Could not verify verdict' : 'Submission failed')}
+      </div>
       {/* Console Header Bar (36px) */}
-      <div className="h-9 bg-[#0b0f17] border-b border-[#1e2636] px-3 flex items-center justify-between flex-shrink-0">
+      <div className="h-9 bg-[#0b0f17] border-b border-[#1e2636] px-3 flex items-center justify-between flex-shrink-0 gap-2">
         {/* Left side: Console Tabs */}
-        <div className="flex items-center gap-1 h-full" role="tablist">
+        <div className="flex items-center gap-1 h-full min-w-0 overflow-x-auto flex-1 scrollbar-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             type="button"
-            role="tab"
-            aria-selected={consoleTab === 'input' && !isConsoleCollapsed}
+            aria-pressed={consoleTab === 'input' && !isConsoleCollapsed}
             onClick={() => {
               setConsoleTab('input');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
             }}
-            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 ${
               consoleTab === 'input' && !isConsoleCollapsed
                 ? 'text-white'
                 : 'text-gray-400 hover:text-gray-200'
@@ -81,13 +91,12 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
 
           <button
             type="button"
-            role="tab"
-            aria-selected={consoleTab === 'output' && !isConsoleCollapsed}
+            aria-pressed={consoleTab === 'output' && !isConsoleCollapsed}
             onClick={() => {
               setConsoleTab('output');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
             }}
-            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 ${
               consoleTab === 'output' && !isConsoleCollapsed
                 ? 'text-white'
                 : 'text-gray-400 hover:text-gray-200'
@@ -96,7 +105,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
             <span>Output</span>
             {runResult && (
               <span
-                className={`w-2 h-2 rounded-full ${runResult.status === 'accepted' ? 'bg-[#10b981]' : 'bg-rose-500'}`}
+                className={`w-2 h-2 rounded-full ${runResult.status === 'accepted' ? 'bg-amber-400' : 'bg-rose-500'}`}
               />
             )}
             {consoleTab === 'output' && !isConsoleCollapsed && (
@@ -106,13 +115,12 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
 
           <button
             type="button"
-            role="tab"
-            aria-selected={consoleTab === 'latest_result' && !isConsoleCollapsed}
+            aria-pressed={consoleTab === 'latest_result' && !isConsoleCollapsed}
             onClick={() => {
               setConsoleTab('latest_result');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
             }}
-            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 ${
               consoleTab === 'latest_result' && !isConsoleCollapsed
                 ? 'text-white'
                 : 'text-gray-400 hover:text-gray-200'
@@ -121,7 +129,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
             <span>Latest Result</span>
             {activeSubmission.status && (
               <span
-                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border max-w-[120px] truncate ${getVerdictClasses(
+                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border max-w-[100px] truncate shrink-0 ${getVerdictClasses(
                   activeSubmission.status,
                 )}`}
                 title={formatVerdict(activeSubmission.status)}
@@ -135,17 +143,12 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
           </button>
         </div>
 
-        {/* Right side: Cursor & Collapse Controls */}
-        <div className="flex items-center gap-3 text-xs text-gray-400 font-mono">
-          {cursorPos && (
-            <span className="hidden sm:inline text-[11px] text-gray-500">
-              Ln {cursorPos.lineNumber}, Col {cursorPos.column}
-            </span>
-          )}
-
+        {/* Right side: Collapse Controls */}
+        <div className="flex items-center gap-3 text-xs text-gray-400 font-mono shrink-0 ml-auto z-10">
           <button
             type="button"
             onClick={() => setIsConsoleCollapsed(!isConsoleCollapsed)}
+            aria-expanded={!isConsoleCollapsed}
             className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-white transition-colors"
           >
             <span>{isConsoleCollapsed ? 'Show Console' : 'Hide Console'}</span>
@@ -206,11 +209,13 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                     <span
                       className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${
                         runResult.status === 'accepted'
-                          ? 'border-[#10b981]/50 bg-[#10b981]/15 text-[#10b981]'
+                          ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
                           : 'border-rose-500/50 bg-rose-500/15 text-rose-300'
                       }`}
                     >
-                      {runResult.status
+                      {runResult.status === 'accepted'
+                        ? 'Attempted (not graded)'
+                        : runResult.status
                         ? formatVerdict(runResult.status)
                         : 'Error'}
                     </span>
@@ -253,7 +258,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                     </pre>
                   )}
 
-                  {/* Standard Output: only show stdout or show placeholder when no errors exist */}
+                  {/* Standard Output: only show stdout or show placeholder when status is accepted */}
                   {runResult.stdout ? (
                     <div className="space-y-1">
                       <span className="text-slate-400 text-[11px] uppercase font-semibold">Standard Output:</span>
@@ -261,7 +266,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                         {runResult.stdout}
                       </pre>
                     </div>
-                  ) : !runResult.compile_output?.trim() && !runResult.stderr?.trim() && !runResult.errorText ? (
+                  ) : runResult.status === 'accepted' ? (
                     <div className="space-y-1">
                       <span className="text-slate-400 text-[11px] uppercase font-semibold">Standard Output:</span>
                       <pre className="p-2.5 rounded bg-black/60 border border-[#1e2636] text-slate-400 overflow-x-auto whitespace-pre italic">

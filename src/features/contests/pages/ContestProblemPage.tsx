@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useOutletContext, useLocation, Link } from 'react-router-dom';
 import { useProblemDetails } from '../hooks/useProblemDetails';
+import { useContestProblems } from '../hooks/useContestProblems';
 import { CodeProblemView } from '../components/CodeProblemView';
 import { MCQProblemView } from '../components/MCQProblemView';
-import { SubmissionPanel, formatVerdict } from '../components/SubmissionPanel';
 import { SubmittedSolutionViewer } from '../components/SubmittedSolutionViewer';
 import { useProblemSubmissions } from '../hooks/useProblemSubmissions';
 import type { ContestOutletContext } from '../layouts/ContestLayout';
@@ -12,6 +12,7 @@ import { AlertCircle, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'react-toastify';
 import { useAuth } from '@/lib/AuthContext';
+import { formatVerdict } from '../submissionUtils';
 
 export const ContestProblemPage = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
@@ -24,9 +25,23 @@ export const ContestProblemPage = () => {
     isRegistered = false,
   } = useOutletContext<ContestOutletContext>() || {};
 
-  const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
+  // For ended contests: only registered + authenticated users see code/submissions.
+  // Guests and unregistered users see ONLY the problem statement (hideIDE = true).
+  const hideIDE = isContestEnded ? !(isAuthenticated && isRegistered) : !isAuthenticated;
+  const isLocked = isContestEnded;
 
-  // After the contest ends only registered users need their history: history[0] is their last submission.
+  const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
+  const { problems } = useContestProblems(contestId || '');
+
+  const mcqProblems = problems.filter((p) => p.type === 'mcq');
+  const currentMcqIndex = mcqProblems.findIndex((p) => p.id === problemId);
+  const prevMcq = currentMcqIndex > 0 ? mcqProblems[currentMcqIndex - 1] : null;
+  const nextMcq =
+    currentMcqIndex >= 0 && currentMcqIndex < mcqProblems.length - 1
+      ? mcqProblems[currentMcqIndex + 1]
+      : null;
+
+  // Always run for authenticated users; skip only for guests or unregistered post-contest users.
   const {
     activeSubmission,
     history,
@@ -61,19 +76,20 @@ export const ContestProblemPage = () => {
     }
   }, [activeSubmission]);
 
-  // Post-contest: fetch full details (including code) for the latest submission.
-  // Keyed on `id:status:attempt` so a resolved verdict or a Retry triggers a refetch.
-  // Snapshot at mount: anyone on this page when time runs out is redirected by ContestLayout,
-  // so don't fetch details for a page that is about to leave.
-  const [endedOnArrival] = useState(isContestEnded);
-  const showOwnSubmission = endedOnArrival && isAuthenticated && isRegistered;
-  const latest = showOwnSubmission ? history[0] : undefined;
+  // Post-contest: fetch full details (including code) for the registered user's latest submission.
+  // Also fetch details for MCQ problems so the chosen option is known during active contests.
   const [attempt, setAttempt] = useState(0);
-  const detailsKey = latest ? `${latest.id}:${latest.status}:${attempt}` : undefined;
-  const retryOwnSubmission = () => {
-    setAttempt((n) => n + 1);
-    void refreshHistory();
-  };
+
+  const isMcq = problem?.type === 'mcq';
+  const showOwnSubmission = isContestEnded && isAuthenticated && isRegistered;
+  const candidateLatest =
+    showOwnSubmission || (isMcq && isAuthenticated && history.length > 0) ? history[0] : undefined;
+  const latestHasOption = isMcq && candidateLatest?.option && candidateLatest.option.length > 0;
+  const shouldFetchSubmissionDetails =
+    (showOwnSubmission || (isMcq && isAuthenticated && history.length > 0)) &&
+    !(isMcq && latestHasOption);
+  const latest = shouldFetchSubmissionDetails ? candidateLatest : undefined;
+  const detailsKey = latest ? `${problemId}:${latest.id}:${latest.status}:${attempt}` : undefined;
 
   const [ownSubmission, setOwnSubmission] = useState<{
     key: string;
@@ -86,16 +102,26 @@ export const ContestProblemPage = () => {
     let live = true;
     contestApi.getSubmissionDetails(latest.id).then(
       (data) => live && setOwnSubmission({ key: detailsKey, data }),
-      (e) => live && setOwnSubmission({ key: detailsKey, error: e instanceof Error ? e.message : 'Could not load your submission.' }),
+      (e) =>
+        live &&
+        setOwnSubmission({
+          key: detailsKey,
+          error: e instanceof Error ? e.message : 'Could not load your submission.',
+        }),
     );
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [detailsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Ignore a result for an older submission/attempt. Users are kept apart by ContestLayout
-  // remounting this page whenever the signed-in user changes.
   const shownSubmission = ownSubmission?.key === detailsKey ? ownSubmission : undefined;
   const isLoadingSubmission = isHistoryLoading || (!!latest && !shownSubmission);
   const submissionError = historyError || shownSubmission?.error;
+
+  const retryOwnSubmission = () => {
+    setAttempt((n) => n + 1);
+    refreshHistory();
+  };
 
   if (!contestId || !problemId) {
     return (
@@ -157,17 +183,37 @@ export const ContestProblemPage = () => {
     );
   }
 
-  const submittedOptionIndex = shownSubmission?.data?.option?.[0] ?? null;
+  // Derive option index for MCQ if submitted
+  const submittedOptionIndex =
+    shownSubmission?.data?.option && shownSubmission.data.option.length > 0
+      ? shownSubmission.data.option[0]
+      : history[0]?.option && history[0].option.length > 0
+      ? history[0].option[0]
+      : activeSubmission.details?.option && activeSubmission.details.option.length > 0
+      ? activeSubmission.details.option[0]
+      : null;
+
+  const isHistoryResolved = !isHistoryLoading && !historyError;
+  const hasSavedMcqSubmission = history.length > 0 || !!activeSubmission.id;
+  const hasSubmittedMCQ =
+    isMcq && (submittedOptionIndex !== null || hasSavedMcqSubmission);
+
+  const canSubmitMCQ =
+    isAuthenticated && !isLocked && isHistoryResolved && !hasSubmittedMCQ;
+
+  const mcqSubmissionError =
+    activeSubmission.phase === 'error' || activeSubmission.phase === 'timeout'
+      ? activeSubmission.message || 'Could not verify verdict'
+      : null;
 
   return (
     <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
       {/* Informational banners when contest has ended */}
       {isContestEnded && !isAuthenticated && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300">
+        <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
           <Lock className="w-4 h-4 text-yellow-400 flex-shrink-0" />
           <span>
             This contest has ended.{' '}
-            {/* S5: pass return path so login redirects back here */}
             <Link
               to="/login"
               state={{ from: location.pathname }}
@@ -181,7 +227,7 @@ export const ContestProblemPage = () => {
       )}
 
       {isContestEnded && isAuthenticated && !isRegistered && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300">
+        <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
           <Lock className="w-4 h-4 text-yellow-400 flex-shrink-0" />
           <span>
             This contest has ended. You were not registered for this contest, so only the problem statement is visible.
@@ -189,35 +235,67 @@ export const ContestProblemPage = () => {
         </div>
       )}
 
-      {/* MCQ has no side pane, so its loading/error/empty states go here (code problems use the viewer) */}
-      {showOwnSubmission && problem.type === 'mcq' && (isLoadingSubmission || submissionError || history.length === 0) && (
-        <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300">
-          {isLoadingSubmission ? (
-            'Loading your answer…'
-          ) : submissionError ? (
-            <>
-              <span>Could not load your answer: {submissionError}</span>
-              <button type="button" onClick={retryOwnSubmission} className="text-green-400 hover:underline">
-                Retry
-              </button>
-            </>
-          ) : (
-            'You did not answer this question before the contest ended.'
-          )}
-        </div>
+      {/* MCQ has no side pane, so its loading/error/empty states go here */}
+      {isMcq && (
+        showOwnSubmission ? (
+          (isLoadingSubmission || submissionError || history.length === 0) && (
+            <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
+              {isLoadingSubmission ? (
+                'Loading your answer…'
+              ) : submissionError ? (
+                <>
+                  <span>Could not load your answer: {submissionError}</span>
+                  <button type="button" onClick={retryOwnSubmission} className="text-green-400 hover:underline ml-2">
+                    Retry
+                  </button>
+                </>
+              ) : (
+                'You did not answer this question before the contest ended.'
+              )}
+            </div>
+          )
+        ) : (
+          !isContestEnded && isAuthenticated && (
+            historyError ? (
+              <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
+                <span>Could not load submission history: {historyError}</span>
+                <button type="button" onClick={retryOwnSubmission} className="text-green-400 hover:underline ml-2">
+                  Retry
+                </button>
+              </div>
+            ) : isHistoryLoading ? (
+              <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
+                <span>Loading your answer…</span>
+              </div>
+            ) : hasSavedMcqSubmission && shownSubmission?.error ? (
+              <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
+                <span>Could not load your answer: {shownSubmission.error}</span>
+                <button type="button" onClick={retryOwnSubmission} className="text-green-400 hover:underline ml-2">
+                  Retry
+                </button>
+              </div>
+            ) : hasSavedMcqSubmission && isLoadingSubmission ? (
+              <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
+                <span>Loading your answer…</span>
+              </div>
+            ) : null
+          )
+        )
       )}
 
       <div className="flex min-h-0 flex-1 h-full overflow-hidden">
         {problem.type === 'code' ? (
           showOwnSubmission ? (
-            /* Post-contest registered view: 50/50 split */
+            /* Post-contest registered view: Exactly 50/50 uniform split */
             <div className="flex-1 flex min-h-0 h-full overflow-hidden">
               <div className="w-1/2 min-h-0 h-full border-r border-gray-700 overflow-hidden flex flex-col">
                 <CodeProblemView
                   key={`${user?.uid || 'guest'}_${problem.id}`}
                   problem={problem}
                   contestId={contestId}
+                  isContestEnded={true}
                   hideIDE={true}
+                  isLocked={true}
                 />
               </div>
               <div className="w-1/2 min-h-0 h-full overflow-hidden flex flex-col">
@@ -231,41 +309,44 @@ export const ContestProblemPage = () => {
               </div>
             </div>
           ) : (
-            /* Active contest OR post-contest unauthenticated / unregistered */
+            /* Active contest CodeChef-style 2-column workspace */
             <CodeProblemView
               key={`${user?.uid || 'guest'}_${problem.id}`}
               problem={problem}
               contestId={contestId}
-              onSubmit={isAuthenticated && !isContestEnded ? submitCode : undefined}
-              onRun={isAuthenticated && !isContestEnded ? runCode : undefined}
-              hideIDE={isContestEnded}
+              onSubmit={isAuthenticated && !isLocked ? submitCode : undefined}
+              onRun={isAuthenticated && !isLocked ? runCode : undefined}
+              isContestEnded={isContestEnded}
+              hideIDE={hideIDE}
+              isLocked={isLocked}
+              activeSubmission={activeSubmission}
+              history={history}
+              historyError={historyError}
+              isHistoryLoading={isHistoryLoading}
+              hasMoreHistory={hasMoreHistory}
+              onRetryPolling={retryPolling}
+              onRefreshHistory={refreshHistory}
+              onLoadMoreHistory={loadMoreHistory}
             />
           )
         ) : (
           <MCQProblemView
             key={problem.id}
             problem={problem}
-            onSubmit={isAuthenticated && !isContestEnded ? submitMCQ : undefined}
+            onSubmit={canSubmitMCQ ? submitMCQ : undefined}
+            submissionError={mcqSubmissionError}
+            onRetryPolling={retryPolling}
             isContestEnded={isContestEnded}
-            submittedOption={showOwnSubmission ? submittedOptionIndex : null}
+            submittedOption={submittedOptionIndex}
+            contestId={contestId}
+            prevProblemId={prevMcq?.id}
+            nextProblemId={nextMcq?.id}
+            mcqIndex={currentMcqIndex >= 0 ? currentMcqIndex + 1 : undefined}
+            totalMcqs={mcqProblems.length > 0 ? mcqProblems.length : undefined}
+            onNavigate={(targetId) => navigate(`/contests/${contestId}/problems/${targetId}`)}
           />
         )}
       </div>
-
-      {/* Submission panel: ONLY shown during active live contests */}
-      {isAuthenticated && !isContestEnded && (
-        <SubmissionPanel
-          problemType={problem.type}
-          activeSubmission={activeSubmission}
-          history={history}
-          historyError={historyError}
-          isHistoryLoading={isHistoryLoading}
-          hasMoreHistory={hasMoreHistory}
-          onRetryPolling={retryPolling}
-          onRefreshHistory={refreshHistory}
-          onLoadMoreHistory={loadMoreHistory}
-        />
-      )}
     </div>
   );
 };

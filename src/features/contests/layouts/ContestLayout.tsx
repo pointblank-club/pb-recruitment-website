@@ -195,6 +195,7 @@ export const ContestLayout = () => {
         contestName={contest?.name || 'Contest'}
         contestId={contestId}
         onSubmitContest={canEnd ? handleOpenEndModal : undefined}
+        isContestEnded={isContestEnded}
       />
       
       <div className="flex-1 min-h-0 overflow-auto flex flex-col">

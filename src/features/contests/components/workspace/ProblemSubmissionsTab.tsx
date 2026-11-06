@@ -34,6 +34,7 @@ export const ProblemSubmissionsTab: React.FC<ProblemSubmissionsTabProps> = ({
             disabled={isHistoryLoading}
             className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#141b29] transition-colors"
             title="Refresh submission history"
+            aria-label="Refresh submission history"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isHistoryLoading ? 'animate-spin' : ''}`} />
           </button>

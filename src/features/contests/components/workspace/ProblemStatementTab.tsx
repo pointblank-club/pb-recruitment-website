@@ -30,6 +30,7 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
               to={`/contests/${contestId}/problems`}
               className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-[#141b29] border border-transparent hover:border-[#1e2636] transition-all flex items-center justify-center"
               title="Back to Problems"
+              aria-label="Back to Problems"
             >
               <ChevronLeft className="w-5 h-5" />
             </Link>
@@ -67,6 +68,22 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
         {problem.description && (
           <div className="space-y-2">
             <p className="whitespace-pre-line leading-relaxed text-slate-200">{problem.description}</p>
+          </div>
+        )}
+
+        {/* Input Format */}
+        {problem.input_format && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-white">Input Format</h3>
+            <p className="whitespace-pre-line font-mono text-xs text-slate-300 leading-relaxed">{problem.input_format}</p>
+          </div>
+        )}
+
+        {/* Output Format */}
+        {problem.output_format && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-white">Output Format</h3>
+            <p className="whitespace-pre-line font-mono text-xs text-slate-300 leading-relaxed">{problem.output_format}</p>
           </div>
         )}
 
@@ -123,6 +140,7 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
                             onClick={() => onCopy(pane.text, pane.key)}
                             className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#141b29] transition-colors"
                             title={`Copy sample ${pane.label.toLowerCase()}`}
+                            aria-label={`Copy sample ${pane.label.toLowerCase()}`}
                           >
                             {copiedId === pane.key ? (
                               <Check className="w-3 h-3 text-[#10b981]" />
