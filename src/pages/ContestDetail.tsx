@@ -25,6 +25,7 @@ const ContestDetail: React.FC = () => {
     const fetchContest = async () => {
       try {
         setIsLoading(true);
+        setContest(null);
         const data = await contestApi.getContestById(id!);
         if (isMounted) setContest(data ?? undefined);
       } catch (error) {

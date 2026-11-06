@@ -20,14 +20,20 @@ import AdminContestContestants from "./pages/AdminContestContestants";
 import AdminContestPlagiarism from "./pages/AdminContestPlagiarism";
 import { AdminRoute } from "./components/AdminRoute";
 import { AuthenticatedRoute } from "./components/AuthenticatedRoute";
+import { useAuth } from "./lib/AuthContext";
 
 const App: React.FC = () => {
+  const { user } = useAuth();
+
   return (
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/test" element={<TestPage />} />
         <Route path="/contests" element={<ContestList />} />
-        <Route path="/contest/:id" element={<ContestDetail />} />
+        <Route
+          path="/contest/:id"
+          element={<ContestDetail key={user?.uid || "guest"} />}
+        />
         <Route
           path="/contests/:contestId"
           element={<ContestLayout />}
