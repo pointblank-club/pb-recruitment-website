@@ -24,7 +24,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
   }
 
   return (
-    <div className={`space-y-4 font-['DM_Sans'] ${compact ? 'text-xs' : ''}`} aria-live="polite">
+    <div className={`space-y-4 font-['DM_Sans'] ${compact ? 'text-xs' : ''}`}>
       {!compact && (
         <div className="flex items-center justify-between pb-2 border-b border-[#1e2636]">
           <h2 className="text-sm font-semibold text-white">Latest Result</h2>
@@ -112,10 +112,10 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
                     {isPass ? 'Passed' : formatVerdict(tc.status)}
                   </span>
                   <span className="text-slate-400 font-mono">
-                    {tc.runtime !== undefined ? `${tc.runtime} ms` : '—'}
+                    {tc.runtime != null ? `${tc.runtime} ms` : '—'}
                   </span>
                   <span className="text-slate-400 font-mono">
-                    {tc.memory !== undefined ? `${tc.memory} KB` : '—'}
+                    {tc.memory != null ? `${tc.memory} KB` : '—'}
                   </span>
                 </div>
               );

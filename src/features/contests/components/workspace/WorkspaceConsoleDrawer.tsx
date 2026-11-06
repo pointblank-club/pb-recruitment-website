@@ -29,6 +29,7 @@ interface WorkspaceConsoleDrawerProps {
   activeSubmission: ActiveSubmission;
   onRetryPolling?: () => void;
   onInvalidateRun: () => void;
+  isResizing?: boolean;
 }
 
 export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
@@ -46,12 +47,24 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
   activeSubmission,
   onRetryPolling,
   onInvalidateRun,
+  isResizing = false,
 }) => {
   return (
     <div
-      className="flex flex-col bg-[#090d14] border-t border-[#1e2636] overflow-hidden flex-shrink-0 transition-[height] duration-150 ease-out font-['DM_Sans']"
+      className={`flex flex-col bg-[#090d14] border-t border-[#1e2636] overflow-hidden flex-shrink-0 font-['DM_Sans'] ${
+        isResizing ? '' : 'transition-[height] duration-150 ease-out'
+      }`}
       style={{ height: isConsoleCollapsed ? '36px' : `${consoleHeight}px` }}
     >
+      {/* Screen reader live announcement region for submission verdicts */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {activeSubmission.phase === 'submitting' && 'Sending submission'}
+        {activeSubmission.phase === 'received' && 'Submission received'}
+        {activeSubmission.phase === 'polling' && 'Judging in progress'}
+        {activeSubmission.phase === 'completed' && `Verdict: ${formatVerdict(activeSubmission.status)}`}
+        {activeSubmission.phase === 'timeout' && 'Verdict delayed'}
+        {activeSubmission.phase === 'error' && (activeSubmission.id ? 'Could not verify verdict' : 'Submission failed')}
+      </div>
       {/* Console Header Bar (36px) */}
       <div className="h-9 bg-[#0b0f17] border-b border-[#1e2636] px-3 flex items-center justify-between flex-shrink-0">
         {/* Left side: Console Tabs */}
@@ -135,6 +148,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
           <button
             type="button"
             onClick={() => setIsConsoleCollapsed(!isConsoleCollapsed)}
+            aria-expanded={!isConsoleCollapsed}
             className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-white transition-colors"
           >
             <span>{isConsoleCollapsed ? 'Show Console' : 'Hide Console'}</span>

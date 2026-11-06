@@ -616,6 +616,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
               activeSubmission={activeSubmission}
               onRetryPolling={onRetryPolling}
               onInvalidateRun={invalidateRun}
+              isResizing={isResizingV}
             />
           </div>
         )}
