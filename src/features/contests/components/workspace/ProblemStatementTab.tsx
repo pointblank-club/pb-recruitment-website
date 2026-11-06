@@ -70,6 +70,22 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
           </div>
         )}
 
+        {/* Input Format */}
+        {problem.input_format && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-white">Input Format</h3>
+            <p className="whitespace-pre-line font-mono text-xs text-slate-300 leading-relaxed">{problem.input_format}</p>
+          </div>
+        )}
+
+        {/* Output Format */}
+        {problem.output_format && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-white">Output Format</h3>
+            <p className="whitespace-pre-line font-mono text-xs text-slate-300 leading-relaxed">{problem.output_format}</p>
+          </div>
+        )}
+
         {/* Constraints / Note */}
         {problem.constraints && problem.constraints.length > 0 && (
           <div className="space-y-2">

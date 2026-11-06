@@ -104,15 +104,19 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
           </div>
           <div className="divide-y divide-[#192233]">
             {activeSubmission.details.test_case_results.map((tc: TestCaseResult, idx: number) => {
-              const isPass = ['pass', 'passed'].includes(tc.status);
+              const isPass = PASSING_STATUSES.has(tc.status);
               return (
                 <div key={idx} className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-2 text-xs items-center">
                   <span className="text-slate-300 font-mono">Case {idx + 1}</span>
                   <span className={isPass ? 'text-[#10b981] font-medium' : 'text-rose-400 font-medium'}>
                     {isPass ? 'Passed' : formatVerdict(tc.status)}
                   </span>
-                  <span className="text-slate-400 font-mono">{tc.runtime ?? '—'} ms</span>
-                  <span className="text-slate-400 font-mono">{tc.memory ?? '—'} KB</span>
+                  <span className="text-slate-400 font-mono">
+                    {tc.runtime !== undefined ? `${tc.runtime} ms` : '—'}
+                  </span>
+                  <span className="text-slate-400 font-mono">
+                    {tc.memory !== undefined ? `${tc.memory} KB` : '—'}
+                  </span>
                 </div>
               );
             })}
