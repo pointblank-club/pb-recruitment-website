@@ -13,6 +13,7 @@ interface UseCodeDraftOptions {
   defaultTemplates: Record<string, string>;
   defaultLanguage?: string;
   defaultInput?: string;
+  enabled?: boolean;
 }
 
 interface UseCodeDraftResult {
@@ -31,11 +32,12 @@ export const useCodeDraft = ({
   defaultTemplates,
   defaultLanguage = 'cpp',
   defaultInput = '',
+  enabled = true,
 }: UseCodeDraftOptions): UseCodeDraftResult => {
   const storageKey = `contest_code_draft_${userId}_${contestId}_${problemId}`;
 
   // Helper to load draft safely from localStorage
-  const loadSavedDraft = (): CodeDraft | null => {
+  const loadSavedDraft = useCallback((): CodeDraft | null => {
     try {
       const raw = localStorage.getItem(storageKey);
       if (!raw) return null;
@@ -43,10 +45,11 @@ export const useCodeDraft = ({
     } catch {
       return null;
     }
-  };
+  }, [storageKey]);
 
   // 1. Initialize states using saved draft if available, otherwise defaults
   const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
+    if (!enabled) return defaultLanguage;
     const draft = loadSavedDraft();
     return draft?.selectedLanguage && defaultTemplates[draft.selectedLanguage] !== undefined
       ? draft.selectedLanguage
@@ -54,6 +57,7 @@ export const useCodeDraft = ({
   });
 
   const [codeByLanguage, setCodeByLanguage] = useState<Record<string, string>>(() => {
+    if (!enabled) return { ...defaultTemplates };
     const draft = loadSavedDraft();
     return {
       ...defaultTemplates,
@@ -62,6 +66,7 @@ export const useCodeDraft = ({
   });
 
   const [customInput, setCustomInput] = useState<string>(() => {
+    if (!enabled) return defaultInput;
     const draft = loadSavedDraft();
     return typeof draft?.customInput === 'string' ? draft.customInput : defaultInput;
   });
@@ -77,32 +82,81 @@ export const useCodeDraft = ({
     latestDraftRef.current = { selectedLanguage, codeByLanguage, customInput };
   }, [selectedLanguage, codeByLanguage, customInput]);
 
+  // Sync state when storageKey changes (e.g. Firebase Auth finishes resolving userId)
+  useEffect(() => {
+    if (!enabled) return;
+    const draft = loadSavedDraft();
+    if (draft) {
+      const lang =
+        draft.selectedLanguage && defaultTemplates[draft.selectedLanguage] !== undefined
+          ? draft.selectedLanguage
+          : defaultLanguage;
+      const codes = {
+        ...defaultTemplates,
+        ...(draft.codeByLanguage || {}),
+      };
+      const input = typeof draft.customInput === 'string' ? draft.customInput : defaultInput;
+
+      latestDraftRef.current = {
+        selectedLanguage: lang,
+        codeByLanguage: codes,
+        customInput: input,
+      };
+
+      setSelectedLanguage(lang);
+      setCodeByLanguage(codes);
+      setCustomInput(input);
+    } else {
+      latestDraftRef.current = {
+        selectedLanguage: defaultLanguage,
+        codeByLanguage: { ...defaultTemplates },
+        customInput: defaultInput,
+      };
+      setSelectedLanguage(defaultLanguage);
+      setCodeByLanguage({ ...defaultTemplates });
+      setCustomInput(defaultInput);
+    }
+  }, [storageKey, enabled, defaultLanguage, defaultTemplates, defaultInput, loadSavedDraft]);
+
   // Synchronous flush helper
   const flushDraftToStorage = useCallback(() => {
+    if (!enabled) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify(latestDraftRef.current));
     } catch {
       // Gracefully handle storage quota or privacy mode errors
     }
-  }, [storageKey]);
+  }, [storageKey, enabled]);
 
   // Debounced auto-save during active typing (400ms delay)
   useEffect(() => {
+    if (!enabled) return;
     const timer = setTimeout(() => {
       flushDraftToStorage();
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [selectedLanguage, codeByLanguage, customInput, flushDraftToStorage]);
+  }, [enabled, selectedLanguage, codeByLanguage, customInput, flushDraftToStorage]);
 
-  // Ensure state is flushed immediately if the user refreshes, closes tab, or component unmounts
+  // Flush on beforeunload and mobile visibilitychange (tab switch, minimize, lock)
   useEffect(() => {
+    if (!enabled) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushDraftToStorage();
+      }
+    };
+
     window.addEventListener('beforeunload', flushDraftToStorage);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       flushDraftToStorage();
       window.removeEventListener('beforeunload', flushDraftToStorage);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [flushDraftToStorage]);
+  }, [enabled, flushDraftToStorage]);
 
   return {
     selectedLanguage,
@@ -113,4 +167,3 @@ export const useCodeDraft = ({
     setCustomInput,
   };
 };
-

@@ -97,6 +97,7 @@ export const CodeProblemView = ({
     defaultTemplates: DEFAULT_CODE_TEMPLATES,
     defaultLanguage: 'cpp',
     defaultInput: problem.examples?.[0]?.input || '',
+    enabled: !hideIDE,
   });
   const [runResult, setRunResult] = useState<RunCodeResponse | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
@@ -122,7 +123,7 @@ export const CodeProblemView = ({
   const handleLanguageChange = useCallback((newLanguage: string) => {
     invalidateRun();
     setSelectedLanguage(newLanguage);
-  }, [invalidateRun]);
+  }, [invalidateRun, setSelectedLanguage]);
 
   const handleCodeChange = useCallback((value: string | undefined) => {
     invalidateRun();
@@ -130,7 +131,7 @@ export const CodeProblemView = ({
       ...current,
       [selectedLanguage]: value || '',
     }));
-  }, [invalidateRun, selectedLanguage]);
+  }, [invalidateRun, selectedLanguage, setCodeByLanguage]);
 
   const handleRunCode = useCallback(async () => {
     if (!onRun) return;

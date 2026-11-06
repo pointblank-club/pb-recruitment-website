@@ -10,11 +10,13 @@ import type { ContestOutletContext } from '../layouts/ContestLayout';
 import { contestApi, type SubmissionDetailsResponse } from '@/services/api/contestApi';
 import { AlertCircle, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/lib/AuthContext';
 
 export const ContestProblemPage = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const {
     isContestEnded = false,
     isAuthenticated = false,
@@ -193,7 +195,7 @@ export const ContestProblemPage = () => {
             <div className="flex-1 flex min-h-0 h-full overflow-hidden">
               <div className="w-1/2 min-h-0 h-full border-r border-gray-700 overflow-hidden flex flex-col">
                 <CodeProblemView
-                  key={problem.id}
+                  key={`${user?.uid || 'guest'}_${problem.id}`}
                   problem={problem}
                   contestId={contestId}
                   hideIDE={true}
@@ -212,7 +214,7 @@ export const ContestProblemPage = () => {
           ) : (
             /* Active contest OR post-contest unauthenticated / unregistered */
             <CodeProblemView
-              key={problem.id}
+              key={`${user?.uid || 'guest'}_${problem.id}`}
               problem={problem}
               contestId={contestId}
               onSubmit={isAuthenticated && !isContestEnded ? submitCode : undefined}
