@@ -1,32 +1,54 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/AuthContext';
 import type { Problem } from '../problem.types';
 import { contestApi } from '@/services/api/contestApi';
 
 export const useContestProblems = (contestId: string) => {
-  const [problems, setProblems] = useState<Problem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const scope = `${contestId}:${user?.uid ?? ''}`;
+  const [result, setResult] = useState<{
+    scope: string;
+    problems: Problem[];
+    isLoading: boolean;
+    error: string | null;
+  }>({ scope: '', problems: [], isLoading: true, error: null });
 
   useEffect(() => {
+    if (!contestId) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let delay = 2000;
+    let hasLoaded = false;
+
+    const schedule = () => {
+      timer = setTimeout(() => { void fetchProblems(); }, delay);
+      delay = Math.min(delay * 2, 15000);
+    };
     const fetchProblems = async () => {
       try {
-        setIsLoading(true);
-        setError(null);
-        const data = await contestApi.getContestProblems(contestId);
-        setProblems(data);
+        const problems = await contestApi.getContestProblems(contestId, controller.signal);
+        if (controller.signal.aborted) return;
+        hasLoaded = true;
+        setResult({ scope, problems, isLoading: false, error: null });
+        if (problems.some((problem) => problem.progress === 'judging')) schedule();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch problems');
-      } finally {
-        setIsLoading(false);
+        if (controller.signal.aborted) return;
+        if (hasLoaded) schedule();
+        else setResult({
+          scope, problems: [], isLoading: false,
+          error: err instanceof Error ? err.message : 'Failed to fetch problems',
+        });
       }
     };
 
-    fetchProblems();
-  }, [contestId]);
+    void fetchProblems();
+    return () => {
+      controller.abort();
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [contestId, scope]);
 
-  return {
-    problems,
-    isLoading,
-    error,
-  };
+  return result.scope === scope
+    ? result
+    : { problems: [], isLoading: true, error: null };
 };

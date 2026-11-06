@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Play, Send, Copy, Check, Clock, Cpu } from 'lucide-react';
 import type { RunCodeResponse } from '@/services/api/contestApi';
 import { formatVerdict, getVerdictClasses } from './SubmissionPanel';
-import type { Problem } from '../problem.types';
 import { useAuth } from '@/lib/AuthContext';
+import { setProblemAttempted } from '@/lib/contestStorage';
+import type { Problem } from '../problem.types';
 import { useCodeDraft } from '../hooks/useCodeDraft';
 
 interface CodeProblemViewProps {
@@ -147,6 +148,7 @@ export const CodeProblemView = ({
     setRunError(null);
     setRunResult(null);
     const inputRevision = inputRevisionRef.current;
+    if (user) setProblemAttempted(problem.contest_id, user.uid, problem.id);
 
     try {
       const result = await onRun(code, selectedLanguage, customInput);
@@ -160,7 +162,7 @@ export const CodeProblemView = ({
     } finally {
       setIsRunning(false);
     }
-  }, [code, selectedLanguage, customInput, onRun]);
+  }, [code, selectedLanguage, customInput, onRun, problem.contest_id, problem.id, user]);
 
   const handleSubmit = async () => {
     if (!onSubmit) return;
@@ -590,8 +592,8 @@ export const CodeProblemView = ({
                           <Cpu className="w-3 h-3 text-gray-400" />
                           {runResult.memory} KiB
                         </span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${getVerdictClasses(runResult.status)}`}>
-                          {formatVerdict(runResult.status)}
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${runResult.status === 'accepted' ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : getVerdictClasses(runResult.status)}`}>
+                          {runResult.status === 'accepted' ? 'Attempted (not graded)' : formatVerdict(runResult.status)}
                         </span>
                       </div>
                     )}
