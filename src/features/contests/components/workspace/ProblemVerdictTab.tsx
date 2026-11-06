@@ -24,7 +24,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
   }
 
   return (
-    <div className={`space-y-4 font-['DM_Sans'] ${compact ? 'text-xs' : ''}`}>
+    <div className={`space-y-4 font-['DM_Sans'] ${compact ? 'text-xs' : ''}`} aria-live="polite">
       {!compact && (
         <div className="flex items-center justify-between pb-2 border-b border-[#1e2636]">
           <h2 className="text-sm font-semibold text-white">Latest Result</h2>
