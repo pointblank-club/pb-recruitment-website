@@ -16,9 +16,10 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
   const { user } = useAuth();
   const eligibleYearsText = contest.formatEligibleYears();
 
-  const isRegistered = Boolean(
-    contest.is_registered || (user?.uid && getContestRegistered(contest.id, user.uid))
-  );
+  const isRegistered =
+    contest.is_registered !== undefined
+      ? contest.is_registered
+      : Boolean(user?.uid && getContestRegistered(contest.id, user.uid));
   const isOngoing = contest.isContestOngoing();
 
   return (

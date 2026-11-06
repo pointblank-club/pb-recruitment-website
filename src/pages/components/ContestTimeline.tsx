@@ -7,7 +7,12 @@ import type { Contest } from "@/models/contest";
 import { contestApi } from "@/services/api/contestApi";
 import { Popup } from "@/components/ui/popup";
 import { useAuth } from "@/lib/AuthContext";
-import { getContestSubmitted, getContestRegistered, setContestRegistered } from "@/lib/contestStorage";
+import {
+  getContestSubmitted,
+  getContestRegistered,
+  setContestRegistered,
+  removeContestRegistered,
+} from "@/lib/contestStorage";
 
 interface ContestTimelineProps {
   contest: Contest;
@@ -17,9 +22,12 @@ interface ContestTimelineProps {
 const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [isRegistered, setIsRegistered] = React.useState<boolean>(() =>
-    Boolean(contest.is_registered || (user?.uid && getContestRegistered(contest.id, user.uid)))
-  );
+  const [isRegistered, setIsRegistered] = React.useState<boolean>(() => {
+    if (contest.is_registered !== undefined) {
+      return contest.is_registered;
+    }
+    return Boolean(user?.uid && getContestRegistered(contest.id, user.uid));
+  });
   const [popup, setPopup] = useState<{
       isOpen: boolean;
       type: "success" | "error";
@@ -62,12 +70,17 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
   };
 
   useEffect(() => {
-    const registered = Boolean(
-      contest.is_registered || (user?.uid && getContestRegistered(contest.id, user.uid))
-    );
-    setIsRegistered(registered);
-    if (contest.is_registered && user?.uid) {
-      setContestRegistered(contest.id, user.uid);
+    if (contest.is_registered !== undefined) {
+      setIsRegistered(contest.is_registered);
+      if (user?.uid) {
+        if (contest.is_registered) {
+          setContestRegistered(contest.id, user.uid);
+        } else {
+          removeContestRegistered(contest.id, user.uid);
+        }
+      }
+    } else {
+      setIsRegistered(Boolean(user?.uid && getContestRegistered(contest.id, user.uid)));
     }
   }, [contest.id, contest.is_registered, user?.uid]);
 

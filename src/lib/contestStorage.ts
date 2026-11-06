@@ -30,3 +30,11 @@ export const setContestRegistered = (contestId: string, userId: string): void =>
   }
 };
 
+export const removeContestRegistered = (contestId: string, userId: string): void => {
+  try {
+    localStorage.removeItem(`contest_registered_${contestId}_${userId}`);
+  } catch {
+    // Ignore storage failure
+  }
+};
+
