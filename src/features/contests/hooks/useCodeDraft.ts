@@ -36,12 +36,29 @@ export const useCodeDraft = ({
 }: UseCodeDraftOptions): UseCodeDraftResult => {
   const storageKey = `contest_code_draft_${userId}_${contestId}_${problemId}`;
 
-  // Helper to load draft safely from localStorage
+  // Helper to load draft safely from localStorage and validate runtime shape
   const loadSavedDraft = useCallback((): CodeDraft | null => {
     try {
       const raw = localStorage.getItem(storageKey);
       if (!raw) return null;
-      return JSON.parse(raw) as CodeDraft;
+      const parsed: unknown = JSON.parse(raw);
+      if (typeof parsed !== 'object' || parsed === null) return null;
+
+      const { selectedLanguage, codeByLanguage, customInput } = parsed as Record<string, unknown>;
+      const codes: Record<string, string> = {};
+      if (typeof codeByLanguage === 'object' && codeByLanguage !== null && !Array.isArray(codeByLanguage)) {
+        for (const [lang, value] of Object.entries(codeByLanguage)) {
+          if (typeof value === 'string') {
+            codes[lang] = value;
+          }
+        }
+      }
+
+      return {
+        selectedLanguage: typeof selectedLanguage === 'string' ? selectedLanguage : '',
+        codeByLanguage: codes,
+        customInput: typeof customInput === 'string' ? customInput : undefined,
+      };
     } catch {
       return null;
     }
@@ -118,15 +135,34 @@ export const useCodeDraft = ({
     }
   }, [storageKey, enabled, defaultLanguage, defaultTemplates, defaultInput, loadSavedDraft]);
 
-  // Synchronous flush helper
+  // Synchronous flush helper - only persists entries that differ from defaults
   const flushDraftToStorage = useCallback(() => {
     if (!enabled) return;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(latestDraftRef.current));
+      const { selectedLanguage, codeByLanguage, customInput } = latestDraftRef.current;
+      const changedCode = Object.fromEntries(
+        Object.entries(codeByLanguage).filter(([lang, code]) => code !== defaultTemplates[lang]),
+      );
+      const hasChangedCode = Object.keys(changedCode).length > 0;
+      const hasChangedInput = customInput !== defaultInput;
+      const hasChangedLang = selectedLanguage !== defaultLanguage;
+
+      // If nothing has changed from defaults, remove redundant key from localStorage
+      if (!hasChangedCode && !hasChangedInput && !hasChangedLang) {
+        localStorage.removeItem(storageKey);
+        return;
+      }
+
+      const draft: CodeDraft = {
+        selectedLanguage,
+        codeByLanguage: changedCode,
+        customInput: hasChangedInput ? customInput : undefined,
+      };
+      localStorage.setItem(storageKey, JSON.stringify(draft));
     } catch {
       // Gracefully handle storage quota or privacy mode errors
     }
-  }, [storageKey, enabled]);
+  }, [storageKey, enabled, defaultTemplates, defaultInput, defaultLanguage]);
 
   // Debounced auto-save during active typing (400ms delay)
   useEffect(() => {
