@@ -10,6 +10,7 @@ interface MCQProblemViewProps {
   problem: Problem;
   onSubmit?: (selectedOption: number) => Promise<void>;
   submissionError?: string | null;
+  onRetryPolling?: () => void;
   isContestEnded?: boolean;
   /** submittedOption: option chosen by registered user before contest ended */
   submittedOption?: number | null;
@@ -25,6 +26,7 @@ export const MCQProblemView = ({
   problem,
   onSubmit,
   submissionError = null,
+  onRetryPolling,
   isContestEnded = false,
   submittedOption = null,
   contestId,
@@ -223,7 +225,7 @@ export const MCQProblemView = ({
         </div>
       </div>
 
-      {(onSubmit || hasSubmitted || prevProblemId !== undefined || nextProblemId !== undefined) && (
+      {(onSubmit || hasSubmitted || Boolean(displayError) || prevProblemId !== undefined || nextProblemId !== undefined) && (
         <div className="border-t border-gray-700 bg-black">
           <div className="max-w-4xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3">
             {/* MCQ Navigation buttons */}
@@ -254,52 +256,64 @@ export const MCQProblemView = ({
             </div>
 
             {/* Answer submission actions */}
-            {hasSubmitted ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-950/40 border border-green-800/60 text-green-300 text-xs font-medium">
-                <CheckCircle2 className="w-4 h-4 text-green-400" />
-                <span>Answer Submitted</span>
-              </div>
-            ) : onSubmit ? (
-              <div className="flex items-center gap-3 flex-wrap">
-                {displayError && (
-                  <div
-                    role="alert"
-                    aria-live="assertive"
-                    className="flex items-center gap-1.5 text-xs text-red-400 bg-red-950/50 border border-red-800/60 px-3 py-1.5 rounded-md max-w-md"
-                  >
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span>{displayError}</span>
-                  </div>
-                )}
-                <Button
-                  onClick={handleClearResponse}
-                  variant="outline"
-                  size="sm"
-                  disabled={!selectedAnswer || isSubmitting}
-                  className="flex items-center gap-2 text-xs text-black"
+            <div className="flex items-center gap-3 flex-wrap">
+              {displayError && (
+                <div
+                  role="alert"
+                  aria-live="assertive"
+                  className="flex items-center gap-2 text-xs text-red-400 bg-red-950/50 border border-red-800/60 px-3 py-1.5 rounded-md max-w-md"
                 >
-                  Clear Response
-                </Button>
-                <Button
-                  onClick={handleSubmit}
-                  size="sm"
-                  disabled={isSubmitting || !selectedAnswer || options.length === 0}
-                  className="flex items-center gap-2 text-xs bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-700 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-3.5 h-3.5" />
-                      Submit Answer
-                    </>
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{displayError}</span>
+                  {hasSubmitted && onRetryPolling && (
+                    <button
+                      type="button"
+                      onClick={onRetryPolling}
+                      className="text-xs text-red-300 underline hover:text-white ml-1 font-medium whitespace-nowrap focus:outline-none"
+                    >
+                      Retry
+                    </button>
                   )}
-                </Button>
-              </div>
-            ) : null}
+                </div>
+              )}
+
+              {hasSubmitted ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-950/40 border border-green-800/60 text-green-300 text-xs font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-green-400" />
+                  <span>Answer Submitted</span>
+                </div>
+              ) : onSubmit ? (
+                <>
+                  <Button
+                    onClick={handleClearResponse}
+                    variant="outline"
+                    size="sm"
+                    disabled={!selectedAnswer || isSubmitting}
+                    className="flex items-center gap-2 text-xs text-black"
+                  >
+                    Clear Response
+                  </Button>
+                  <Button
+                    onClick={handleSubmit}
+                    size="sm"
+                    disabled={isSubmitting || !selectedAnswer || options.length === 0}
+                    className="flex items-center gap-2 text-xs bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-700 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3.5 h-3.5" />
+                        Submit Answer
+                      </>
+                    )}
+                  </Button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       )}

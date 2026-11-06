@@ -347,17 +347,21 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
         {/* LEFT PANE: Tabbed Problem Context                         */}
         {/* ========================================================= */}
         <div
-          className="w-full md:w-[var(--left-pane-width)] flex flex-col min-h-[300px] md:min-h-0 h-1/2 md:h-full overflow-hidden bg-[#090d14] border-b md:border-b-0 md:border-r border-[#1e2636] shrink-0 md:shrink"
+          className={`w-full md:w-[var(--left-pane-width)] flex flex-col min-h-[300px] md:min-h-0 ${
+            hideIDE ? 'h-full' : 'h-1/2 md:h-full'
+          } overflow-hidden bg-[#090d14] ${
+            hideIDE ? '' : 'border-b md:border-b-0'
+          } md:border-r border-[#1e2636] shrink-0 md:shrink`}
           style={{ '--left-pane-width': hideIDE ? '100%' : `${leftPaneWidthPct}%` } as React.CSSProperties}
         >
           {/* Left Pane Top Tab Bar */}
-          <div className="h-10 bg-[#0b0f17] border-b border-[#1e2636] flex items-center justify-between px-2 flex-shrink-0">
-            <div className="flex items-center gap-1 h-full">
+          <div className="h-10 bg-[#0b0f17] border-b border-[#1e2636] flex items-center justify-between px-2 flex-shrink-0 gap-2">
+            <div className="flex items-center gap-1 h-full min-w-0 overflow-x-auto flex-1 scrollbar-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {/* Tab 1: Statement */}
               <button
                 type="button"
                 onClick={() => setLeftTab('statement')}
-                className={`relative px-3.5 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                className={`relative px-3.5 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 ${
                   leftTab === 'statement' ? 'text-white' : 'text-gray-400 hover:text-gray-200'
                 }`}
               >
@@ -373,7 +377,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setLeftTab('submissions')}
-                  className={`relative px-3.5 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                  className={`relative px-3.5 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 ${
                     leftTab === 'submissions' ? 'text-white' : 'text-gray-400 hover:text-gray-200'
                   }`}
                 >
@@ -395,7 +399,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setLeftTab('latest_result')}
-                  className={`relative px-3.5 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                  className={`relative px-3.5 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 ${
                     leftTab === 'latest_result' ? 'text-white' : 'text-gray-400 hover:text-gray-200'
                   }`}
                 >
@@ -423,7 +427,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                 type="button"
                 onClick={toggleMaximizeLeft}
                 title={isLeftMaximized ? 'Restore Width' : 'Maximize Statement Width'}
-                className="p-1.5 rounded hover:bg-[#141b29] text-gray-400 hover:text-white transition-colors"
+                className="p-1.5 rounded hover:bg-[#141b29] text-gray-400 hover:text-white transition-colors shrink-0"
               >
                 {isLeftMaximized ? (
                   <Minimize2 className="w-3.5 h-3.5 text-[#10b981]" />

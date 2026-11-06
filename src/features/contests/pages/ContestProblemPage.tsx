@@ -180,7 +180,9 @@ export const ContestProblemPage = () => {
     isAuthenticated && !isLocked && isHistoryResolved && !hasSubmittedMCQ;
 
   const mcqSubmissionError =
-    activeSubmission.phase === 'error' ? activeSubmission.message : null;
+    activeSubmission.phase === 'error' || activeSubmission.phase === 'timeout'
+      ? activeSubmission.message || 'Could not verify verdict'
+      : null;
 
   return (
     <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
@@ -309,6 +311,7 @@ export const ContestProblemPage = () => {
             problem={problem}
             onSubmit={canSubmitMCQ ? submitMCQ : undefined}
             submissionError={mcqSubmissionError}
+            onRetryPolling={retryPolling}
             isContestEnded={isContestEnded}
             submittedOption={submittedOptionIndex}
             contestId={contestId}
