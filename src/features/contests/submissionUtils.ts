@@ -32,7 +32,7 @@ export const getVerdictClasses = (status?: string) => {
 };
 
 export const formatSubmittedAt = (timestamp?: number | null) => {
-  if (!timestamp || isNaN(timestamp)) return '—';
+  if (!timestamp || !Number.isFinite(timestamp)) return '—';
   const milliseconds = timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
