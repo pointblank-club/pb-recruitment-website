@@ -254,8 +254,12 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
       if (!containerRef.current) return;
       const bounds = containerRef.current.getBoundingClientRect();
       const relativeX = e.clientX - bounds.left;
+      const minLeftPx = 280;
+      const minRightPx = 320;
+      const minPct = Math.max(25, (minLeftPx / bounds.width) * 100);
+      const maxPct = Math.min(68, ((bounds.width - minRightPx) / bounds.width) * 100);
       const pct = (relativeX / bounds.width) * 100;
-      const clamped = Math.max(25, Math.min(72, pct));
+      const clamped = Math.max(minPct, Math.min(Math.max(minPct, maxPct), pct));
       setLeftPaneWidthPct(clamped);
       setIsLeftMaximized(false);
     };
@@ -316,7 +320,15 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
       setLeftPaneWidthPct(46);
       setIsLeftMaximized(false);
     } else {
-      setLeftPaneWidthPct(68);
+      let maxPct = 62;
+      if (containerRef.current) {
+        const width = containerRef.current.getBoundingClientRect().width;
+        if (width > 0) {
+          const calculated = ((width - 340) / width) * 100;
+          maxPct = Math.max(50, Math.min(62, Math.floor(calculated)));
+        }
+      }
+      setLeftPaneWidthPct(maxPct);
       setIsLeftMaximized(true);
     }
   };
@@ -329,14 +341,14 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
       <div
         ref={containerRef}
         id="workspaceContainer"
-        className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden"
+        className="flex-1 flex flex-col md:flex-row min-h-0 overflow-y-auto md:overflow-hidden"
       >
         {/* ========================================================= */}
         {/* LEFT PANE: Tabbed Problem Context                         */}
         {/* ========================================================= */}
         <div
-          className="flex flex-col min-h-0 overflow-hidden bg-[#090d14] border-r border-[#1e2636] flex-shrink-0"
-          style={{ width: hideIDE ? '100%' : `${leftPaneWidthPct}%` }}
+          className="w-full md:w-[var(--left-pane-width)] flex flex-col min-h-[300px] md:min-h-0 h-1/2 md:h-full overflow-hidden bg-[#090d14] border-b md:border-b-0 md:border-r border-[#1e2636] shrink-0 md:shrink"
+          style={{ '--left-pane-width': hideIDE ? '100%' : `${leftPaneWidthPct}%` } as React.CSSProperties}
         >
           {/* Left Pane Top Tab Bar */}
           <div className="h-10 bg-[#0b0f17] border-b border-[#1e2636] flex items-center justify-between px-2 flex-shrink-0">
@@ -472,12 +484,12 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
         {!hideIDE && (
           <div
             ref={rightPaneRef}
-            className="flex-1 flex flex-col min-h-0 min-w-[320px] overflow-hidden bg-[#090d14]"
+            className="w-full md:w-auto flex-1 flex flex-col min-h-[400px] md:min-h-0 min-w-0 md:min-w-[320px] overflow-hidden bg-[#090d14]"
           >
             {/* Top Toolbar */}
-            <div className="h-12 bg-[#0b0f17] border-b border-[#1e2636] px-4 flex items-center justify-between flex-shrink-0">
+            <div className="min-h-12 h-auto py-2 bg-[#0b0f17] border-b border-[#1e2636] px-3 md:px-4 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
               {/* Left side: Language selector & helpers */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <select
                   value={selectedLanguage}
                   onChange={(e) => handleLanguageChange(e.target.value)}
@@ -518,12 +530,12 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
 
               {/* Right side: Action buttons */}
               {isLocked ? (
-                <div className="flex items-center gap-1.5 text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/30 px-3 py-1 rounded">
+                <div className="flex items-center gap-1.5 text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/30 px-3 py-1 rounded shrink-0">
                   <Lock className="w-3.5 h-3.5" />
                   <span>Contest Ended · Read Only</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2.5 shrink-0">
                   <Button
                     onClick={handleRunCode}
                     disabled={isRunning || !code.trim()}

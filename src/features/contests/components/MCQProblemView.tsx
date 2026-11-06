@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Save, ListChecks, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Save, ListChecks, CheckCircle2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import type { Problem } from '../problem.types';
 
 interface MCQProblemViewProps {
   problem: Problem;
   onSubmit?: (selectedOption: number) => Promise<void>;
+  submissionError?: string | null;
   isContestEnded?: boolean;
   /** submittedOption: option chosen by registered user before contest ended */
   submittedOption?: number | null;
@@ -23,6 +24,7 @@ interface MCQProblemViewProps {
 export const MCQProblemView = ({
   problem,
   onSubmit,
+  submissionError = null,
   isContestEnded = false,
   submittedOption = null,
   contestId,
@@ -35,6 +37,7 @@ export const MCQProblemView = ({
   const [userSelectedAnswer, setUserSelectedAnswer] = useState<string>('');
   const [justSubmitted, setJustSubmitted] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const hasSubmitted =
     (submittedOption !== null && submittedOption !== undefined) ||
@@ -50,6 +53,7 @@ export const MCQProblemView = ({
   const handleClearResponse = useCallback(() => {
     if (!hasSubmitted) {
       setUserSelectedAnswer('');
+      setLocalError(null);
     }
   }, [hasSubmitted]);
 
@@ -68,14 +72,20 @@ export const MCQProblemView = ({
 
     try {
       setIsSubmitting(true);
+      setLocalError(null);
       await onSubmit(parseInt(selectedAnswer));
       setJustSubmitted(selectedAnswer);
     } catch (error) {
       console.error('Submission error:', error);
+      if (error instanceof Error && error.message) {
+        setLocalError(error.message);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const displayError = submissionError || localError;
 
   const options = problem.options ?? [];
 
@@ -133,7 +143,12 @@ export const MCQProblemView = ({
             ) : (
               <RadioGroup
                 value={selectedAnswer}
-                onValueChange={(val) => !hasSubmitted && setUserSelectedAnswer(val)}
+                onValueChange={(val) => {
+                  if (!hasSubmitted) {
+                    setUserSelectedAnswer(val);
+                    setLocalError(null);
+                  }
+                }}
                 disabled={hasSubmitted || !onSubmit}
               >
                 <div className="space-y-2">
@@ -153,7 +168,12 @@ export const MCQProblemView = ({
                       <div
                         key={optionValue}
                         className={`flex items-center gap-4 p-4 rounded-lg border transition-all ${borderBgClass} ${!hasSubmitted && onSubmit ? 'cursor-pointer' : 'cursor-default'}`}
-                        onClick={() => !hasSubmitted && onSubmit && setUserSelectedAnswer(optionValue)}
+                        onClick={() => {
+                          if (!hasSubmitted && onSubmit) {
+                            setUserSelectedAnswer(optionValue);
+                            setLocalError(null);
+                          }
+                        }}
                       >
                         <RadioGroupItem
                           value={optionValue}
@@ -240,7 +260,17 @@ export const MCQProblemView = ({
                 <span>Answer Submitted</span>
               </div>
             ) : onSubmit ? (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                {displayError && (
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="flex items-center gap-1.5 text-xs text-red-400 bg-red-950/50 border border-red-800/60 px-3 py-1.5 rounded-md max-w-md"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{displayError}</span>
+                  </div>
+                )}
                 <Button
                   onClick={handleClearResponse}
                   variant="outline"

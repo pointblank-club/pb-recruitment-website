@@ -56,12 +56,18 @@ export const ContestProblemPage = () => {
 
   // Post-contest: fetch full details (including code) for the registered user's latest submission.
   // Also fetch details for MCQ problems so the chosen option is known during active contests.
+  const [attempt, setAttempt] = useState(0);
+
   const isMcq = problem?.type === 'mcq';
   const showOwnSubmission = isContestEnded && isAuthenticated && isRegistered;
+  const candidateLatest =
+    showOwnSubmission || (isMcq && isAuthenticated && history.length > 0) ? history[0] : undefined;
+  const latestHasOption = isMcq && candidateLatest?.option && candidateLatest.option.length > 0;
   const shouldFetchSubmissionDetails =
-    showOwnSubmission || (isMcq && isAuthenticated && history.length > 0);
-  const latest = shouldFetchSubmissionDetails ? history[0] : undefined;
-  const detailsKey = latest ? `${problemId}:${latest.id}:${latest.status}` : undefined;
+    (showOwnSubmission || (isMcq && isAuthenticated && history.length > 0)) &&
+    !(isMcq && latestHasOption);
+  const latest = shouldFetchSubmissionDetails ? candidateLatest : undefined;
+  const detailsKey = latest ? `${problemId}:${latest.id}:${latest.status}:${attempt}` : undefined;
 
   const [ownSubmission, setOwnSubmission] = useState<{
     key: string;
@@ -91,6 +97,7 @@ export const ContestProblemPage = () => {
   const submissionError = historyError || shownSubmission?.error;
 
   const retryOwnSubmission = () => {
+    setAttempt((n) => n + 1);
     refreshHistory();
   };
 
@@ -164,8 +171,16 @@ export const ContestProblemPage = () => {
       ? activeSubmission.details.option[0]
       : null;
 
+  const isHistoryResolved = !isHistoryLoading && !historyError;
+  const hasSavedMcqSubmission = history.length > 0 || !!activeSubmission.id;
   const hasSubmittedMCQ =
-    isMcq && (submittedOptionIndex !== null || history.length > 0 || !!activeSubmission.id);
+    isMcq && (submittedOptionIndex !== null || hasSavedMcqSubmission);
+
+  const canSubmitMCQ =
+    isAuthenticated && !isLocked && isHistoryResolved && !hasSubmittedMCQ;
+
+  const mcqSubmissionError =
+    activeSubmission.phase === 'error' ? activeSubmission.message : null;
 
   return (
     <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
@@ -197,21 +212,51 @@ export const ContestProblemPage = () => {
       )}
 
       {/* MCQ has no side pane, so its loading/error/empty states go here */}
-      {showOwnSubmission && problem.type === 'mcq' && (isLoadingSubmission || submissionError || history.length === 0) && (
-        <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
-          {isLoadingSubmission ? (
-            'Loading your answer…'
-          ) : submissionError ? (
-            <>
-              <span>Could not load your answer: {submissionError}</span>
-              <button type="button" onClick={retryOwnSubmission} className="text-green-400 hover:underline ml-2">
-                Retry
-              </button>
-            </>
-          ) : (
-            'You did not answer this question before the contest ended.'
-          )}
-        </div>
+      {isMcq && (
+        showOwnSubmission ? (
+          (isLoadingSubmission || submissionError || history.length === 0) && (
+            <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
+              {isLoadingSubmission ? (
+                'Loading your answer…'
+              ) : submissionError ? (
+                <>
+                  <span>Could not load your answer: {submissionError}</span>
+                  <button type="button" onClick={retryOwnSubmission} className="text-green-400 hover:underline ml-2">
+                    Retry
+                  </button>
+                </>
+              ) : (
+                'You did not answer this question before the contest ended.'
+              )}
+            </div>
+          )
+        ) : (
+          !isContestEnded && isAuthenticated && (
+            historyError ? (
+              <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
+                <span>Could not load submission history: {historyError}</span>
+                <button type="button" onClick={retryOwnSubmission} className="text-green-400 hover:underline ml-2">
+                  Retry
+                </button>
+              </div>
+            ) : isHistoryLoading ? (
+              <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
+                <span>Loading your answer…</span>
+              </div>
+            ) : hasSavedMcqSubmission && shownSubmission?.error ? (
+              <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
+                <span>Could not load your answer: {shownSubmission.error}</span>
+                <button type="button" onClick={retryOwnSubmission} className="text-green-400 hover:underline ml-2">
+                  Retry
+                </button>
+              </div>
+            ) : hasSavedMcqSubmission && isLoadingSubmission ? (
+              <div role="status" className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
+                <span>Loading your answer…</span>
+              </div>
+            ) : null
+          )
+        )
       )}
 
       <div className="flex min-h-0 flex-1 h-full overflow-hidden">
@@ -262,7 +307,8 @@ export const ContestProblemPage = () => {
           <MCQProblemView
             key={problem.id}
             problem={problem}
-            onSubmit={isAuthenticated && !isLocked && !hasSubmittedMCQ ? submitMCQ : undefined}
+            onSubmit={canSubmitMCQ ? submitMCQ : undefined}
+            submissionError={mcqSubmissionError}
             isContestEnded={isContestEnded}
             submittedOption={submittedOptionIndex}
             contestId={contestId}

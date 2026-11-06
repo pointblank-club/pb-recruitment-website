@@ -66,9 +66,9 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
         {activeSubmission.phase === 'error' && (activeSubmission.id ? 'Could not verify verdict' : 'Submission failed')}
       </div>
       {/* Console Header Bar (36px) */}
-      <div className="h-9 bg-[#0b0f17] border-b border-[#1e2636] px-3 flex items-center justify-between flex-shrink-0">
+      <div className="h-9 bg-[#0b0f17] border-b border-[#1e2636] px-3 flex items-center justify-between flex-shrink-0 gap-2">
         {/* Left side: Console Tabs */}
-        <div className="flex items-center gap-1 h-full min-w-0">
+        <div className="flex items-center gap-1 h-full min-w-0 overflow-x-auto flex-1 scrollbar-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             type="button"
             aria-pressed={consoleTab === 'input' && !isConsoleCollapsed}
@@ -76,7 +76,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
               setConsoleTab('input');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
             }}
-            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 ${
               consoleTab === 'input' && !isConsoleCollapsed
                 ? 'text-white'
                 : 'text-gray-400 hover:text-gray-200'
@@ -96,7 +96,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
               setConsoleTab('output');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
             }}
-            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 ${
               consoleTab === 'output' && !isConsoleCollapsed
                 ? 'text-white'
                 : 'text-gray-400 hover:text-gray-200'
@@ -120,7 +120,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
               setConsoleTab('latest_result');
               if (isConsoleCollapsed) setIsConsoleCollapsed(false);
             }}
-            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`relative px-3 h-full text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 ${
               consoleTab === 'latest_result' && !isConsoleCollapsed
                 ? 'text-white'
                 : 'text-gray-400 hover:text-gray-200'
@@ -129,7 +129,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
             <span>Latest Result</span>
             {activeSubmission.status && (
               <span
-                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border max-w-[120px] truncate ${getVerdictClasses(
+                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border max-w-[100px] truncate shrink-0 ${getVerdictClasses(
                   activeSubmission.status,
                 )}`}
                 title={formatVerdict(activeSubmission.status)}
@@ -144,7 +144,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
         </div>
 
         {/* Right side: Collapse Controls */}
-        <div className="flex items-center gap-3 text-xs text-gray-400 font-mono shrink-0">
+        <div className="flex items-center gap-3 text-xs text-gray-400 font-mono shrink-0 ml-auto z-10">
           <button
             type="button"
             onClick={() => setIsConsoleCollapsed(!isConsoleCollapsed)}
