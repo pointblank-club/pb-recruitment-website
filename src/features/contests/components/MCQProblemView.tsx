@@ -269,7 +269,7 @@ export const MCQProblemView = ({
                     <button
                       type="button"
                       onClick={onRetryPolling}
-                      className="text-xs text-red-300 underline hover:text-white ml-1 font-medium whitespace-nowrap focus:outline-none"
+                      className="text-xs text-red-300 underline hover:text-white ml-1 font-medium whitespace-nowrap"
                     >
                       Retry
                     </button>
