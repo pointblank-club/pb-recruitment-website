@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Copy, Check, Code2, AlertCircle, RefreshCw } from 'lucide-react';
 import { decodeBase64 } from '@/lib/base64';
-import { formatVerdict, getVerdictClasses } from './SubmissionPanel';
+import { formatVerdict, getVerdictClasses } from '../submissionUtils';
 import type { SubmissionDetailsResponse } from '@/services/api/contestApi';
 
 interface SubmittedSolutionViewerProps {
