@@ -97,8 +97,8 @@ const ContestDetail: React.FC = () => {
           <ContestHero contest={contest!} />
           <ContestTimeline
             contest={contest!}
-            onRegistered={() => {
-              setContest((prev) => (prev ? new Contest({ ...prev, is_registered: true }) : prev));
+            onRegistered={(registeredId) => {
+              setContest((prev) => (prev && prev.id === registeredId ? new Contest({ ...prev, is_registered: true }) : prev));
             }}
           />
           <ContestDetails contest={contest!} />

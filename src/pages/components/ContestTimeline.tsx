@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import axios from "axios";
@@ -16,12 +16,19 @@ import {
 
 interface ContestTimelineProps {
   contest: Contest;
-  onRegistered?: () => void;
+  onRegistered?: (contestId: string) => void;
 }
 
 const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   const [isRegistered, setIsRegistered] = React.useState<boolean>(() => {
     if (contest.is_registered !== undefined) {
       return contest.is_registered;
@@ -92,13 +99,17 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
       return;
     }
 
+    const targetContestId = contest.id;
+    const targetUserId = user.uid;
+
     try {
-      await contestApi.registerForContest(contest.id);
-      setIsRegistered(true);
-      if (user.uid) {
-        setContestRegistered(contest.id, user.uid);
+      await contestApi.registerForContest(targetContestId);
+      if (!isMountedRef.current || contest.id !== targetContestId || user?.uid !== targetUserId) {
+        return;
       }
-      onRegistered?.();
+      setIsRegistered(true);
+      setContestRegistered(targetContestId, targetUserId);
+      onRegistered?.(targetContestId);
       setPopup({
         isOpen: true,
         type: "success",
@@ -106,6 +117,10 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
       });
     } catch (err: unknown) {
       console.error("Registration failed:", err);
+
+      if (!isMountedRef.current || contest.id !== targetContestId || user?.uid !== targetUserId) {
+        return;
+      }
 
       let message = "Failed to register. Please try again.";
 
@@ -133,10 +148,8 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
           case 409:
             message = "You are already registered.";
             setIsRegistered(true);
-            if (user.uid) {
-              setContestRegistered(contest.id, user.uid);
-            }
-            onRegistered?.();
+            setContestRegistered(targetContestId, targetUserId);
+            onRegistered?.(targetContestId);
             break;
 
           case 500:
@@ -163,8 +176,10 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
   );
 
   const handleStartContest = () => {
-    // Request fullscreen 
-    document.documentElement.requestFullscreen().catch(() => {});
+    // Request fullscreen safely if supported
+    if (typeof document.documentElement?.requestFullscreen === 'function') {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
 
     // Redirect to problems page
     navigate(`/contests/${contest.id}/problems`);
