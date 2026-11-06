@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import axios from "axios";
@@ -7,18 +7,34 @@ import type { Contest } from "@/models/contest";
 import { contestApi } from "@/services/api/contestApi";
 import { Popup } from "@/components/ui/popup";
 import { useAuth } from "@/lib/AuthContext";
-import { getContestSubmitted } from "@/lib/contestStorage";
+import {
+  getContestSubmitted,
+  getContestRegistered,
+  setContestRegistered,
+  removeContestRegistered,
+} from "@/lib/contestStorage";
 
 interface ContestTimelineProps {
   contest: Contest;
+  onRegistered?: (contestId: string) => void;
 }
 
-const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
+const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [isRegistered, setIsRegistered] = React.useState<boolean>(
-    contest.is_registered ?? false
-  );
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+  const [isRegistered, setIsRegistered] = React.useState<boolean>(() => {
+    if (contest.is_registered !== undefined) {
+      return contest.is_registered;
+    }
+    return Boolean(user?.uid && getContestRegistered(contest.id, user.uid));
+  });
   const [popup, setPopup] = useState<{
       isOpen: boolean;
       type: "success" | "error";
@@ -61,8 +77,19 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
   };
 
   useEffect(() => {
-    setIsRegistered(contest.is_registered ?? false);
-  }, [contest.id, contest.is_registered]);
+    if (contest.is_registered !== undefined) {
+      setIsRegistered(contest.is_registered);
+      if (user?.uid) {
+        if (contest.is_registered) {
+          setContestRegistered(contest.id, user.uid);
+        } else {
+          removeContestRegistered(contest.id, user.uid);
+        }
+      }
+    } else {
+      setIsRegistered(Boolean(user?.uid && getContestRegistered(contest.id, user.uid)));
+    }
+  }, [contest.id, contest.is_registered, user?.uid]);
 
   const eligibleYearsText = contest.formatEligibleYears();
 
@@ -72,9 +99,17 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
       return;
     }
 
+    const targetContestId = contest.id;
+    const targetUserId = user.uid;
+
     try {
-      await contestApi.registerForContest(contest.id);
+      await contestApi.registerForContest(targetContestId);
+      if (!isMountedRef.current || contest.id !== targetContestId || user?.uid !== targetUserId) {
+        return;
+      }
       setIsRegistered(true);
+      setContestRegistered(targetContestId, targetUserId);
+      onRegistered?.(targetContestId);
       setPopup({
         isOpen: true,
         type: "success",
@@ -82,6 +117,10 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
       });
     } catch (err: unknown) {
       console.error("Registration failed:", err);
+
+      if (!isMountedRef.current || contest.id !== targetContestId || user?.uid !== targetUserId) {
+        return;
+      }
 
       let message = "Failed to register. Please try again.";
 
@@ -109,6 +148,8 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
           case 409:
             message = "You are already registered.";
             setIsRegistered(true);
+            setContestRegistered(targetContestId, targetUserId);
+            onRegistered?.(targetContestId);
             break;
 
           case 500:
@@ -135,8 +176,10 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest }) => {
   );
 
   const handleStartContest = () => {
-    // Request fullscreen 
-    document.documentElement.requestFullscreen().catch(() => {});
+    // Request fullscreen safely if supported
+    if (typeof document.documentElement?.requestFullscreen === 'function') {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
 
     // Redirect to problems page
     navigate(`/contests/${contest.id}/problems`);

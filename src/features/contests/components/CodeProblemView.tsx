@@ -8,9 +8,11 @@ import { formatVerdict, getVerdictClasses } from './SubmissionPanel';
 import { useAuth } from '@/lib/AuthContext';
 import { setProblemAttempted } from '@/lib/contestStorage';
 import type { Problem } from '../problem.types';
+import { useCodeDraft } from '../hooks/useCodeDraft';
 
 interface CodeProblemViewProps {
   problem: Problem;
+  contestId?: string;
   onSubmit?: (code: string, language: string) => Promise<void>;
   onRun?: (code: string, language: string, stdin: string) => Promise<RunCodeResponse>;
   /** hideIDE: unauthenticated visitors – only show problem statement, hide the editor pane */
@@ -74,16 +76,30 @@ const getRunErrorMessage = (error: unknown): string => {
 
 export const CodeProblemView = ({
   problem,
+  contestId,
   onSubmit,
   onRun,
   hideIDE = false,
 }: CodeProblemViewProps) => {
   const { user } = useAuth();
-  const [selectedLanguage, setSelectedLanguage] = useState('cpp');
-  const [codeByLanguage, setCodeByLanguage] = useState<Record<string, string>>(
-    () => ({ ...DEFAULT_CODE_TEMPLATES }),
-  );
-  const [customInput, setCustomInput] = useState(() => problem.examples?.[0]?.input || '');
+  const effectiveContestId = contestId || problem.contest_id || 'general';
+
+  const {
+    selectedLanguage,
+    setSelectedLanguage,
+    codeByLanguage,
+    setCodeByLanguage,
+    customInput,
+    setCustomInput,
+  } = useCodeDraft({
+    contestId: effectiveContestId,
+    problemId: problem.id,
+    userId: user?.uid || 'guest',
+    defaultTemplates: DEFAULT_CODE_TEMPLATES,
+    defaultLanguage: 'cpp',
+    defaultInput: problem.examples?.[0]?.input || '',
+    enabled: !hideIDE,
+  });
   const [runResult, setRunResult] = useState<RunCodeResponse | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -108,7 +124,7 @@ export const CodeProblemView = ({
   const handleLanguageChange = useCallback((newLanguage: string) => {
     invalidateRun();
     setSelectedLanguage(newLanguage);
-  }, [invalidateRun]);
+  }, [invalidateRun, setSelectedLanguage]);
 
   const handleCodeChange = useCallback((value: string | undefined) => {
     invalidateRun();
@@ -116,7 +132,7 @@ export const CodeProblemView = ({
       ...current,
       [selectedLanguage]: value || '',
     }));
-  }, [invalidateRun, selectedLanguage]);
+  }, [invalidateRun, selectedLanguage, setCodeByLanguage]);
 
   const handleRunCode = useCallback(async () => {
     if (!onRun) return;

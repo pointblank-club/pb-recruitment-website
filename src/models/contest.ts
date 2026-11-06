@@ -41,7 +41,7 @@ export class Contest {
         this.registration_start_time = data.registration_start_time;
         this.registration_end_time = data.registration_end_time;
         this.eligible_to = data.eligible_to;
-        this.is_registered = data.is_registered ?? false;
+        this.is_registered = data.is_registered;
     }
 
     isRegistrationOpen(): boolean {
