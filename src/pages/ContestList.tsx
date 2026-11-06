@@ -26,7 +26,7 @@ const ContestList: React.FC = () => {
         if (isMounted) {
           setContests(response as Contest[]);
         }
-      } catch (error) {
+      } catch {
         if (isMounted) {
           toast.error("Error fetching contests. Please try again later. If problem persists, contact volunteers.");
         }

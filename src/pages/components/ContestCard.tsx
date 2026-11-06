@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Trophy } from "lucide-react";
 import type { Contest } from "@/models/contest";
 import { useAuth } from "@/lib/AuthContext";
-import { getContestRegistered } from "@/lib/contestStorage";
+import { getContestRegistered, getContestSubmitted } from "@/lib/contestStorage";
 
 interface ContestCardProps {
   contest: Contest;
@@ -21,6 +21,15 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
       ? contest.is_registered
       : Boolean(user?.uid && getContestRegistered(contest.id, user.uid));
   const isOngoing = contest.isContestOngoing();
+  const isSubmittedEarly = Boolean(
+    user?.uid && getContestSubmitted(contest.id, user.uid)
+  );
+
+  const handleEnterContest = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    document.documentElement.requestFullscreen().catch(() => {});
+    navigate(`/contests/${contest.id}/problems`);
+  };
 
   return (
     <motion.div
@@ -80,16 +89,26 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
             >
               View Problems
             </motion.button>
+          ) : isSubmittedEarly ? (
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/contests/${contest.id}/leaderboard`);
+              }}
+              className="flex-1 py-2 px-4 rounded-lg font-semibold transition-all bg-gray-800 text-green-400 border border-green-500/30 hover:bg-gray-750"
+            >
+              View Leaderboard
+            </motion.button>
           ) : isRegistered ? (
             isOngoing ? (
               <motion.button
                 type="button"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/contests/${contest.id}/problems`);
-                }}
+                onClick={handleEnterContest}
                 className="flex-1 py-2 px-4 rounded-lg font-semibold transition-all bg-green text-black hover:bg-green-600"
               >
                 Enter Contest
@@ -111,8 +130,8 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
           ) : (
             <motion.button
               type="button"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={contest.isRegistrationOpen() ? { scale: 1.02 } : undefined}
+              whileTap={contest.isRegistrationOpen() ? { scale: 0.98 } : undefined}
               onClick={(e) => {
                 e.stopPropagation();
                 onClick();
@@ -120,9 +139,8 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
               className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-all ${
                 contest.isRegistrationOpen()
                   ? "bg-green text-black hover:bg-green-600"
-                  : "bg-gray-700 text-gray-400 cursor-not-allowed"
+                  : "bg-gray-800 text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500"
               }`}
-              disabled={!contest.isRegistrationOpen()}
             >
               {contest.isRegistrationOpen() ? "Register" : "Registration Closed"}
             </motion.button>
