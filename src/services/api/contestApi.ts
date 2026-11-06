@@ -74,8 +74,8 @@ class ContestApiService {
     return response.data.map(c => new Contest(c));
   }
 
-  async getContestProblems(contestId: string): Promise<Problem[]> {
-    const response = await this.axiosInstance.get<ProblemOverviewResponse[]>(`/contests/${contestId}/problems`);
+  async getContestProblems(contestId: string, signal?: AbortSignal): Promise<Problem[]> {
+    const response = await this.axiosInstance.get<ProblemOverviewResponse[]>(`/contests/${contestId}/problems`, { signal });
     return response.data.map((problem) => toProblemOverview(problem, contestId));
   }
 

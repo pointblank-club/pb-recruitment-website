@@ -105,7 +105,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
             <span>Output</span>
             {runResult && (
               <span
-                className={`w-2 h-2 rounded-full ${runResult.status === 'accepted' ? 'bg-[#10b981]' : 'bg-rose-500'}`}
+                className={`w-2 h-2 rounded-full ${runResult.status === 'accepted' ? 'bg-amber-400' : 'bg-rose-500'}`}
               />
             )}
             {consoleTab === 'output' && !isConsoleCollapsed && (
@@ -209,12 +209,12 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                     <span
                       className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${
                         runResult.status === 'accepted'
-                          ? 'border-[#10b981]/50 bg-[#10b981]/15 text-[#10b981]'
+                          ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
                           : 'border-rose-500/50 bg-rose-500/15 text-rose-300'
                       }`}
                     >
                       {runResult.status === 'accepted'
-                        ? 'Finished'
+                        ? 'Attempted (not graded)'
                         : runResult.status
                         ? formatVerdict(runResult.status)
                         : 'Error'}

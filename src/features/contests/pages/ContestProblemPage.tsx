@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useOutletContext, useLocation, Link } from 'react-router-dom';
 import { useProblemDetails } from '../hooks/useProblemDetails';
 import { useContestProblems } from '../hooks/useContestProblems';
@@ -10,11 +10,15 @@ import type { ContestOutletContext } from '../layouts/ContestLayout';
 import { contestApi, type SubmissionDetailsResponse } from '@/services/api/contestApi';
 import { AlertCircle, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from 'react-toastify';
+import { useAuth } from '@/lib/AuthContext';
+import { formatVerdict } from '../submissionUtils';
 
 export const ContestProblemPage = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const {
     isContestEnded = false,
     isAuthenticated = false,
@@ -53,6 +57,24 @@ export const ContestProblemPage = () => {
   } = useProblemSubmissions(contestId || '', problemId || '', {
     skip: !isAuthenticated || (isContestEnded && !isRegistered),
   });
+
+  const notifiedSubmissionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeSubmission.phase === 'completed' && activeSubmission.id && activeSubmission.status) {
+      if (notifiedSubmissionRef.current === activeSubmission.id) return;
+      notifiedSubmissionRef.current = activeSubmission.id;
+      const verdict = formatVerdict(activeSubmission.status);
+      if (activeSubmission.status === 'accepted' || activeSubmission.status === 'completed') {
+        toast.success(`Submission successful: ${verdict}`);
+      } else {
+        toast.error(`Submission result: ${verdict}`);
+      }
+    } else if (activeSubmission.phase === 'error') {
+      toast.error(activeSubmission.message || 'Submission failed.');
+    } else if (activeSubmission.phase === 'timeout') {
+      toast.info(activeSubmission.message || 'Submission saved; verdict delayed.');
+    }
+  }, [activeSubmission]);
 
   // Post-contest: fetch full details (including code) for the registered user's latest submission.
   // Also fetch details for MCQ problems so the chosen option is known during active contests.
@@ -268,8 +290,9 @@ export const ContestProblemPage = () => {
             <div className="flex-1 flex min-h-0 h-full overflow-hidden">
               <div className="w-1/2 min-h-0 h-full border-r border-gray-700 overflow-hidden flex flex-col">
                 <CodeProblemView
-                  key={problem.id}
+                  key={`${user?.uid || 'guest'}_${problem.id}`}
                   problem={problem}
+                  contestId={contestId}
                   isContestEnded={true}
                   hideIDE={true}
                   isLocked={true}
@@ -288,8 +311,9 @@ export const ContestProblemPage = () => {
           ) : (
             /* Active contest CodeChef-style 2-column workspace */
             <CodeProblemView
-              key={problem.id}
+              key={`${user?.uid || 'guest'}_${problem.id}`}
               problem={problem}
+              contestId={contestId}
               onSubmit={isAuthenticated && !isLocked ? submitCode : undefined}
               onRun={isAuthenticated && !isLocked ? runCode : undefined}
               isContestEnded={isContestEnded}

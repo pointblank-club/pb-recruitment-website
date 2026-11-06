@@ -14,19 +14,29 @@ const ContestList: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchContests = async () => {
       try {
         setIsLoading(true);
         const response = await contestApi.getContestsList();
-        setContests(response as Contest[]);
-      } catch (error) {
-        toast.error("Error fetching contests. Please try again later. If problem persists, contact volunteers.");
+        if (isMounted) {
+          setContests(response as Contest[]);
+        }
+      } catch {
+        if (isMounted) {
+          toast.error("Error fetching contests. Please try again later. If problem persists, contact volunteers.");
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
-    fetchContests();
+    void fetchContests();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const navigate = useNavigate();

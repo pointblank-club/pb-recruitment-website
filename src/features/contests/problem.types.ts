@@ -1,4 +1,5 @@
 export type ProblemType = 'code' | 'mcq';
+export type ProblemProgress = 'unsolved' | 'attempted' | 'judging' | 'failed' | 'solved' | 'unavailable';
 
 export interface Problem {
   id: string;
@@ -6,6 +7,7 @@ export interface Problem {
   name: string;
   score: number;
   type: ProblemType;
+  progress?: ProblemProgress;
   answer?: number[];
   description?: string;
   constraints?: string[];

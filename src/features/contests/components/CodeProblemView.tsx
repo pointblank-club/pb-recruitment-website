@@ -2,6 +2,9 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/lib/AuthContext';
+import { setProblemAttempted } from '@/lib/contestStorage';
+import { useCodeDraft } from '../hooks/useCodeDraft';
 import {
   Play,
   Send,
@@ -29,6 +32,7 @@ import { WorkspaceConsoleDrawer, type ConsoleRunResult } from './workspace/Works
 
 interface CodeProblemViewProps {
   problem: Problem;
+  contestId?: string;
   onSubmit?: (code: string, language: string) => Promise<void>;
   onRun?: (code: string, language: string, stdin: string) => Promise<RunCodeResponse>;
   isContestEnded?: boolean;
@@ -102,6 +106,7 @@ const getRunErrorMessage = (error: unknown): string => {
 
 export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   problem,
+  contestId,
   onSubmit,
   onRun,
   hideIDE = false,
@@ -115,11 +120,23 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   onRefreshHistory,
   onLoadMoreHistory,
 }) => {
-  // Language & Code state
-  const [selectedLanguage, setSelectedLanguage] = useState('cpp');
-  const [codeByLanguage, setCodeByLanguage] = useState<Record<string, string>>(
-    () => ({ ...DEFAULT_CODE_TEMPLATES }),
-  );
+  const { user } = useAuth();
+  const {
+    selectedLanguage,
+    setSelectedLanguage,
+    codeByLanguage,
+    setCodeByLanguage,
+    customInput,
+    setCustomInput,
+  } = useCodeDraft({
+    contestId: contestId || problem.contest_id || 'general',
+    problemId: problem.id,
+    userId: user?.uid || 'guest',
+    defaultTemplates: DEFAULT_CODE_TEMPLATES,
+    defaultLanguage: 'cpp',
+    defaultInput: problem.examples?.[0]?.input || '',
+    enabled: !hideIDE,
+  });
   const code = codeByLanguage[selectedLanguage] || '';
 
   // Left Pane State (Statement | Submissions | Latest Result)
@@ -132,7 +149,6 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   const [consoleHeight, setConsoleHeight] = useState(230);
 
   // Custom Input & Run state
-  const [customInput, setCustomInput] = useState('');
   const [runResult, setRunResult] = useState<ConsoleRunResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -157,7 +173,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   const handleLanguageChange = useCallback((newLanguage: string) => {
     invalidateRun();
     setSelectedLanguage(newLanguage);
-  }, [invalidateRun]);
+  }, [invalidateRun, setSelectedLanguage]);
 
   const handleCodeChange = useCallback((value: string | undefined) => {
     invalidateRun();
@@ -165,7 +181,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
       ...current,
       [selectedLanguage]: value || '',
     }));
-  }, [invalidateRun, selectedLanguage]);
+  }, [invalidateRun, selectedLanguage, setCodeByLanguage]);
 
   const handleResetCode = useCallback(() => {
     if (isLocked) return;
@@ -185,7 +201,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
     setRunResult(null);
     setConsoleTab('input');
     setIsConsoleCollapsed(false);
-  }, [invalidateRun]);
+  }, [invalidateRun, setCustomInput]);
 
   // Run Code logic
   const handleRunCode = useCallback(async () => {
@@ -207,6 +223,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
     setIsConsoleCollapsed(false);
     setRunResult(null);
     const inputRevision = inputRevisionRef.current;
+    if (user) setProblemAttempted(problem.contest_id, user.uid, problem.id);
 
     try {
       const result = await onRun(code, selectedLanguage, customInput);
@@ -225,7 +242,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
     } finally {
       setIsRunning(false);
     }
-  }, [code, customInput, onRun, selectedLanguage]);
+  }, [code, customInput, onRun, selectedLanguage, problem.contest_id, problem.id, user]);
 
   // Submit Code logic
   const handleSubmit = async () => {
