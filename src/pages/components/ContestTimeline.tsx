@@ -176,12 +176,6 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
   );
 
   const handleStartContest = () => {
-    // Request fullscreen safely if supported
-    if (typeof document.documentElement?.requestFullscreen === 'function') {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-
-    // Redirect to problems page
     navigate(`/contests/${contest.id}/problems`);
   };
   const closePopup = () => {

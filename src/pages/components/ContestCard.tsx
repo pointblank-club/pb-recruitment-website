@@ -27,9 +27,6 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
 
   const handleEnterContest = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (typeof document.documentElement?.requestFullscreen === 'function') {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
     navigate(`/contests/${contest.id}/problems`);
   };
 

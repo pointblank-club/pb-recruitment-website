@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { ContestHeader } from '../components/ContestHeader';
 import { EndContestModal } from '../components/EndContestModal';
+import { ContestParticipationGate } from '../components/ContestParticipationGate';
 import { useContest } from '../hooks/useContest';
 import { useAuth } from '@/lib/AuthContext';
 import { getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
@@ -136,6 +137,7 @@ export const ContestLayout = () => {
   };
 
   const handleConfirmEndContest = () => {
+    hasExitedRef.current = true;
     setIsEndModalOpen(false);
     if (user?.uid && contestId) {
       setContestSubmitted(contestId, user.uid);
@@ -186,6 +188,8 @@ export const ContestLayout = () => {
 
   const isContestEnded = contest ? Date.now() >= contest.end_time : false;
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;
+  const isParticipating = !!user && !!contest?.is_registered && isLive && !isLeaderboardPage &&
+    !hasExitedRef.current && !getContestSubmitted(contestId, user.uid);
 
   return (
     <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
@@ -213,6 +217,13 @@ export const ContestLayout = () => {
         onConfirm={handleConfirmEndContest}
         contestName={contest?.name}
       />
+      {isParticipating && (
+        <ContestParticipationGate
+          key={`${contestId}:${user.uid}`}
+          isExitingRef={hasExitedRef}
+          endTime={contest!.end_time}
+        />
+      )}
     </div>
   );
 };
