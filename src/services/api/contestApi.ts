@@ -15,6 +15,7 @@ import {
 import { Contest } from "@/models/contest";
 import { auth } from '@/lib/firebase';
 import { encodeBase64 } from '@/lib/base64';
+import * as Sentry from '@sentry/react';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 // TODO(PBR-2): Delete mockJudgingSetting, MOCK_SUBMISSION_JUDGING, MockSubmission,
@@ -64,6 +65,19 @@ class ContestApiService {
         // Surface the server's message (e.g. "user not registered") instead of axios' generic text.
         const serverMessage = error.response?.data?.error;
         if (typeof serverMessage === 'string' && serverMessage) error.message = serverMessage;
+
+        // Capture unexpected server 5xx errors or network drops into Sentry (skip client cancels)
+        if (!axios.isCancel(error) && (!error.response || error.response.status >= 500)) {
+          Sentry.captureException(error, {
+            extra: {
+              url: error.config?.url,
+              method: error.config?.method,
+              status: error.response?.status,
+              serverMessage,
+            },
+          });
+        }
+
         return Promise.reject(error);
       }
     );
