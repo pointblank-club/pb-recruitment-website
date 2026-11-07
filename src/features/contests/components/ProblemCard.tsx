@@ -26,17 +26,10 @@ const progressLabels: Record<ProblemProgress, string> = {
 };
 
 export const ProblemCard = ({ problem, contestId, progress }: ProblemCardProps) => {
-  const isMcq = problem.type === 'mcq';
-  const effectiveProgress: ProblemProgress | undefined = isMcq && progress
-    ? (progress === 'solved' || progress === 'failed' || progress === 'attempted' ? 'attempted' : 'unsolved')
-    : progress;
-
-  const label = effectiveProgress ? progressLabels[effectiveProgress] : undefined;
-
   return (
     <Link
       to={`/contests/${contestId}/problems/${problem.id}`}
-      className={`block w-full p-4 border rounded ${effectiveProgress ? progressColors[effectiveProgress] : 'border-gray-300/30 bg-black hover:bg-gray-900'}`}
+      className={`block w-full p-4 border rounded ${progress ? progressColors[progress] : 'border-gray-300/30 bg-black hover:bg-gray-900'}`}
     >
       <div className="flex items-center justify-between w-full">
         <div className="flex-1">
@@ -46,7 +39,7 @@ export const ProblemCard = ({ problem, contestId, progress }: ProblemCardProps) 
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {label && <span className="rounded bg-black/40 px-2 py-1 text-xs text-gray-200">{label}</span>}
+          {progress && <span className="rounded bg-black/40 px-2 py-1 text-xs text-gray-200">{progressLabels[progress]}</span>}
           <span className="text-gray-500">→</span>
         </div>
       </div>
