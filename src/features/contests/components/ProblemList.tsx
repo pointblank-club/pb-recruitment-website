@@ -14,7 +14,11 @@ export const ProblemList = ({ problems, contestId }: ProblemListProps) => {
   if (user) {
     problems.forEach((problem) => {
       let status = problem.progress ?? 'unavailable';
-      if ((status === 'unsolved' || status === 'unavailable') && getProblemAttempted(contestId, user.uid, problem.id)) {
+      if (problem.type === 'mcq') {
+        if (status !== 'unsolved' && status !== 'unavailable') {
+          status = 'attempted';
+        }
+      } else if ((status === 'unsolved' || status === 'unavailable') && getProblemAttempted(contestId, user.uid, problem.id)) {
         status = 'attempted';
       }
       progress[problem.id] = status;
