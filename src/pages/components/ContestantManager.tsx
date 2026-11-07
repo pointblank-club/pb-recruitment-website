@@ -1,6 +1,8 @@
 import { adminApi } from "@/services/api/adminApi";
 import axios from "axios";
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Code2 } from "lucide-react";
 
 export interface Contestant {
   id: string;
@@ -18,6 +20,7 @@ interface ContestantManagerProps {
 }
 
 const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contestants, setContestants }) => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [updatingMap, setUpdatingMap] = useState<Record<string, boolean>>({});
@@ -167,23 +170,32 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                     </div>
                   </div>
                 </div>
-                <div className="md:ml-4">
-                  <label className="block text-gray-400 text-sm mb-2">Change Status</label>
-                  <select
-                    value={contestant.status}
-                    disabled={Boolean(updatingMap[contestant.id])}
-                    onChange={(e) =>
-                      handleStatusChange(
-                        contestant.id,
-                        e.target.value as "Active" | "Banned" | "Hidden"
-                      )
-                    }
-                    className={`bg-gray-900 border border-gray-700 rounded px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none ${updatingMap[contestant.id] ? "opacity-50 cursor-wait" : ""}`}
+                <div className="flex flex-col gap-2 md:ml-4 min-w-[140px]">
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-1">Status</label>
+                    <select
+                      value={contestant.status}
+                      disabled={Boolean(updatingMap[contestant.id])}
+                      onChange={(e) =>
+                        handleStatusChange(
+                          contestant.id,
+                          e.target.value as "Active" | "Banned" | "Hidden"
+                        )
+                      }
+                      className={`w-full bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-300 focus:border-green-500 focus:outline-none ${updatingMap[contestant.id] ? "opacity-50 cursor-wait" : ""}`}
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Hidden">Hidden</option>
+                      <option value="Banned">Banned</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/admin/contest/${contestId}/submissions?userId=${contestant.id}`)}
+                    className="w-full flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-semibold transition-colors shadow"
                   >
-                    <option value="Active">Active</option>
-                    <option value="Hidden">Hidden</option>
-                    <option value="Banned">Banned</option>
-                  </select>
+                    <Code2 className="w-3.5 h-3.5" />
+                    View Code
+                  </button>
                 </div>
               </div>
             </div>

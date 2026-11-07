@@ -1,14 +1,32 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Code2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useLeaderboard } from '../hooks/useLeaderboard';
 import { LeaderboardTable } from '../components/LeaderboardTable';
+import { adminApi } from '@/services/api/adminApi';
 
 export const ContestLeaderboardPage = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
   const leaderboardState = useLeaderboard(contestId || '');
   const hasRedirectedRef = useRef(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    adminApi
+      .checkAdminAccess()
+      .then(() => {
+        if (!cancelled) setIsAdmin(true);
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdmin(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const {
     leaderboard,
@@ -125,15 +143,28 @@ export const ContestLeaderboardPage = () => {
       </nav>
 
       {/* Page Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-white mb-2 font-['DM_Sans']">LEADERBOARD</h1>
-        <p className="text-gray-400 font-['DM_Sans']">Real-time rankings for {contest.name}</p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2 font-['DM_Sans']">LEADERBOARD</h1>
+          <p className="text-gray-400 font-['DM_Sans']">Real-time rankings for {contest.name}</p>
+        </div>
+        {isAdmin && (
+          <button
+            onClick={() => navigate(`/admin/contest/${contestId}/submissions`)}
+            className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2 rounded text-sm font-semibold transition-colors font-['DM_Sans'] shadow self-start sm:self-auto"
+          >
+            <Code2 size={16} />
+            View Contest Submissions
+          </button>
+        )}
       </div>
 
       {/* Leaderboard Table */}
       <LeaderboardTable
         entries={leaderboard}
         currentUserId={currentUserRank?.user_id}
+        contestId={contestId}
+        isAdmin={isAdmin}
       />
 
       {/* Pagination controls */}

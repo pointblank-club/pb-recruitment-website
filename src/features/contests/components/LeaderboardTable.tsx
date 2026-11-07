@@ -1,15 +1,50 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Code2 } from 'lucide-react';
 import type { LeaderboardEntry } from '../problem.types';
 import { formatTimestamp } from '@/lib/utils';
 import { LeaderboardRowDetails } from './LeaderboardRowDetails.tsx';
+import { adminApi } from '@/services/api/adminApi';
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[];
   currentUserId?: string;
+  contestId?: string;
+  isAdmin?: boolean;
 }
 
-export const LeaderboardTable = ({ entries, currentUserId }: LeaderboardTableProps) => {
+export const LeaderboardTable = ({
+  entries,
+  currentUserId,
+  contestId,
+  isAdmin: propIsAdmin,
+}: LeaderboardTableProps) => {
+  const navigate = useNavigate();
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [isAdminState, setIsAdminState] = useState<boolean>(propIsAdmin ?? false);
+
+  useEffect(() => {
+    if (propIsAdmin !== undefined) {
+      setIsAdminState(propIsAdmin);
+      return;
+    }
+
+    let cancelled = false;
+    adminApi
+      .checkAdminAccess()
+      .then(() => {
+        if (!cancelled) setIsAdminState(true);
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdminState(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [propIsAdmin]);
+
+  const isAdmin = isAdminState;
 
   const toggleExpand = (userId: string) => {
     setExpandedUserId(expandedUserId === userId ? null : userId);
@@ -57,6 +92,11 @@ export const LeaderboardTable = ({ entries, currentUserId }: LeaderboardTablePro
               <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
                 Details
               </th>
+              {isAdmin && (
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
+                  Code
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
@@ -117,11 +157,32 @@ export const LeaderboardTable = ({ entries, currentUserId }: LeaderboardTablePro
                         </button>
                       )}
                     </td>
+                    {isAdmin && (
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <button
+                          onClick={() =>
+                            navigate(
+                              `/admin/contest/${contestId}/submissions?userId=${entry.user_id}`
+                            )
+                          }
+                          className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold font-['DM_Sans'] border border-emerald-700/60 bg-emerald-950/40 px-2.5 py-1 hover:border-emerald-500 transition-colors rounded inline-flex items-center gap-1.5"
+                          title={`View all code submissions for ${entry.username}`}
+                        >
+                          <Code2 size={13} />
+                          View Code
+                        </button>
+                      </td>
+                    )}
                   </tr>
                   {isExpanded && entry.problem_scores && (
                     <tr>
-                      <td colSpan={7} className="px-6 py-4 bg-gray-900 border-t border-gray-800">
-                        <LeaderboardRowDetails problemScores={entry.problem_scores} />
+                      <td colSpan={isAdmin ? 8 : 7} className="px-6 py-4 bg-gray-900 border-t border-gray-800">
+                        <LeaderboardRowDetails
+                          problemScores={entry.problem_scores}
+                          userId={entry.user_id}
+                          contestId={contestId}
+                          isAdmin={isAdmin}
+                        />
                       </td>
                     </tr>
                   )}
