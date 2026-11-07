@@ -1,6 +1,7 @@
-import axios, { type AxiosInstance, type AxiosError } from 'axios';
+import axios, { type AxiosInstance } from 'axios';
 import { Contest } from "@/models/contest";
 import { auth } from '@/lib/firebase';
+import { attachSentryInterceptor } from './sentryInterceptor';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 type ContestPayload = ConstructorParameters<typeof Contest>[0];
@@ -156,13 +157,7 @@ class AdminApiService {
       (error) => Promise.reject(error)
     );
 
-    this.axiosInstance.interceptors.response.use(
-      (response) => response,
-      (error: AxiosError) => {
-        // Pass through the original error so you can handle specific status codes manually
-        return Promise.reject(error);
-      }
-    );
+    attachSentryInterceptor(this.axiosInstance);
   }
 
   async checkAdminAccess(): Promise<void> {

@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance } from 'axios';
 import { auth } from '@/lib/firebase';
+import { attachSentryInterceptor } from './sentryInterceptor';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -31,6 +32,8 @@ class UserApiService {
       },
       (error) => Promise.reject(error)
     );
+
+    attachSentryInterceptor(this.axiosInstance);
   }
 
   async getUserProfile(): Promise<any> {
