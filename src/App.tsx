@@ -21,11 +21,28 @@ import AdminContestPlagiarism from "./pages/AdminContestPlagiarism";
 import { AdminRoute } from "./components/AdminRoute";
 import { AuthenticatedRoute } from "./components/AuthenticatedRoute";
 import { useAuth } from "./lib/AuthContext";
+import * as Sentry from "@sentry/react";
 
 const App: React.FC = () => {
   const { user } = useAuth();
 
   return (
+    <Sentry.ErrorBoundary
+      fallback={
+        <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
+          <h1 className="text-3xl font-anton text-beige mb-3">Something Went Wrong</h1>
+          <p className="text-gray-400 mb-6 max-w-md">
+            An unexpected interface error occurred. The technical team has been notified.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-green px-8 py-3 rounded-full text-black font-semibold hover:bg-green-600 transition-colors"
+          >
+            Reload Interface
+          </button>
+        </div>
+      }
+    >
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/test" element={<TestPage />} />
@@ -53,6 +70,7 @@ const App: React.FC = () => {
         <Route path="/admin/contest/:contestId/contestants" element={<AdminRoute><AdminContestContestants /></AdminRoute>} />
         <Route path="/admin/contest/:contestId/plagiarism" element={<AdminRoute><AdminContestPlagiarism /></AdminRoute>} />
       </Routes>
+    </Sentry.ErrorBoundary>
   );
 };
 
