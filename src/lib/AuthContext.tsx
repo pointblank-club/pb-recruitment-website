@@ -6,6 +6,7 @@ import { auth } from "./firebase";
 import type { User } from "firebase/auth";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { fetchUserProfile, type UserProfile } from "./profileService";
+import * as Sentry from "@sentry/react";
 
 interface AuthContextType {
   user: User | null;
@@ -36,6 +37,9 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     try {
       const profile = await fetchUserProfile(userId);
       setUserProfile(profile);
+      if (profile?.id) {
+        Sentry.setTag("usn", profile.id);
+      }
     } catch (error) {
       console.error("Failed to load user profile:", error);
       setUserProfile(null);
@@ -46,8 +50,13 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
+        Sentry.setUser({
+          id: firebaseUser.uid,
+          email: firebaseUser.email || undefined,
+        });
         await loadUserProfile(firebaseUser.uid);
       } else {
+        Sentry.setUser(null);
         setUserProfile(null);
       }
       setLoading(false);
@@ -58,6 +67,7 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     await signOut(auth);
+    Sentry.setUser(null);
     setUser(null);
     setUserProfile(null);
   };
