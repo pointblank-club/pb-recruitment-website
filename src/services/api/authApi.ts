@@ -1,6 +1,5 @@
 import axios, { type AxiosInstance } from 'axios';
 import { getDepartmentFromBranch } from '@/constants';
-import { attachSentryInterceptor } from './sentryInterceptor';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -24,8 +23,6 @@ class AuthApiService {
         'Content-Type': 'application/json',
       },
     });
-
-    attachSentryInterceptor(this.axiosInstance);
   }
 
   async signup(data: SignupPayload): Promise<void> {

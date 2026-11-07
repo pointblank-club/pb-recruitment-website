@@ -32,7 +32,7 @@ const App: React.FC = () => {
         <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
           <h1 className="text-3xl font-anton text-beige mb-3">Something Went Wrong</h1>
           <p className="text-gray-400 mb-6 max-w-md">
-            An unexpected interface error occurred. The technical team has been notified.
+            An unexpected interface error occurred. Please reload. If this continues, contact the technical team.
           </p>
           <button
             onClick={() => window.location.reload()}

@@ -37,9 +37,6 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     try {
       const profile = await fetchUserProfile(userId);
       setUserProfile(profile);
-      if (profile?.id) {
-        Sentry.setTag("usn", profile.id);
-      }
     } catch (error) {
       console.error("Failed to load user profile:", error);
       setUserProfile(null);
@@ -52,7 +49,6 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
       if (firebaseUser) {
         Sentry.setUser({
           id: firebaseUser.uid,
-          email: firebaseUser.email || undefined,
         });
         await loadUserProfile(firebaseUser.uid);
       } else {
