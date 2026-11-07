@@ -10,6 +10,9 @@ interface LeaderboardTableProps {
 
 export const LeaderboardTable = ({ entries, currentUserId }: LeaderboardTableProps) => {
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const hasProblemBreakdown = entries.some(
+    (entry) => entry.problem_scores && entry.problem_scores.length > 0
+  );
 
   const toggleExpand = (userId: string) => {
     setExpandedUserId(expandedUserId === userId ? null : userId);
@@ -54,9 +57,11 @@ export const LeaderboardTable = ({ entries, currentUserId }: LeaderboardTablePro
               <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
                 Last Submit
               </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
-                Details
-              </th>
+              {hasProblemBreakdown && (
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
+                  Details
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
@@ -107,20 +112,22 @@ export const LeaderboardTable = ({ entries, currentUserId }: LeaderboardTablePro
                         {(entry.last_submission_time == 0?"-":formatTimestamp(entry.last_submission_time))}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      {entry.problem_scores && entry.problem_scores.length > 0 && (
-                        <button
-                          onClick={() => toggleExpand(entry.user_id)}
-                          className="text-green-400 hover:text-green-300 text-sm font-['DM_Sans'] border border-gray-700 px-2 py-1 hover:border-green-400 transition-colors"
-                        >
-                          {isExpanded ? 'HIDE' : 'VIEW'}
-                        </button>
-                      )}
-                    </td>
+                    {hasProblemBreakdown && (
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        {entry.problem_scores && entry.problem_scores.length > 0 && (
+                          <button
+                            onClick={() => toggleExpand(entry.user_id)}
+                            className="text-green-400 hover:text-green-300 text-sm font-['DM_Sans'] border border-gray-700 px-2 py-1 hover:border-green-400 transition-colors"
+                          >
+                            {isExpanded ? 'HIDE' : 'VIEW'}
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                   {isExpanded && entry.problem_scores && (
                     <tr>
-                      <td colSpan={7} className="px-6 py-4 bg-gray-900 border-t border-gray-800">
+                      <td colSpan={hasProblemBreakdown ? 7 : 6} className="px-6 py-4 bg-gray-900 border-t border-gray-800">
                         <LeaderboardRowDetails problemScores={entry.problem_scores} />
                       </td>
                     </tr>

@@ -17,7 +17,7 @@ const progressColors: Record<ProblemProgress, string> = {
 };
 
 const progressLabels: Record<ProblemProgress, string> = {
-  unsolved: 'Unsolved',
+  unsolved: 'Not Attempted',
   attempted: 'Attempted',
   judging: 'Judging',
   failed: 'Failed',
@@ -31,9 +31,7 @@ export const ProblemCard = ({ problem, contestId, progress }: ProblemCardProps) 
     ? (progress === 'solved' || progress === 'failed' || progress === 'attempted' ? 'attempted' : 'unsolved')
     : progress;
 
-  const label = effectiveProgress
-    ? (isMcq && effectiveProgress === 'unsolved' ? 'Not Attempted' : progressLabels[effectiveProgress])
-    : undefined;
+  const label = effectiveProgress ? progressLabels[effectiveProgress] : undefined;
 
   return (
     <Link
