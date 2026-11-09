@@ -38,7 +38,7 @@ export interface LeaderboardEntry {
   usn: string;
   total_score: number;
   problems_solved: number;
-  last_submission_time: number;
+  last_submission_time?: number | null;
   problem_scores?: ProblemScore[];
 }
 
