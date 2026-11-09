@@ -152,6 +152,8 @@ export default function AdminContestSubmissions() {
 
     let cancelled = false;
     setIsLoadingSubmissions(true);
+    setSelectedSubmissionId(null);
+    setSubmissionDetails(null);
 
     const params: { user_id?: string; problem_id?: string; page?: number; page_size?: number } = {
       page,
