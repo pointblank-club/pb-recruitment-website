@@ -17,7 +17,7 @@ const progressColors: Record<ProblemProgress, string> = {
 };
 
 const progressLabels: Record<ProblemProgress, string> = {
-  unsolved: 'Unsolved',
+  unsolved: 'Not Attempted',
   attempted: 'Attempted',
   judging: 'Judging',
   failed: 'Failed',
@@ -26,7 +26,6 @@ const progressLabels: Record<ProblemProgress, string> = {
 };
 
 export const ProblemCard = ({ problem, contestId, progress }: ProblemCardProps) => {
-
   return (
     <Link
       to={`/contests/${contestId}/problems/${problem.id}`}

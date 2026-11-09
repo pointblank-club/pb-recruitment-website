@@ -63,18 +63,22 @@ export const ContestProblemPage = () => {
     if (activeSubmission.phase === 'completed' && activeSubmission.id && activeSubmission.status) {
       if (notifiedSubmissionRef.current === activeSubmission.id) return;
       notifiedSubmissionRef.current = activeSubmission.id;
-      const verdict = formatVerdict(activeSubmission.status);
-      if (activeSubmission.status === 'accepted' || activeSubmission.status === 'completed') {
-        toast.success(`Submission successful: ${verdict}`);
+      if (problem?.type === 'mcq') {
+        toast.success('Answer submitted successfully');
       } else {
-        toast.error(`Submission result: ${verdict}`);
+        const verdict = formatVerdict(activeSubmission.status);
+        if (activeSubmission.status === 'accepted' || activeSubmission.status === 'completed') {
+          toast.success(`Submission successful: ${verdict}`);
+        } else {
+          toast.error(`Submission result: ${verdict}`);
+        }
       }
     } else if (activeSubmission.phase === 'error') {
       toast.error(activeSubmission.message || 'Submission failed.');
     } else if (activeSubmission.phase === 'timeout') {
       toast.info(activeSubmission.message || 'Submission saved; verdict delayed.');
     }
-  }, [activeSubmission]);
+  }, [activeSubmission, problem?.type]);
 
   // Post-contest: fetch full details (including code) for the registered user's latest submission.
   // Also fetch details for MCQ problems so the chosen option is known during active contests.
