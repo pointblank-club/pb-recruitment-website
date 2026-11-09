@@ -92,7 +92,7 @@ export const MCQProblemView = ({
   const options = problem.options ?? [];
 
   return (
-    <div className="flex-1 flex flex-col bg-black text-white">
+    <div className={`flex-1 flex flex-col bg-black text-white ${!isContestEnded ? 'select-none' : ''}`}>
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6 space-y-6">
           <div className="space-y-2">

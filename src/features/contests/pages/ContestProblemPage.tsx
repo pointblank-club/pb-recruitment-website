@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'react-toastify';
 import { useAuth } from '@/lib/AuthContext';
 import { formatVerdict } from '../submissionUtils';
+import { useClipboardBlocker } from '../hooks/useClipboardBlocker';
 
 export const ContestProblemPage = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
@@ -24,6 +25,9 @@ export const ContestProblemPage = () => {
     isAuthenticated = false,
     isRegistered = false,
   } = useOutletContext<ContestOutletContext>() || {};
+
+  // Disable clipboard operations (copy, paste, cut, contextmenu) during active contest
+  useClipboardBlocker({ enabled: !isContestEnded });
 
   // For ended contests: only registered + authenticated users see code/submissions.
   // Guests and unregistered users see ONLY the problem statement (hideIDE = true).
