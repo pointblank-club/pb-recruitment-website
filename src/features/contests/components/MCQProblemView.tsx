@@ -100,7 +100,7 @@ export const MCQProblemView = ({
               <div className="flex items-center gap-2.5">
                 {contestId && (
                   <Link
-                    to={`/contests/${contestId}/problems`}
+                    to={`/contests/${contestId}/problems?tab=mcq`}
                     className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-gray-800 transition-colors flex items-center justify-center"
                     title="Back to Problems"
                   >

@@ -22,12 +22,12 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
 
   return (
     <div className="space-y-4 max-w-4xl mx-auto font-['DM_Sans']">
-      {/* Header Row: Title & Metadata Badges */}
-      <div className="pb-3 border-b border-[#192130] flex flex-wrap items-center justify-between gap-3">
+      {/* Header Row: Title & Metadata Badges (Sticky) */}
+      <div className="sticky -top-5 z-20 bg-[#090d14] -mt-5 pt-5 pb-3 border-b border-[#192130] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           {contestId && (
             <Link
-              to={`/contests/${contestId}/problems`}
+              to={`/contests/${contestId}/problems?tab=code`}
               className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-[#141b29] border border-transparent hover:border-[#1e2636] transition-all flex items-center justify-center"
               title="Back to Problems"
               aria-label="Back to Problems"
