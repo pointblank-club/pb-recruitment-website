@@ -1,28 +1,32 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronLeft, ArrowUpRight, Copy, Check } from 'lucide-react';
+import { ChevronLeft, ArrowUpRight } from 'lucide-react';
 import type { Problem } from '../../problem.types';
+import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../../clipboardGuards';
 import { MathText } from './MathText';
 
 interface ProblemStatementTabProps {
   problem: Problem;
   hideIDE?: boolean;
-  copiedId: string | null;
-  onCopy: (text: string, id: string) => void;
   onLoadSample: (input: string) => void;
 }
 
 export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
   problem,
   hideIDE = false,
-  copiedId,
-  onCopy,
   onLoadSample,
 }) => {
   const { contestId } = useParams<{ contestId: string }>();
 
   return (
-    <div className="space-y-4 max-w-4xl mx-auto font-['DM_Sans']">
+    <div
+      className="space-y-4 max-w-4xl mx-auto font-['DM_Sans'] select-none"
+      onCopyCapture={preventClipboardAction}
+      onCutCapture={preventClipboardAction}
+      onPasteCapture={preventClipboardAction}
+      onKeyDownCapture={preventClipboardShortcut}
+      onContextMenu={preventContextMenu}
+    >
       {/* Header Row: Title & Metadata Badges */}
       <div className="pb-3 border-b border-[#192130] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -108,8 +112,6 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
           <div className="space-y-4 pt-2">
             {problem.examples.map((example, index) => {
               const sampleNum = index + 1;
-              const inKey = `sample-in-${sampleNum}`;
-              const outKey = `sample-out-${sampleNum}`;
               return (
                 <div key={index} className="border-t border-[#192233] pt-4 space-y-3">
                   <div className="flex items-center justify-between">
@@ -130,25 +132,12 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {[
-                      { label: 'Input', text: example.input, key: inKey },
-                      { label: 'Output', text: example.output, key: outKey },
+                      { label: 'Input', text: example.input },
+                      { label: 'Output', text: example.output },
                     ].map((pane) => (
                       <div key={pane.label} className="rounded border border-[#192233] bg-[#06080d] overflow-hidden">
                         <div className="h-8 px-3 bg-[#0c121c] border-b border-[#192233] flex items-center justify-between">
                           <span className="text-[11px] font-mono text-slate-400 font-semibold">{pane.label}</span>
-                          <button
-                            type="button"
-                            onClick={() => onCopy(pane.text, pane.key)}
-                            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#141b29] transition-colors"
-                            title={`Copy sample ${pane.label.toLowerCase()}`}
-                            aria-label={`Copy sample ${pane.label.toLowerCase()}`}
-                          >
-                            {copiedId === pane.key ? (
-                              <Check className="w-3 h-3 text-[#10b981]" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
                         </div>
                         <pre className="p-3 text-xs font-mono text-slate-200 overflow-x-auto whitespace-pre">
                           {pane.text}

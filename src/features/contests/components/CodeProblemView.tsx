@@ -5,11 +5,10 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
 import { setProblemAttempted } from '@/lib/contestStorage';
 import { useCodeDraft } from '../hooks/useCodeDraft';
+import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
 import {
   Play,
   Send,
-  Copy,
-  Check,
   Lock,
   RotateCcw,
   Maximize2,
@@ -153,9 +152,6 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Clipboard feedback
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
   // Pane resizing
   const [leftPaneWidthPct, setLeftPaneWidthPct] = useState<number>(46);
   const [isResizingH, setIsResizingH] = useState(false);
@@ -188,12 +184,6 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
     const defaultTemplate = DEFAULT_CODE_TEMPLATES[selectedLanguage] || '';
     handleCodeChange(defaultTemplate);
   }, [handleCodeChange, isLocked, selectedLanguage]);
-
-  const handleCopy = useCallback((text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  }, []);
 
   const handleLoadSampleIntoCustomInput = useCallback((input: string) => {
     invalidateRun();
@@ -353,7 +343,14 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   const sample1 = problem.examples && problem.examples.length > 0 ? problem.examples[0] : null;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#05070a] text-slate-200 overflow-hidden font-['DM_Sans'] select-text">
+    <div
+      className="flex-1 min-h-0 flex flex-col bg-[#05070a] text-slate-200 overflow-hidden font-['DM_Sans'] select-text"
+      onCopyCapture={preventClipboardAction}
+      onCutCapture={preventClipboardAction}
+      onPasteCapture={preventClipboardAction}
+      onKeyDownCapture={preventClipboardShortcut}
+      onContextMenu={preventContextMenu}
+    >
       {/* Main Split Workspace Container */}
       <div
         ref={containerRef}
@@ -461,8 +458,6 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
               <ProblemStatementTab
                 problem={problem}
                 hideIDE={hideIDE}
-                copiedId={copiedId}
-                onCopy={handleCopy}
                 onLoadSample={handleLoadSampleIntoCustomInput}
               />
             )}
@@ -535,18 +530,6 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => handleCopy(code, 'editor-code')}
-                  title="Copy code"
-                  className="p-1.5 rounded hover:bg-[#141b29] text-gray-400 hover:text-white transition-colors"
-                >
-                  {copiedId === 'editor-code' ? (
-                    <Check className="w-3.5 h-3.5 text-[#10b981]" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                </button>
               </div>
 
               {/* Right side: Action buttons */}
@@ -620,7 +603,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                   cursorBlinking: 'smooth',
                   smoothScrolling: true,
                   padding: { top: 12, bottom: 12 },
-                  contextmenu: true,
+                  contextmenu: false,
                   folding: true,
                 }}
               />

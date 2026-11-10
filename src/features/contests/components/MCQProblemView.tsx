@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Save, ListChecks, CheckCircle2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import type { Problem } from '../problem.types';
+import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
 
 interface MCQProblemViewProps {
   problem: Problem;
@@ -93,7 +94,14 @@ export const MCQProblemView = ({
   const options = problem.options ?? [];
 
   return (
-    <div className="flex-1 flex flex-col bg-black text-white">
+    <div
+      className="flex-1 flex flex-col bg-black text-white select-none"
+      onCopyCapture={preventClipboardAction}
+      onCutCapture={preventClipboardAction}
+      onPasteCapture={preventClipboardAction}
+      onKeyDownCapture={preventClipboardShortcut}
+      onContextMenu={preventContextMenu}
+    >
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6 space-y-6">
           <div className="space-y-2">

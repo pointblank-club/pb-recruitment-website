@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { Copy, Check, Code2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Code2, AlertCircle, RefreshCw } from 'lucide-react';
 import { decodeBase64 } from '@/lib/base64';
 import { formatVerdict, getVerdictClasses } from '../submissionUtils';
 import type { SubmissionDetailsResponse } from '@/services/api/contestApi';
+import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
 
 interface SubmittedSolutionViewerProps {
   submission: SubmissionDetailsResponse | null;
@@ -22,21 +22,7 @@ export const SubmittedSolutionViewer = ({
   onRetry,
   hasHistory = false,
 }: SubmittedSolutionViewerProps) => {
-  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
-
   const decodedCode = submission?.code ? decodeBase64(submission.code) : '';
-
-  const handleCopy = async () => {
-    if (!decodedCode) return;
-    try {
-      await navigator.clipboard.writeText(decodedCode);
-      setCopyStatus('copied');
-      setTimeout(() => setCopyStatus('idle'), 2000);
-    } catch {
-      setCopyStatus('failed');
-      setTimeout(() => setCopyStatus('idle'), 2000);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -88,7 +74,14 @@ export const SubmittedSolutionViewer = ({
   const badgeClass = getVerdictClasses(submission.status);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-black text-white overflow-hidden font-['DM_Sans']">
+    <div
+      className="flex-1 flex flex-col h-full bg-black text-white overflow-hidden font-['DM_Sans']"
+      onCopyCapture={preventClipboardAction}
+      onCutCapture={preventClipboardAction}
+      onPasteCapture={preventClipboardAction}
+      onKeyDownCapture={preventClipboardShortcut}
+      onContextMenu={preventContextMenu}
+    >
       {/* Header bar matching CodeProblemView right pane */}
       <div className="h-10 border-b border-gray-700 px-4 bg-gray-900/50 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -116,32 +109,6 @@ export const SubmittedSolutionViewer = ({
           )}
         </div>
 
-        <button
-          onClick={handleCopy}
-          type="button"
-          aria-label={copyStatus === 'copied' ? 'Copied to clipboard' : copyStatus === 'failed' ? 'Copy failed' : 'Copy code'}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-gray-300 hover:text-white bg-gray-800/80 hover:bg-gray-800 rounded border border-gray-700 transition-colors"
-        >
-          {copyStatus === 'copied' ? (
-            <>
-              <Check className="w-3.5 h-3.5 text-green-400" />
-              <span className="text-green-400">Copied</span>
-            </>
-          ) : copyStatus === 'failed' ? (
-            <>
-              <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-              <span className="text-red-400">Failed</span>
-            </>
-          ) : (
-            <>
-              <Copy className="w-3.5 h-3.5" />
-              <span>Copy</span>
-            </>
-          )}
-        </button>
-        <span className="sr-only" aria-live="polite">
-          {copyStatus === 'copied' ? 'Code copied to clipboard' : copyStatus === 'failed' ? 'Failed to copy code' : ''}
-        </span>
       </div>
 
       {/* Code body */}
