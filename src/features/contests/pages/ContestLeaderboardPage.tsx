@@ -5,16 +5,21 @@ import { toast } from 'react-toastify';
 import { useLeaderboard } from '../hooks/useLeaderboard';
 import { LeaderboardTable } from '../components/LeaderboardTable';
 import { adminApi } from '@/services/api/adminApi';
+import { useAuth } from '@/lib/AuthContext';
 
 export const ContestLeaderboardPage = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
   const leaderboardState = useLeaderboard(contestId || '');
   const hasRedirectedRef = useRef(false);
+  const { user, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    if (authLoading) return () => { cancelled = true; };
+    setIsAdmin(false);
+    if (!user) return () => { cancelled = true; };
     adminApi
       .checkAdminAccess()
       .then(() => {
@@ -26,7 +31,7 @@ export const ContestLeaderboardPage = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, user?.uid]);
 
   const {
     leaderboard,

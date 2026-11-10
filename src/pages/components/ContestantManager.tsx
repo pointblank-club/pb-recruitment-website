@@ -190,7 +190,7 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                     </select>
                   </div>
                   <button
-                    onClick={() => navigate(`/admin/contest/${contestId}/submissions?userId=${contestant.id}`)}
+                    onClick={() => navigate(`/admin/contest/${contestId}/submissions?${new URLSearchParams({ userId: contestant.id })}`)}
                     className="w-full flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-semibold transition-colors shadow"
                   >
                     <Code2 className="w-3.5 h-3.5" />

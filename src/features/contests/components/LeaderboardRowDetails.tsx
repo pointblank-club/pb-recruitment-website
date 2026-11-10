@@ -67,7 +67,7 @@ export const LeaderboardRowDetails = ({
                       type="button"
                       onClick={() =>
                         navigate(
-                          `/admin/contest/${contestId}/submissions?userId=${userId}&problemId=${problemScore.problem_id}`
+                          `/admin/contest/${contestId}/submissions?${new URLSearchParams({ userId, problemId: problemScore.problem_id })}`
                         )
                       }
                       className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold border border-emerald-800 bg-emerald-950/60 px-2 py-0.5 rounded hover:border-emerald-600 transition-colors inline-flex items-center gap-1"

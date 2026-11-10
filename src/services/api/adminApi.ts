@@ -381,7 +381,7 @@ class AdminApiService {
 
   async getContestSubmissions(
     contestId: string,
-    params?: { user_id?: string; problem_id?: string; page?: number; page_size?: number }
+    params?: { user_id?: string; problem_id?: string; verdict?: string; page?: number; page_size?: number }
   ): Promise<{ submissions: AdminSubmissionItem[]; totalCount: number }> {
     const response = await this.axiosInstance.get<AdminSubmissionItem[]>(
       `/admin/contests/${contestId}/submissions`,

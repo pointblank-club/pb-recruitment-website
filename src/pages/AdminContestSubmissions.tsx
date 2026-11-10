@@ -63,7 +63,9 @@ export default function AdminContestSubmissions() {
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState<boolean>(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(false);
   const [detailsError, setDetailsError] = useState<string>("");
+  const [metaError, setMetaError] = useState<string>("");
   const [retryCount, setRetryCount] = useState<number>(0);
+  const [metaRetryCount, setMetaRetryCount] = useState<number>(0);
 
   // Handlers to update URL search parameters
   const handleUserChange = (userId: string) => {
@@ -100,10 +102,10 @@ export default function AdminContestSubmissions() {
     setRetryCount((c) => c + 1);
   };
 
-  // Reset page when participant or problem filter changes
+  // Reset page when route or filters change
   useEffect(() => {
     setPage(0);
-  }, [selectedUserId, selectedProblemId]);
+  }, [contestId, selectedUserId, selectedProblemId, statusFilter]);
 
   // Load contest metadata, coding problems, and contestants
   useEffect(() => {
@@ -111,24 +113,16 @@ export default function AdminContestSubmissions() {
 
     let cancelled = false;
     setIsLoadingMeta(true);
+    setMetaError("");
 
     Promise.all([
-      adminApi.getContestById(contestId).catch((err) => {
-        console.error("Failed to load contest:", err);
-        return null;
-      }),
-      adminApi.getContestProblems(contestId).catch((err) => {
-        console.error("Failed to load problems:", err);
-        return [];
-      }),
-      adminApi.getContestRegistrations(contestId).catch((err) => {
-        console.error("Failed to load registrations:", err);
-        return [];
-      }),
+      adminApi.getContestById(contestId),
+      adminApi.getContestProblems(contestId),
+      adminApi.getContestRegistrations(contestId),
     ])
       .then(([contest, allProblems, allRegistrations]) => {
         if (cancelled) return;
-        setContestName(contest?.name ?? contestId);
+        setContestName(contest.name ?? contestId);
         // Only keep coding problems
         const coding = allProblems.filter((p) => p.type === "code");
         setCodeProblems(coding);
@@ -138,13 +132,14 @@ export default function AdminContestSubmissions() {
       .catch((err) => {
         if (cancelled) return;
         console.error("Error loading contest metadata:", err);
+        setMetaError(err instanceof Error ? err.message : "Failed to load contest data.");
         setIsLoadingMeta(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [contestId]);
+  }, [contestId, metaRetryCount]);
 
   // Load submissions whenever contestId, selectedUserId, selectedProblemId, or page changes
   useEffect(() => {
@@ -155,10 +150,11 @@ export default function AdminContestSubmissions() {
     setSelectedSubmissionId(null);
     setSubmissionDetails(null);
 
-    const params: { user_id?: string; problem_id?: string; page?: number; page_size?: number } = {
+    const params: { user_id?: string; problem_id?: string; verdict?: string; page?: number; page_size?: number } = {
       page,
       page_size: PAGE_SIZE,
     };
+    if (statusFilter !== "all") params.verdict = statusFilter;
     if (selectedUserId) {
       params.user_id = selectedUserId;
     }
@@ -202,7 +198,7 @@ export default function AdminContestSubmissions() {
     return () => {
       cancelled = true;
     };
-  }, [contestId, selectedUserId, selectedProblemId, page]);
+  }, [contestId, selectedUserId, selectedProblemId, statusFilter, page]);
 
   // Load submission details when a submission is selected
   useEffect(() => {
@@ -223,6 +219,7 @@ export default function AdminContestSubmissions() {
       .then((details) => {
         if (cancelled) return;
         setSubmissionDetails(details);
+        setSubmissions((current) => current.map((item) => item.id === details.id ? { ...item, status: details.status, runtime: details.runtime, memory: details.memory } : item));
         setDetailsError("");
         setIsLoadingDetails(false);
       })
@@ -241,12 +238,7 @@ export default function AdminContestSubmissions() {
   }, [selectedSubmissionId, contestId, retryCount]);
 
   // Filtered submissions based on status
-  const filteredSubmissions = useMemo(() => {
-    return submissions.filter((sub) => {
-      if (statusFilter === "all") return true;
-      return sub.status.toLowerCase() === statusFilter.toLowerCase();
-    });
-  }, [submissions, statusFilter]);
+  const filteredSubmissions = submissions;
 
   // Clear details and selection when selection becomes invalid under current filters
   useEffect(() => {
@@ -311,6 +303,7 @@ export default function AdminContestSubmissions() {
       <Navbar />
 
       <div className="flex-grow container mx-auto px-4 py-8 max-w-7xl">
+        {metaError && <div role="alert" className="mb-5 rounded border border-red-800 bg-red-950/40 p-4 text-red-300">Unable to load contest filters: {metaError} <button type="button" className="ml-3 underline" onClick={() => setMetaRetryCount((n) => n + 1)}>Retry</button></div>}
         {/* Navigation back button */}
         <div className="flex items-center justify-between mb-6">
           <button
@@ -351,11 +344,11 @@ export default function AdminContestSubmissions() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Participant selector */}
             <div>
-              <label className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-1.5">
+              <label htmlFor="participant-filter" className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-1.5">
                 <User size={15} className="text-green-400" />
                 Select Participant
               </label>
-              <select
+              <select id="participant-filter" aria-label="Select Participant"
                 value={selectedUserId}
                 onChange={(e) => handleUserChange(e.target.value)}
                 className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-gray-200 text-sm focus:border-green-500 focus:outline-none"
@@ -371,11 +364,11 @@ export default function AdminContestSubmissions() {
 
             {/* Coding Problem selector */}
             <div>
-              <label className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-1.5">
+              <label htmlFor="problem-filter" className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-1.5">
                 <FileCode size={15} className="text-green-400" />
                 Coding Problem
               </label>
-              <select
+              <select id="problem-filter" aria-label="Coding Problem"
                 value={selectedProblemId}
                 onChange={(e) => handleProblemChange(e.target.value)}
                 className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-gray-200 text-sm focus:border-green-500 focus:outline-none"
@@ -391,11 +384,11 @@ export default function AdminContestSubmissions() {
 
             {/* Status filter */}
             <div>
-              <label className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-1.5">
+              <label htmlFor="verdict-filter" className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-1.5">
                 <Filter size={15} className="text-green-400" />
                 Verdict Status
               </label>
-              <select
+              <select id="verdict-filter" aria-label="Verdict Status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-gray-200 text-sm focus:border-green-500 focus:outline-none"
@@ -452,7 +445,7 @@ export default function AdminContestSubmissions() {
                 Submissions History
                 <span className="text-xs font-mono font-normal bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">
                   {statusFilter !== "all"
-                    ? `${filteredSubmissions.length} filtered`
+                    ? `${totalCount} filtered`
                     : totalCount > 0
                     ? `${submissions.length} of ${totalCount}`
                     : filteredSubmissions.length}
@@ -484,10 +477,12 @@ export default function AdminContestSubmissions() {
                   const isSelected = sub.id === selectedSubmissionId;
                   const verdictBadgeClass = getVerdictClasses(sub.status);
                   return (
-                    <div
+                    <button
+                      type="button"
+                      aria-pressed={isSelected}
                       key={sub.id}
                       onClick={() => setSelectedSubmissionId(sub.id)}
-                      className={`cursor-pointer rounded-lg p-3.5 border transition-all duration-150 ${
+                      className={`w-full text-left cursor-pointer rounded-lg p-3.5 border transition-all duration-150 ${
                         isSelected
                           ? "bg-gray-800/90 border-green-500 shadow-lg shadow-green-500/10"
                           : "bg-gray-900 border-gray-800 hover:border-gray-700 hover:bg-gray-850"
@@ -528,7 +523,7 @@ export default function AdminContestSubmissions() {
                           {formatSubmittedAt(sub.created_at)}
                         </span>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>

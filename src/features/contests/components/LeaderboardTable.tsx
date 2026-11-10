@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Code2 } from 'lucide-react';
 import type { LeaderboardEntry } from '../problem.types';
 import { formatTimestamp } from '@/lib/utils';
 import { LeaderboardRowDetails } from './LeaderboardRowDetails.tsx';
-import { adminApi } from '@/services/api/adminApi';
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[];
@@ -21,30 +20,7 @@ export const LeaderboardTable = ({
 }: LeaderboardTableProps) => {
   const navigate = useNavigate();
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
-  const [isAdminState, setIsAdminState] = useState<boolean>(propIsAdmin ?? false);
-
-  useEffect(() => {
-    if (propIsAdmin !== undefined) {
-      setIsAdminState(propIsAdmin);
-      return;
-    }
-
-    let cancelled = false;
-    adminApi
-      .checkAdminAccess()
-      .then(() => {
-        if (!cancelled) setIsAdminState(true);
-      })
-      .catch(() => {
-        if (!cancelled) setIsAdminState(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [propIsAdmin]);
-
-  const isAdmin = isAdminState;
+  const isAdmin = propIsAdmin ?? false;
 
   const hasProblemBreakdown = entries.some(
     (entry) => entry.problem_scores && entry.problem_scores.length > 0
@@ -170,7 +146,7 @@ export const LeaderboardTable = ({
                         <button
                           onClick={() =>
                             navigate(
-                              `/admin/contest/${contestId}/submissions?userId=${entry.user_id}`
+                              `/admin/contest/${contestId}/submissions?${new URLSearchParams({ userId: entry.user_id })}`
                             )
                           }
                           className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold font-['DM_Sans'] border border-emerald-700/60 bg-emerald-950/40 px-2.5 py-1 hover:border-emerald-500 transition-colors rounded inline-flex items-center gap-1.5"
