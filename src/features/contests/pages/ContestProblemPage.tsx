@@ -16,6 +16,11 @@ import { formatVerdict } from '../submissionUtils';
 import { useClipboardBlocker } from '../hooks/useClipboardBlocker';
 
 export const ContestProblemPage = () => {
+  const { user } = useAuth();
+  return <ContestProblemContent key={user?.uid ?? 'guest'} />;
+};
+
+const ContestProblemContent = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -90,7 +95,7 @@ export const ContestProblemPage = () => {
     if (activeSubmission.phase === 'completed' && activeSubmission.id && activeSubmission.status) {
       if (notifiedSubmissionRef.current === activeSubmission.id) return;
       notifiedSubmissionRef.current = activeSubmission.id;
-      if (problem?.type !== 'mcq') {
+      if (activeSubmission.details?.type === 'code' && activeSubmission.status !== 'attempted') {
         const verdict = formatVerdict(activeSubmission.status);
         if (activeSubmission.status === 'accepted' || activeSubmission.status === 'completed') {
           toast.success(`Submission successful: ${verdict}`);
@@ -103,7 +108,7 @@ export const ContestProblemPage = () => {
     } else if (activeSubmission.phase === 'timeout') {
       toast.info(activeSubmission.message || 'Submission saved; verdict delayed.');
     }
-  }, [activeSubmission, problem?.type]);
+  }, [activeSubmission]);
 
   // Post-contest: fetch full details (including code) for the registered user's latest submission.
   // Also fetch details for MCQ problems so the chosen option is known during active contests.

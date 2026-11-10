@@ -41,7 +41,7 @@ const wait = (delay: number) => new Promise<void>((resolve) => {
   window.setTimeout(resolve, delay);
 });
 
-const isJudging = (status: SubmissionStatus) => (
+const isJudging = (status?: SubmissionStatus) => (
   status === 'pending' || status === 'processing'
 );
 

@@ -334,6 +334,7 @@ export interface RunCodeResponse {
 export type SubmissionType = 'code' | 'mcq';
 
 export type SubmissionStatus =
+  | 'attempted'
   | 'pending'
   | 'processing'
   | 'accepted'
