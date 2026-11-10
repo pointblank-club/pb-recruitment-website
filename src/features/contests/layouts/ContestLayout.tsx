@@ -2,6 +2,7 @@ import { Navigate, Outlet, useParams, useNavigate, useLocation } from 'react-rou
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { ContestHeader } from '../components/ContestHeader';
+import { ContestParticipationGate } from '../components/ContestParticipationGate';
 import { EndContestModal } from '../components/EndContestModal';
 import { useContest } from '../hooks/useContest';
 import { useAuth } from '@/lib/AuthContext';
@@ -173,16 +174,21 @@ export const ContestLayout = () => {
     setIsEndModalOpen(true);
   };
 
+  const handleLeaveContest = () => {
+    hasExitedRef.current = true;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    navigate(`/contest/${contestId}`, { replace: true });
+  };
+
   const handleConfirmEndContest = () => {
     setIsEndModalOpen(false);
     if (user?.uid && contestId) {
       setContestSubmitted(contestId, user.uid);
     }
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    }
     toast.info("Contest ended on this device. Only your submitted solutions will be scored.");
-    navigate(`/contest/${contestId}`, { replace: true });
+    handleLeaveContest();
   };
 
   if (!contestId) {
@@ -223,6 +229,8 @@ export const ContestLayout = () => {
   }
 
   const isContestEnded = contest ? (hasElapsedDeadline || Date.now() >= contest.end_time) : false;
+  const isParticipating = !!user && !!contest?.is_registered && isLive && !isLeaderboardPage &&
+    !hasExitedRef.current && !getContestSubmitted(contestId, user.uid);
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;
 
   return (
@@ -252,6 +260,15 @@ export const ContestLayout = () => {
         onConfirm={handleConfirmEndContest}
         contestName={contest?.name}
       />
+
+      {isParticipating && (
+        <ContestParticipationGate
+          key={`${contestId}:${user.uid}`}
+          isExitingRef={hasExitedRef}
+          endTime={contest!.end_time}
+          onLeave={handleLeaveContest}
+        />
+      )}
 
       {!isWindowFocused && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#05070a]/95 px-6 text-center text-slate-300 backdrop-blur-2xl">

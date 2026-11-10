@@ -1,0 +1,155 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Contest participation self-check</title>
+<div id="root"></div>
+<pre id="result">Running…</pre>
+<script type="module">
+  // Open on the Vite dev server. Fullscreen/visibility are mocked; dialogs and focus are native.
+  import React from 'react';
+  import { createRoot } from 'react-dom/client';
+  import { ContestParticipationGate } from '/src/features/contests/components/ContestParticipationGate.tsx';
+
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const waitFor = async (condition) => {
+    const deadline = Date.now() + 2000;
+    while (!condition()) {
+      assert(Date.now() < deadline, 'Timed out waiting for UI');
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  };
+  const tick = () => new Promise(resolve => setTimeout(resolve, 30));
+  const dialog = () => document.querySelector('dialog[open]');
+  const click = (text) => {
+    const button = [...document.querySelectorAll('dialog button')].find(node => node.textContent === text);
+    assert(button, `Missing button: ${text}`);
+    button.click();
+  };
+  let supported = true, fullscreen = false, hidden = false, denied = true, requests = 0, leaves = 0;
+  let completeRequest;
+  let deferRequest = false;
+  Object.defineProperties(document, {
+    fullscreenEnabled: { get: () => supported },
+    fullscreenElement: { get: () => fullscreen ? document.documentElement : null },
+    hidden: { get: () => hidden },
+  });
+  document.documentElement.requestFullscreen = async () => {
+    requests++;
+    if (denied) throw new Error('Test permission denial');
+    if (deferRequest) await new Promise(resolve => { completeRequest = resolve; });
+    fullscreen = true;
+    document.dispatchEvent(new Event('fullscreenchange'));
+  };
+  document.exitFullscreen = async () => {
+    fullscreen = false;
+    document.dispatchEvent(new Event('fullscreenchange'));
+  };
+  const listeners = new Map(['fullscreenchange', 'visibilitychange'].map(type => [type, new Set()]));
+  const addListener = document.addEventListener.bind(document);
+  const removeListener = document.removeEventListener.bind(document);
+  document.addEventListener = (type, handler, ...options) => {
+    listeners.get(type)?.add(handler);
+    addListener(type, handler, ...options);
+  };
+  document.removeEventListener = (type, handler, ...options) => {
+    listeners.get(type)?.delete(handler);
+    removeListener(type, handler, ...options);
+  };
+  const isExitingRef = { current: false };
+  const endTime = Date.now() + 60000;
+  const onLeave = () => {
+    leaves++;
+    isExitingRef.current = true;
+    if (document.fullscreenElement) document.exitFullscreen();
+    render(false);
+  };
+  const root = createRoot(document.getElementById('root'));
+  const render = (active = true) => root.render(React.createElement(React.StrictMode, null,
+    React.createElement('input', { id: 'workspace', defaultValue: 'draft' }),
+    React.createElement('div', {
+      id: 'focus-overlay',
+      style: { display: 'none', position: 'fixed', inset: 0, zIndex: 9999, background: 'black' },
+    }, 'Inactive window'),
+    active && React.createElement(ContestParticipationGate, { isExitingRef, endTime, onLeave }),
+  ));
+  try {
+    render();
+    await waitFor(dialog);
+    const workspace = document.getElementById('workspace');
+    workspace.value = 'unsaved draft';
+    click('Enter fullscreen');
+    await waitFor(() => dialog()?.textContent.includes('Test permission denial'));
+    assert(!dialog().textContent.includes('Continue demo without fullscreen'), 'Denial must not offer demo bypass');
+    click('Leave contest');
+    await waitFor(() => !dialog());
+    assert(leaves === 1, 'Denied fullscreen must still allow leaving');
+    isExitingRef.current = false;
+    render();
+    await waitFor(dialog);
+    click('Enter fullscreen');
+    await waitFor(() => dialog()?.textContent.includes('Test permission denial'));
+    denied = false;
+    click('Retry');
+    await waitFor(() => !dialog());
+    assert(listeners.get('fullscreenchange').size === 1, 'StrictMode must leave one fullscreen listener');
+    assert(listeners.get('visibilitychange').size === 0, 'Tab warnings belong to the tab tracker');
+
+    hidden = true;
+    document.dispatchEvent(new Event('visibilitychange'));
+    hidden = false;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await tick();
+    assert(!dialog(), 'Tab return alone must not add a second warning');
+    workspace.focus();
+    const overlay = document.getElementById('focus-overlay');
+    overlay.style.display = 'block';
+    fullscreen = false;
+    document.dispatchEvent(new Event('fullscreenchange'));
+    await waitFor(dialog);
+    assert(dialog().contains(document.activeElement), 'Recovery must receive focus');
+    const bounds = dialog().getBoundingClientRect();
+    assert(dialog().contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)), 'Native modal must appear above the focus overlay');
+    overlay.style.display = 'none';
+    click('Return to fullscreen');
+    await waitFor(() => !dialog());
+    assert(document.activeElement === workspace, 'Recovery must restore workspace focus');
+    assert(document.getElementById('workspace') === workspace && workspace.value === 'unsaved draft', 'Workspace must stay mounted');
+
+    isExitingRef.current = true;
+    fullscreen = false;
+    document.dispatchEvent(new Event('fullscreenchange'));
+    await tick();
+    assert(!dialog(), 'App-driven fullscreen exits must not warn');
+    render(false);
+    await tick();
+    isExitingRef.current = false;
+    deferRequest = true;
+    render();
+    await waitFor(dialog);
+    click('Enter fullscreen');
+    await waitFor(() => !!completeRequest);
+    click('Leave contest');
+    await waitFor(() => !dialog());
+    completeRequest();
+    await tick();
+    assert(!fullscreen && !dialog(), 'A late fullscreen request must not strand users after leaving');
+
+    supported = false;
+    isExitingRef.current = false;
+    render();
+    await waitFor(dialog);
+    const beforeBypass = requests;
+    click('Continue demo without fullscreen');
+    await waitFor(() => !dialog());
+    document.dispatchEvent(new Event('fullscreenchange'));
+    await tick();
+    assert(!dialog() && requests === beforeBypass, 'Explicit unsupported demo continuation must persist without requests');
+    root.unmount();
+    assert([...listeners.values()].every(handlers => handlers.size === 0), 'Listeners must be removed on unmount');
+    document.getElementById('result').textContent = 'PASS: denial/retry/leave, no tab warning, overlay stacking/focus, workspace, deliberate/late exit, unsupported demo, StrictMode cleanup';
+    document.getElementById('result').dataset.result = 'pass';
+  } catch (error) {
+    document.getElementById('result').textContent = `FAIL: ${error.message}`;
+    document.getElementById('result').dataset.result = 'fail';
+    throw error;
+  }
+</script>
