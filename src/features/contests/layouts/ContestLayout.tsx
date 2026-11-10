@@ -40,6 +40,11 @@ export const ContestLayout = () => {
   useEffect(() => {
     if (!contest) return;
 
+    // Clear hasElapsedDeadline whenever current contest metadata confirms a future deadline
+    if (Date.now() < contest.end_time) {
+      setHasElapsedDeadline(false);
+    }
+
     // Check if the user already ended this contest early on this device
     // Only redirect if the contest is still currently running
     const isSubmittedEarly = Boolean(
@@ -81,8 +86,6 @@ export const ContestLayout = () => {
           isRefetchingRef.current = true;
           const updatedContest = await refetch();
           isRefetchingRef.current = false;
-          // The user may have left (e.g. to the leaderboard) while the refetch was in flight
-          if (cancelled) return true;
           if (updatedContest && Date.now() < updatedContest.end_time) {
             // Reconcile extension: contest was extended while running
             setHasElapsedDeadline(false);
@@ -94,6 +97,8 @@ export const ContestLayout = () => {
             setProgress(newTotal > 0 ? Math.min(100, Math.max(0, (newElapsed / newTotal) * 100)) : 0);
             return false;
           }
+          // The user may have left (e.g. to the leaderboard) while the refetch was in flight
+          if (cancelled) return true;
 
           hasExitedRef.current = true;
           if (document.fullscreenElement) {
@@ -106,6 +111,9 @@ export const ContestLayout = () => {
 
         return true;
       }
+
+      // Common nonexpired path: contest deadline is in the future
+      setHasElapsedDeadline(false);
 
       // If contest hasn't started yet and user is in problem/test area
       if (now < startTime) {
