@@ -456,7 +456,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
           </div>
 
           {/* Left Pane Content Area */}
-          <div className="flex-1 overflow-y-auto p-5">
+          <div className="code-viewer-scrollbar flex-1 overflow-y-auto p-5">
             {leftTab === 'statement' && (
               <ProblemStatementTab
                 problem={problem}
@@ -599,7 +599,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
             </div>
 
             {/* Monaco Code Editor */}
-            <div className="flex-1 min-h-0 relative bg-[#06080d]">
+            <div className="code-viewer-scrollbar flex-1 min-h-0 relative bg-[#06080d]">
               <Editor
                 height="100%"
                 language={

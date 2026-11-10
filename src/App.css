@@ -1,0 +1,32 @@
+.code-viewer-scrollbar {
+  scrollbar-color: rgba(16, 185, 129, 0.72) #0b1018;
+  scrollbar-width: thin;
+}
+
+.code-viewer-scrollbar::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.code-viewer-scrollbar::-webkit-scrollbar-track {
+  background: #0b1018;
+}
+
+.code-viewer-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.58);
+  border: 2px solid #0b1018;
+  border-radius: 999px;
+}
+
+.code-viewer-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #10b981;
+}
+
+.monaco-editor .scrollbar .slider {
+  background: rgba(16, 185, 129, 0.52) !important;
+  border-radius: 999px;
+}
+
+.monaco-editor .scrollbar .slider:hover {
+  background: #10b981 !important;
+}

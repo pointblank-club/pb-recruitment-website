@@ -146,7 +146,7 @@ export const SubmittedSolutionViewer = ({
 
       {/* Code body */}
       <div
-        className="flex-1 overflow-auto p-4 bg-[#0d1117]"
+        className="code-viewer-scrollbar flex-1 overflow-auto p-4 bg-[#0d1117]"
         tabIndex={0}
         role="region"
         aria-label="Submitted code"
