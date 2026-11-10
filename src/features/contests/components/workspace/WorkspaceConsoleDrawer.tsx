@@ -262,7 +262,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                   {runResult.stdout ? (
                     <div className="space-y-1">
                       <span className="text-slate-400 text-[11px] uppercase font-semibold">Standard Output:</span>
-                      <pre className="p-2.5 rounded bg-black/60 border border-[#1e2636] text-[#10b981] overflow-x-auto whitespace-pre">
+                      <pre className="p-2.5 rounded bg-black/60 border border-[#1e2636] text-slate-100 overflow-x-auto whitespace-pre">
                         {runResult.stdout}
                       </pre>
                     </div>
