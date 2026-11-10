@@ -67,6 +67,8 @@ const mergeSubmissions = (
 export const useProblemSubmissions = (contestId: string, problemId: string, options?: { skip?: boolean }) => {
   const skip = options?.skip ?? false;
   const [activeSubmission, setActiveSubmission] = useState<ActiveSubmission>({ phase: 'idle' });
+  const activeSubmissionRef = useRef(activeSubmission);
+  activeSubmissionRef.current = activeSubmission;
   const [history, setHistory] = useState<SubmissionDetailsResponse[]>([]);
   const [historyPage, setHistoryPage] = useState(0);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
@@ -75,68 +77,6 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
   const pollTokenRef = useRef(0);
   const historyRequestRef = useRef(0);
   const scopeTokenRef = useRef(0);
-
-  const refreshHistory = useCallback(async () => {
-    if (!problemId) return;
-
-    const requestId = ++historyRequestRef.current;
-    setIsHistoryLoading(true);
-    setHistoryError(null);
-
-    try {
-      const submissions = await contestApi.listUserSubmissions(problemId, 0);
-      if (requestId !== historyRequestRef.current) return;
-      setHistory(submissions);
-      setHistoryPage(0);
-      setHasMoreHistory(submissions.length === HISTORY_PAGE_SIZE);
-    } catch (error) {
-      if (requestId !== historyRequestRef.current) return;
-      setHistoryError(getErrorMessage(error, 'Could not load submission history.'));
-    } finally {
-      if (requestId === historyRequestRef.current) setIsHistoryLoading(false);
-    }
-  }, [problemId]);
-
-  useEffect(() => {
-    const scopeToken = ++scopeTokenRef.current;
-    pollTokenRef.current += 1;
-    setActiveSubmission({ phase: 'idle' });
-    setHistory([]);
-    setHistoryPage(0);
-    setHasMoreHistory(false);
-    setHistoryError(null);
-    setIsHistoryLoading(false);
-
-    if (!skip) void refreshHistory();
-
-    return () => {
-      pollTokenRef.current += 1;
-      historyRequestRef.current += 1;
-      if (scopeTokenRef.current === scopeToken) scopeTokenRef.current += 1;
-    };
-  }, [problemId, refreshHistory, skip]);
-
-  const loadMoreHistory = useCallback(async () => {
-    if (!problemId || isHistoryLoading || !hasMoreHistory) return;
-
-    const nextPage = historyPage + 1;
-    const requestId = ++historyRequestRef.current;
-    setIsHistoryLoading(true);
-    setHistoryError(null);
-
-    try {
-      const submissions = await contestApi.listUserSubmissions(problemId, nextPage);
-      if (requestId !== historyRequestRef.current) return;
-      setHistory((current) => mergeSubmissions(current, submissions));
-      setHistoryPage(nextPage);
-      setHasMoreHistory(submissions.length === HISTORY_PAGE_SIZE);
-    } catch (error) {
-      if (requestId !== historyRequestRef.current) return;
-      setHistoryError(getErrorMessage(error, 'Could not load more submissions.'));
-    } finally {
-      if (requestId === historyRequestRef.current) setIsHistoryLoading(false);
-    }
-  }, [hasMoreHistory, historyPage, isHistoryLoading, problemId]);
 
   const pollSubmission = useCallback(async (summary: SubmissionDetailsResponse) => {
     const pollToken = ++pollTokenRef.current;
@@ -241,11 +181,109 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
       : current);
   }, []);
 
+  const refreshHistory = useCallback(async () => {
+    if (!problemId) return;
+
+    const requestId = ++historyRequestRef.current;
+    const scopeToken = scopeTokenRef.current;
+    setIsHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const submissions = await contestApi.listUserSubmissions(problemId, 0);
+      if (requestId !== historyRequestRef.current || scopeToken !== scopeTokenRef.current) return;
+      setHistory(submissions);
+      setHistoryPage(0);
+      setHasMoreHistory(submissions.length === HISTORY_PAGE_SIZE);
+
+      if (submissions.length > 0 && activeSubmissionRef.current.phase === 'idle') {
+        const latest = submissions[0];
+        if (isJudging(latest.status)) {
+          setActiveSubmission({
+            id: latest.id,
+            phase: 'polling',
+            status: latest.status,
+            details: latest,
+            message: 'Judging in progress…',
+          });
+          void pollSubmission(latest);
+        } else {
+          setActiveSubmission({
+            id: latest.id,
+            phase: 'completed',
+            status: latest.status,
+            details: latest,
+          });
+
+          try {
+            const details = await contestApi.getSubmissionDetails(latest.id);
+            if (scopeToken !== scopeTokenRef.current) return;
+            setActiveSubmission((current) => (
+              current.id === latest.id && current.phase === 'completed'
+                ? { ...current, details }
+                : current
+            ));
+          } catch {
+            // Keep summary details if detailed fetch fails
+          }
+        }
+      }
+
+      return submissions;
+    } catch (error) {
+      if (requestId !== historyRequestRef.current) return;
+      setHistoryError(getErrorMessage(error, 'Could not load submission history.'));
+    } finally {
+      if (requestId === historyRequestRef.current) setIsHistoryLoading(false);
+    }
+  }, [pollSubmission, problemId]);
+
+  useEffect(() => {
+    pollTokenRef.current += 1;
+    scopeTokenRef.current += 1;
+    setActiveSubmission({ phase: 'idle' });
+    setHistory([]);
+    setHistoryPage(0);
+    setHasMoreHistory(false);
+    setHistoryError(null);
+    setIsHistoryLoading(false);
+
+    if (!skip) void refreshHistory();
+
+    return () => {
+      pollTokenRef.current += 1;
+      historyRequestRef.current += 1;
+      scopeTokenRef.current += 1;
+    };
+  }, [problemId, refreshHistory, skip]);
+
+  const loadMoreHistory = useCallback(async () => {
+    if (!problemId || isHistoryLoading || !hasMoreHistory) return;
+
+    const nextPage = historyPage + 1;
+    const requestId = ++historyRequestRef.current;
+    setIsHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const submissions = await contestApi.listUserSubmissions(problemId, nextPage);
+      if (requestId !== historyRequestRef.current) return;
+      setHistory((current) => mergeSubmissions(current, submissions));
+      setHistoryPage(nextPage);
+      setHasMoreHistory(submissions.length === HISTORY_PAGE_SIZE);
+    } catch (error) {
+      if (requestId !== historyRequestRef.current) return;
+      setHistoryError(getErrorMessage(error, 'Could not load more submissions.'));
+    } finally {
+      if (requestId === historyRequestRef.current) setIsHistoryLoading(false);
+    }
+  }, [hasMoreHistory, historyPage, isHistoryLoading, problemId]);
+
   const submit = useCallback(async (
     createSubmission: () => Promise<SubmissionResponse>,
     metadata: SubmissionMetadata,
   ) => {
-    const scopeToken = scopeTokenRef.current;
+    const scopeToken = ++scopeTokenRef.current;
     pollTokenRef.current += 1;
     setActiveSubmission({
       phase: 'submitting',
@@ -264,19 +302,19 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
         type: metadata.type,
         language: metadata.language,
         option: metadata.option,
-        status: 'pending',
+        ...(metadata.type === 'code' ? { status: 'pending' as const } : {}),
         created_at: Math.floor(Date.now() / 1000),
       };
 
       setActiveSubmission({
         id: response.submission_id,
-        phase: 'received',
-        status: 'pending',
+        phase: metadata.type === 'mcq' ? 'completed' : 'received',
+        status: metadata.type === 'mcq' ? undefined : 'pending',
         details: summary,
-        message: 'Submission received. Waiting for the judge…',
+        message: metadata.type === 'mcq' ? undefined : 'Submission received. Waiting for the judge…',
       });
       setHistory((current) => mergeSubmissions([summary], current));
-      void pollSubmission(summary);
+      if (metadata.type !== 'mcq') void pollSubmission(summary);
     } catch (error) {
       if (scopeToken !== scopeTokenRef.current) return;
 

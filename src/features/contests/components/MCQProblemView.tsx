@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Save, ListChecks, CheckCircle2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import type { Problem } from '../problem.types';
+import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
 
 interface MCQProblemViewProps {
   problem: Problem;
@@ -12,6 +13,7 @@ interface MCQProblemViewProps {
   submissionError?: string | null;
   onRetryPolling?: () => void;
   isContestEnded?: boolean;
+  isRestrictionsActive?: boolean;
   /** submittedOption: option chosen by registered user before contest ended */
   submittedOption?: number | null;
   contestId?: string;
@@ -28,6 +30,7 @@ export const MCQProblemView = ({
   submissionError = null,
   onRetryPolling,
   isContestEnded = false,
+  isRestrictionsActive = false,
   submittedOption = null,
   contestId,
   prevProblemId,
@@ -40,6 +43,14 @@ export const MCQProblemView = ({
   const [justSubmitted, setJustSubmitted] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const requestScopeRef = useRef(0);
+
+  useEffect(() => {
+    const scope = ++requestScopeRef.current;
+    return () => {
+      if (requestScopeRef.current === scope) requestScopeRef.current += 1;
+    };
+  }, [problem.id]);
 
   const hasSubmitted =
     (submittedOption !== null && submittedOption !== undefined) ||
@@ -63,7 +74,7 @@ export const MCQProblemView = ({
     if (hasSubmitted) return;
 
     if (!selectedAnswer) {
-      alert('Please select an answer before submitting.');
+      setLocalError('Please select an answer before submitting.');
       return;
     }
 
@@ -72,18 +83,24 @@ export const MCQProblemView = ({
       return;
     }
 
+    const requestScope = requestScopeRef.current;
+    const isRequestCurrent = () => requestScopeRef.current === requestScope;
+
     try {
       setIsSubmitting(true);
       setLocalError(null);
       await onSubmit(parseInt(selectedAnswer));
+      if (!isRequestCurrent()) return;
       setJustSubmitted(selectedAnswer);
+      if (nextProblemId) onNavigate?.(nextProblemId);
     } catch (error) {
+      if (!isRequestCurrent()) return;
       console.error('Submission error:', error);
       if (error instanceof Error && error.message) {
         setLocalError(error.message);
       }
     } finally {
-      setIsSubmitting(false);
+      if (isRequestCurrent()) setIsSubmitting(false);
     }
   };
 
@@ -92,7 +109,14 @@ export const MCQProblemView = ({
   const options = problem.options ?? [];
 
   return (
-    <div className="flex-1 flex flex-col bg-black text-white">
+    <div
+      className={`flex-1 flex flex-col bg-black text-white ${isRestrictionsActive ? 'select-none' : ''}`}
+      onCopyCapture={isContestEnded ? undefined : preventClipboardAction}
+      onCutCapture={isContestEnded ? undefined : preventClipboardAction}
+      onPasteCapture={isContestEnded ? undefined : preventClipboardAction}
+      onKeyDownCapture={isContestEnded ? undefined : preventClipboardShortcut}
+      onContextMenu={isContestEnded ? undefined : preventContextMenu}
+    >
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6 space-y-6">
           <div className="space-y-2">
@@ -100,7 +124,7 @@ export const MCQProblemView = ({
               <div className="flex items-center gap-2.5">
                 {contestId && (
                   <Link
-                    to={`/contests/${contestId}/problems`}
+                    to={`/contests/${contestId}/problems?tab=mcq`}
                     className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-gray-800 transition-colors flex items-center justify-center"
                     title="Back to Problems"
                   >

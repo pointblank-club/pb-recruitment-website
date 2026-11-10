@@ -1,7 +1,7 @@
 import { useAuth } from '@/lib/AuthContext';
 import { getProblemAttempted } from '@/lib/contestStorage';
 import type { Problem, ProblemProgress } from '../problem.types';
-import { ProblemAccordion } from './ProblemAccordion';
+import { ProblemTabs } from './ProblemTabs';
 
 interface ProblemListProps {
   problems: Problem[];
@@ -14,11 +14,15 @@ export const ProblemList = ({ problems, contestId }: ProblemListProps) => {
   if (user) {
     problems.forEach((problem) => {
       let status = problem.progress ?? 'unavailable';
-      if ((status === 'unsolved' || status === 'unavailable') && getProblemAttempted(contestId, user.uid, problem.id)) {
+      if (problem.type === 'mcq') {
+        if (status !== 'unsolved' && status !== 'unavailable') {
+          status = 'attempted';
+        }
+      } else if ((status === 'unsolved' || status === 'unavailable') && getProblemAttempted(contestId, user.uid, problem.id)) {
         status = 'attempted';
       }
       progress[problem.id] = status;
     });
   }
-  return <ProblemAccordion problems={problems} contestId={contestId} progress={progress} />;
+  return <ProblemTabs problems={problems} contestId={contestId} progress={progress} />;
 };

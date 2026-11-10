@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'react-toastify';
 import { useAuth } from '@/lib/AuthContext';
 import { formatVerdict } from '../submissionUtils';
+import { useClipboardBlocker } from '../hooks/useClipboardBlocker';
 
 export const ContestProblemPage = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
@@ -20,17 +21,35 @@ export const ContestProblemPage = () => {
   const location = useLocation();
   const { user } = useAuth();
   const {
+    isLive = false,
     isContestEnded = false,
     isAuthenticated = false,
     isRegistered = false,
   } = useOutletContext<ContestOutletContext>() || {};
 
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
+
+  // Enable restrictions only for authenticated, registered participants with a successfully loaded problem in a live contest.
+  const isRestrictionsActive =
+    isLive &&
+    !isContestEnded &&
+    isAuthenticated &&
+    isRegistered &&
+    !isLoading &&
+    !error &&
+    Boolean(problem);
+
+  // Disable clipboard operations (copy, paste, cut, contextmenu) during active contest scoped to the workspace
+  useClipboardBlocker({
+    enabled: isRestrictionsActive,
+    containerRef: workspaceRef,
+  });
+
   // For ended contests: only registered + authenticated users see code/submissions.
   // Guests and unregistered users see ONLY the problem statement (hideIDE = true).
   const hideIDE = isContestEnded ? !(isAuthenticated && isRegistered) : !isAuthenticated;
   const isLocked = isContestEnded;
-
-  const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
   const { problems } = useContestProblems(contestId || '');
 
   const mcqProblems = problems.filter((p) => p.type === 'mcq');
@@ -39,6 +58,14 @@ export const ContestProblemPage = () => {
   const nextMcq =
     currentMcqIndex >= 0 && currentMcqIndex < mcqProblems.length - 1
       ? mcqProblems[currentMcqIndex + 1]
+      : null;
+
+  const codeProblems = problems.filter((p) => p.type === 'code');
+  const currentCodeIndex = codeProblems.findIndex((p) => p.id === problemId);
+  const prevCode = currentCodeIndex > 0 ? codeProblems[currentCodeIndex - 1] : null;
+  const nextCode =
+    currentCodeIndex >= 0 && currentCodeIndex < codeProblems.length - 1
+      ? codeProblems[currentCodeIndex + 1]
       : null;
 
   // Always run for authenticated users; skip only for guests or unregistered post-contest users.
@@ -63,18 +90,20 @@ export const ContestProblemPage = () => {
     if (activeSubmission.phase === 'completed' && activeSubmission.id && activeSubmission.status) {
       if (notifiedSubmissionRef.current === activeSubmission.id) return;
       notifiedSubmissionRef.current = activeSubmission.id;
-      const verdict = formatVerdict(activeSubmission.status);
-      if (activeSubmission.status === 'accepted' || activeSubmission.status === 'completed') {
-        toast.success(`Submission successful: ${verdict}`);
-      } else {
-        toast.error(`Submission result: ${verdict}`);
+      if (problem?.type !== 'mcq') {
+        const verdict = formatVerdict(activeSubmission.status);
+        if (activeSubmission.status === 'accepted' || activeSubmission.status === 'completed') {
+          toast.success(`Submission successful: ${verdict}`);
+        } else {
+          toast.error(`Submission result: ${verdict}`);
+        }
       }
     } else if (activeSubmission.phase === 'error') {
       toast.error(activeSubmission.message || 'Submission failed.');
     } else if (activeSubmission.phase === 'timeout') {
       toast.info(activeSubmission.message || 'Submission saved; verdict delayed.');
     }
-  }, [activeSubmission]);
+  }, [activeSubmission, problem?.type]);
 
   // Post-contest: fetch full details (including code) for the registered user's latest submission.
   // Also fetch details for MCQ problems so the chosen option is known during active contests.
@@ -207,7 +236,7 @@ export const ContestProblemPage = () => {
       : null;
 
   return (
-    <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
+    <div ref={workspaceRef} className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
       {/* Informational banners when contest has ended */}
       {isContestEnded && !isAuthenticated && (
         <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
@@ -290,16 +319,23 @@ export const ContestProblemPage = () => {
             <div className="flex-1 flex min-h-0 h-full overflow-hidden">
               <div className="w-1/2 min-h-0 h-full border-r border-gray-700 overflow-hidden flex flex-col">
                 <CodeProblemView
-                  key={`${user?.uid || 'guest'}_${problem.id}`}
+                  key={`${user?.uid || 'guest'}_${contestId}_${problem.id}`}
                   problem={problem}
                   contestId={contestId}
                   isContestEnded={true}
                   hideIDE={true}
                   isLocked={true}
+                  isRestrictionsActive={isRestrictionsActive}
+                  prevProblemId={prevCode?.id}
+                  nextProblemId={nextCode?.id}
+                  codeIndex={currentCodeIndex >= 0 ? currentCodeIndex + 1 : undefined}
+                  totalCodes={codeProblems.length > 0 ? codeProblems.length : undefined}
+                  onNavigate={(targetId) => navigate(`/contests/${contestId}/problems/${targetId}`)}
                 />
               </div>
               <div className="w-1/2 min-h-0 h-full overflow-hidden flex flex-col">
                 <SubmittedSolutionViewer
+                  isContestEnded={isContestEnded}
                   submission={shownSubmission?.data ?? null}
                   isLoading={isLoadingSubmission}
                   error={submissionError}
@@ -311,7 +347,7 @@ export const ContestProblemPage = () => {
           ) : (
             /* Active contest CodeChef-style 2-column workspace */
             <CodeProblemView
-              key={`${user?.uid || 'guest'}_${problem.id}`}
+              key={`${user?.uid || 'guest'}_${contestId}_${problem.id}`}
               problem={problem}
               contestId={contestId}
               onSubmit={isAuthenticated && !isLocked ? submitCode : undefined}
@@ -319,6 +355,7 @@ export const ContestProblemPage = () => {
               isContestEnded={isContestEnded}
               hideIDE={hideIDE}
               isLocked={isLocked}
+              isRestrictionsActive={isRestrictionsActive}
               activeSubmission={activeSubmission}
               history={history}
               historyError={historyError}
@@ -327,6 +364,11 @@ export const ContestProblemPage = () => {
               onRetryPolling={retryPolling}
               onRefreshHistory={refreshHistory}
               onLoadMoreHistory={loadMoreHistory}
+              prevProblemId={prevCode?.id}
+              nextProblemId={nextCode?.id}
+              codeIndex={currentCodeIndex >= 0 ? currentCodeIndex + 1 : undefined}
+              totalCodes={codeProblems.length > 0 ? codeProblems.length : undefined}
+              onNavigate={(targetId) => navigate(`/contests/${contestId}/problems/${targetId}`)}
             />
           )
         ) : (
@@ -337,6 +379,7 @@ export const ContestProblemPage = () => {
             submissionError={mcqSubmissionError}
             onRetryPolling={retryPolling}
             isContestEnded={isContestEnded}
+            isRestrictionsActive={isRestrictionsActive}
             submittedOption={submittedOptionIndex}
             contestId={contestId}
             prevProblemId={prevMcq?.id}

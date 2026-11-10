@@ -59,6 +59,37 @@ export interface AdminProblemSummary {
   memory_limit?: number;
 }
 
+export interface AdminTestCaseResult {
+  id: string;
+  submission_id: string;
+  test_case_id: string;
+  status: string;
+  runtime: number;
+  memory: number;
+  created_at: number;
+}
+
+export interface AdminSubmissionItem {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  contest_id: string;
+  problem_id: string;
+  problem_name: string;
+  type: 'code' | 'mcq';
+  language: string;
+  status: string;
+  created_at: number;
+  runtime: number;
+  memory: number;
+}
+
+export interface AdminSubmissionDetails extends AdminSubmissionItem {
+  code: string;
+  test_case_results: AdminTestCaseResult[];
+}
+
 export interface ProblemTestCase {
   input: string;
   expected_output: string;
@@ -345,6 +376,30 @@ class AdminApiService {
     const response = await this.axiosInstance.post(
       `/admin/contest/${contestId}/consolidate?${params.toString()}`
     );
+    return response.data;
+  }
+
+  async getContestSubmissions(
+    contestId: string,
+    params?: { user_id?: string; problem_id?: string; verdict?: string; page?: number; page_size?: number }
+  ): Promise<{ submissions: AdminSubmissionItem[]; totalCount: number }> {
+    const response = await this.axiosInstance.get<AdminSubmissionItem[]>(
+      `/admin/contests/${contestId}/submissions`,
+      { params }
+    );
+    const countHeader = response.headers['x-total-count'];
+    const totalCount = countHeader ? parseInt(countHeader, 10) : response.data.length;
+    return { submissions: response.data, totalCount };
+  }
+
+  async getSubmissionDetails(
+    submissionId: string,
+    contestId?: string
+  ): Promise<AdminSubmissionDetails> {
+    const url = contestId
+      ? `/admin/contests/${contestId}/submissions/${submissionId}`
+      : `/admin/submissions/${submissionId}`;
+    const response = await this.axiosInstance.get<AdminSubmissionDetails>(url);
     return response.data;
   }
 }
