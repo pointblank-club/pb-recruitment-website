@@ -18,6 +18,7 @@ import AddContest from "./pages/AddContest";
 import AdminContestProblems from "./pages/AdminContestProblems";
 import AdminContestContestants from "./pages/AdminContestContestants";
 import AdminContestPlagiarism from "./pages/AdminContestPlagiarism";
+import AdminContestSubmissions from "./pages/AdminContestSubmissions";
 import { AdminRoute } from "./components/AdminRoute";
 import { AuthenticatedRoute } from "./components/AuthenticatedRoute";
 import { useAuth } from "./lib/AuthContext";
@@ -51,6 +52,7 @@ const App: React.FC = () => {
         <Route path="/admin/contest/:contestId/edit" element={<AdminRoute><AddContest /></AdminRoute>} />
         <Route path="/admin/contest/:contestId/problems" element={<AdminRoute><AdminContestProblems /></AdminRoute>} />
         <Route path="/admin/contest/:contestId/contestants" element={<AdminRoute><AdminContestContestants /></AdminRoute>} />
+        <Route path="/admin/contest/:contestId/submissions" element={<AdminRoute><AdminContestSubmissions /></AdminRoute>} />
         <Route path="/admin/contest/:contestId/plagiarism" element={<AdminRoute><AdminContestPlagiarism /></AdminRoute>} />
       </Routes>
   );

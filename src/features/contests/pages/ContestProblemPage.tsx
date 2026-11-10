@@ -41,6 +41,14 @@ export const ContestProblemPage = () => {
       ? mcqProblems[currentMcqIndex + 1]
       : null;
 
+  const codeProblems = problems.filter((p) => p.type === 'code');
+  const currentCodeIndex = codeProblems.findIndex((p) => p.id === problemId);
+  const prevCode = currentCodeIndex > 0 ? codeProblems[currentCodeIndex - 1] : null;
+  const nextCode =
+    currentCodeIndex >= 0 && currentCodeIndex < codeProblems.length - 1
+      ? codeProblems[currentCodeIndex + 1]
+      : null;
+
   // Always run for authenticated users; skip only for guests or unregistered post-contest users.
   const {
     activeSubmission,
@@ -300,6 +308,11 @@ export const ContestProblemPage = () => {
                   isContestEnded={true}
                   hideIDE={true}
                   isLocked={true}
+                  prevProblemId={prevCode?.id}
+                  nextProblemId={nextCode?.id}
+                  codeIndex={currentCodeIndex >= 0 ? currentCodeIndex + 1 : undefined}
+                  totalCodes={codeProblems.length > 0 ? codeProblems.length : undefined}
+                  onNavigate={(targetId) => navigate(`/contests/${contestId}/problems/${targetId}`)}
                 />
               </div>
               <div className="w-1/2 min-h-0 h-full overflow-hidden flex flex-col">
@@ -332,6 +345,11 @@ export const ContestProblemPage = () => {
               onRetryPolling={retryPolling}
               onRefreshHistory={refreshHistory}
               onLoadMoreHistory={loadMoreHistory}
+              prevProblemId={prevCode?.id}
+              nextProblemId={nextCode?.id}
+              codeIndex={currentCodeIndex >= 0 ? currentCodeIndex + 1 : undefined}
+              totalCodes={codeProblems.length > 0 ? codeProblems.length : undefined}
+              onNavigate={(targetId) => navigate(`/contests/${contestId}/problems/${targetId}`)}
             />
           )
         ) : (

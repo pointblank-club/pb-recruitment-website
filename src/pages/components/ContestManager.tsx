@@ -191,6 +191,12 @@ const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }
                       View Contestants
                     </button>
                     <button
+                      onClick={() => navigate(`/admin/contest/${contest.id}/submissions`)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded transition-colors font-semibold"
+                    >
+                      View Code
+                    </button>
+                    <button
                       disabled={consolidatingId !== null}
                       onClick={() => handleConsolidate(contest.id)}
                       className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded transition-colors font-semibold disabled:opacity-50"

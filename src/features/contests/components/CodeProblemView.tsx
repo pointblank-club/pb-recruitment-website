@@ -11,8 +11,10 @@ import {
   Send,
   Lock,
   RotateCcw,
-  Maximize2,
-  Minimize2,
+  PanelRightOpen,
+  PanelRightClose,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   History,
   Activity,
@@ -45,6 +47,11 @@ interface CodeProblemViewProps {
   onRetryPolling?: () => void;
   onRefreshHistory?: () => void;
   onLoadMoreHistory?: () => void;
+  prevProblemId?: string | null;
+  nextProblemId?: string | null;
+  codeIndex?: number;
+  totalCodes?: number;
+  onNavigate?: (targetProblemId: string) => void;
 }
 
 const SUPPORTED_LANGUAGES = [
@@ -119,6 +126,11 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   onRetryPolling,
   onRefreshHistory,
   onLoadMoreHistory,
+  prevProblemId,
+  nextProblemId,
+  codeIndex,
+  totalCodes,
+  onNavigate,
 }) => {
   const { user } = useAuth();
   const {
@@ -436,21 +448,24 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
               )}
             </div>
 
-            {/* Maximize / Restore width toggle */}
-            {!hideIDE && (
-              <button
-                type="button"
-                onClick={toggleMaximizeLeft}
-                title={isLeftMaximized ? 'Restore Width' : 'Maximize Statement Width'}
-                className="p-1.5 rounded hover:bg-[#141b29] text-gray-400 hover:text-white transition-colors shrink-0"
-              >
-                {isLeftMaximized ? (
-                  <Minimize2 className="w-3.5 h-3.5 text-[#10b981]" />
-                ) : (
-                  <Maximize2 className="w-3.5 h-3.5" />
-                )}
-              </button>
-            )}
+            {/* Header Right Actions */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Maximize / Restore width toggle */}
+              {!hideIDE && (
+                <button
+                  type="button"
+                  onClick={toggleMaximizeLeft}
+                  title={isLeftMaximized ? 'Restore Split View' : 'Maximize Statement Width'}
+                  className="p-1.5 rounded hover:bg-[#141b29] text-gray-400 hover:text-white transition-colors shrink-0"
+                >
+                  {isLeftMaximized ? (
+                    <PanelRightOpen className="w-4 h-4 text-[#10b981]" />
+                  ) : (
+                    <PanelRightClose className="w-4 h-4" />
+                  )}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Left Pane Content Area */}
@@ -482,6 +497,39 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
               />
             )}
           </div>
+
+          {/* Bottom Fixed Navigation Bar - Outside the description box and below it */}
+          {totalCodes !== undefined && totalCodes > 1 && (
+            <div className="h-12 bg-[#0b0f17] border-t border-[#1e2636] px-2.5 flex items-center justify-between flex-shrink-0 gap-2">
+              <button
+                type="button"
+                disabled={!prevProblemId}
+                onClick={() => prevProblemId && onNavigate?.(prevProblemId)}
+                title="Previous Question"
+                className="h-8 px-2.5 rounded-[4px] text-xs font-medium flex items-center gap-1 transition-colors bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#141b29] disabled:hover:text-slate-200 shrink-0"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Prev</span>
+              </button>
+
+              {codeIndex !== undefined && (
+                <span className="text-xs text-gray-400 font-mono truncate text-center">
+                  {codeIndex} / {totalCodes}
+                </span>
+              )}
+
+              <button
+                type="button"
+                disabled={!nextProblemId}
+                onClick={() => nextProblemId && onNavigate?.(nextProblemId)}
+                title="Next Question"
+                className="h-8 px-2.5 rounded-[4px] text-xs font-medium flex items-center gap-1 transition-colors bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#141b29] disabled:hover:text-slate-200 shrink-0"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ========================================================= */}
