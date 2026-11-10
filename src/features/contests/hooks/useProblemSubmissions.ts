@@ -302,19 +302,19 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
         type: metadata.type,
         language: metadata.language,
         option: metadata.option,
-        status: 'pending',
+        ...(metadata.type === 'code' ? { status: 'pending' as const } : {}),
         created_at: Math.floor(Date.now() / 1000),
       };
 
       setActiveSubmission({
         id: response.submission_id,
-        phase: 'received',
-        status: 'pending',
+        phase: metadata.type === 'mcq' ? 'completed' : 'received',
+        status: metadata.type === 'mcq' ? undefined : 'pending',
         details: summary,
-        message: 'Submission received. Waiting for the judge…',
+        message: metadata.type === 'mcq' ? undefined : 'Submission received. Waiting for the judge…',
       });
       setHistory((current) => mergeSubmissions([summary], current));
-      void pollSubmission(summary);
+      if (metadata.type !== 'mcq') void pollSubmission(summary);
     } catch (error) {
       if (scopeToken !== scopeTokenRef.current) return;
 
