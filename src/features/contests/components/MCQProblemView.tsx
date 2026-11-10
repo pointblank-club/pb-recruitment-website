@@ -13,6 +13,7 @@ interface MCQProblemViewProps {
   submissionError?: string | null;
   onRetryPolling?: () => void;
   isContestEnded?: boolean;
+  isRestrictionsActive?: boolean;
   /** submittedOption: option chosen by registered user before contest ended */
   submittedOption?: number | null;
   contestId?: string;
@@ -29,6 +30,7 @@ export const MCQProblemView = ({
   submissionError = null,
   onRetryPolling,
   isContestEnded = false,
+  isRestrictionsActive = false,
   submittedOption = null,
   contestId,
   prevProblemId,
@@ -108,7 +110,7 @@ export const MCQProblemView = ({
 
   return (
     <div
-      className="flex-1 flex flex-col bg-black text-white select-none"
+      className={`flex-1 flex flex-col bg-black text-white ${isRestrictionsActive ? 'select-none' : ''}`}
       onCopyCapture={isContestEnded ? undefined : preventClipboardAction}
       onCutCapture={isContestEnded ? undefined : preventClipboardAction}
       onPasteCapture={isContestEnded ? undefined : preventClipboardAction}

@@ -29,6 +29,36 @@ For UI-only development, `VITE_MOCK_SUBMISSION_JUDGING=true` replaces verdict
 polling with fabricated accepted results after the real submit call. It is ignored
 in production builds; keep it false when verifying real judging.
 
+## Crash reporting and production source maps
+
+Set `VITE_SENTRY_DSN` to enable crash reporting and UID-only identity. Replay,
+performance tracing, and handled API error reporting are disabled.
+
+For readable production stack traces, configure these **build environment**
+variables in the deployment platform:
+
+- `SENTRY_AUTH_TOKEN`: a Sentry token with source-map upload/release permissions.
+- `SENTRY_ORG`: the organization slug.
+- `SENTRY_PROJECT`: the project slug matching the DSN.
+- `SENTRY_RELEASE`: optional release identifier; defaults to
+  `VERCEL_GIT_COMMIT_SHA`, then the current Git commit.
+
+These settings are read from the build process, not Vite's `.env` file. Never
+prefix the upload token with `VITE_`; it must not enter the browser bundle.
+Run the normal `npm run build`. With all three upload settings present, the
+Sentry plugin injects the release and debug IDs, uploads hidden source maps,
+and removes maps from `dist` before deployment. Upload failures fail the build.
+Without upload settings, builds work normally and generate no source maps;
+crash reports then have minified stack locations.
+
+Keep the DSN unset for previews, or build previews with
+`npm run build -- --mode preview` to distinguish their events from production.
+After deployment, verify a synthetic crash resolves to the original TypeScript
+source in Sentry. No participant data is needed for this check.
+
+Run `node tests/sentry-build.test.mjs` to check the build configuration without
+credentials or network access.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

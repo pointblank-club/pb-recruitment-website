@@ -9,6 +9,8 @@ import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } 
 import {
   Play,
   Send,
+  Copy,
+  Check,
   Lock,
   RotateCcw,
   PanelRightOpen,
@@ -39,6 +41,7 @@ interface CodeProblemViewProps {
   isContestEnded?: boolean;
   hideIDE?: boolean;
   isLocked?: boolean;
+  isRestrictionsActive?: boolean;
   activeSubmission?: ActiveSubmission;
   history?: SubmissionDetailsResponse[];
   historyError?: string | null;
@@ -118,6 +121,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   hideIDE = false,
   isLocked = false,
   isContestEnded = false,
+  isRestrictionsActive = false,
   activeSubmission = { phase: 'idle' },
   history = [],
   historyError = null,
@@ -165,6 +169,9 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Clipboard feedback
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
   // Pane resizing
   const [leftPaneWidthPct, setLeftPaneWidthPct] = useState<number>(46);
   const [isResizingH, setIsResizingH] = useState(false);
@@ -197,6 +204,12 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
     const defaultTemplate = DEFAULT_CODE_TEMPLATES[selectedLanguage] || '';
     handleCodeChange(defaultTemplate);
   }, [handleCodeChange, isLocked, selectedLanguage]);
+
+  const handleCopy = useCallback((text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, []);
 
   const handleLoadSampleIntoCustomInput = useCallback((input: string) => {
     invalidateRun();
@@ -474,6 +487,9 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
               <ProblemStatementTab
                 problem={problem}
                 hideIDE={hideIDE}
+                isRestrictionsActive={isRestrictionsActive}
+                copiedId={copiedId}
+                onCopy={handleCopy}
                 onLoadSample={handleLoadSampleIntoCustomInput}
               />
             )}
@@ -579,6 +595,20 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                   </button>
                 )}
 
+                {!isRestrictionsActive && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(code, 'editor-code')}
+                    title="Copy code"
+                    className="p-1.5 rounded hover:bg-[#141b29] text-gray-400 hover:text-white transition-colors"
+                  >
+                    {copiedId === 'editor-code' ? (
+                      <Check className="w-3.5 h-3.5 text-[#10b981]" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* Right side: Action buttons */}

@@ -126,7 +126,9 @@ export const LeaderboardTable = ({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm text-gray-400 font-['DM_Sans']">
-                        {(entry.last_submission_time == 0?"-":formatTimestamp(entry.last_submission_time))}
+                        {!entry.last_submission_time || entry.last_submission_time <= 0
+                          ? "-"
+                          : formatTimestamp(entry.last_submission_time)}
                       </span>
                     </td>
                     {hasProblemBreakdown && (

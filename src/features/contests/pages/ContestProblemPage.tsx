@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'react-toastify';
 import { useAuth } from '@/lib/AuthContext';
 import { formatVerdict } from '../submissionUtils';
+import { useClipboardBlocker } from '../hooks/useClipboardBlocker';
 
 export const ContestProblemPage = () => {
   const { contestId, problemId } = useParams<{ contestId: string; problemId: string }>();
@@ -20,17 +21,35 @@ export const ContestProblemPage = () => {
   const location = useLocation();
   const { user } = useAuth();
   const {
+    isLive = false,
     isContestEnded = false,
     isAuthenticated = false,
     isRegistered = false,
   } = useOutletContext<ContestOutletContext>() || {};
 
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
+
+  // Enable restrictions only for authenticated, registered participants with a successfully loaded problem in a live contest.
+  const isRestrictionsActive =
+    isLive &&
+    !isContestEnded &&
+    isAuthenticated &&
+    isRegistered &&
+    !isLoading &&
+    !error &&
+    Boolean(problem);
+
+  // Disable clipboard operations (copy, paste, cut, contextmenu) during active contest scoped to the workspace
+  useClipboardBlocker({
+    enabled: isRestrictionsActive,
+    containerRef: workspaceRef,
+  });
+
   // For ended contests: only registered + authenticated users see code/submissions.
   // Guests and unregistered users see ONLY the problem statement (hideIDE = true).
   const hideIDE = isContestEnded ? !(isAuthenticated && isRegistered) : !isAuthenticated;
   const isLocked = isContestEnded;
-
-  const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
   const { problems } = useContestProblems(contestId || '');
 
   const mcqProblems = problems.filter((p) => p.type === 'mcq');
@@ -219,7 +238,7 @@ export const ContestProblemPage = () => {
       : null;
 
   return (
-    <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
+    <div ref={workspaceRef} className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
       {/* Informational banners when contest has ended */}
       {isContestEnded && !isAuthenticated && (
         <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">
@@ -308,6 +327,7 @@ export const ContestProblemPage = () => {
                   isContestEnded={true}
                   hideIDE={true}
                   isLocked={true}
+                  isRestrictionsActive={isRestrictionsActive}
                   prevProblemId={prevCode?.id}
                   nextProblemId={nextCode?.id}
                   codeIndex={currentCodeIndex >= 0 ? currentCodeIndex + 1 : undefined}
@@ -337,6 +357,7 @@ export const ContestProblemPage = () => {
               isContestEnded={isContestEnded}
               hideIDE={hideIDE}
               isLocked={isLocked}
+              isRestrictionsActive={isRestrictionsActive}
               activeSubmission={activeSubmission}
               history={history}
               historyError={historyError}
@@ -360,6 +381,7 @@ export const ContestProblemPage = () => {
             submissionError={mcqSubmissionError}
             onRetryPolling={retryPolling}
             isContestEnded={isContestEnded}
+            isRestrictionsActive={isRestrictionsActive}
             submittedOption={submittedOptionIndex}
             contestId={contestId}
             prevProblemId={prevMcq?.id}
