@@ -140,6 +140,8 @@ export const Signup: React.FC = () => {
     const timeoutId = setTimeout(() => {
       if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
         setErrors(prev => ({ ...prev, confirmPassword: "Passwords do not match" }));
+      } else {
+        setErrors(prev => ({ ...prev, confirmPassword: undefined }));
       }
     }, 500);
 
