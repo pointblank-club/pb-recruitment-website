@@ -1,6 +1,7 @@
 import type { SubmissionStatus } from '@/services/api/contestApi';
 
 export const VERDICT_LABELS: Record<SubmissionStatus, string> = {
+  attempted: 'Attempted',
   pending: 'Pending',
   processing: 'Judging',
   accepted: 'Accepted',
@@ -26,6 +27,7 @@ export const formatVerdict = (status?: string) => {
 };
 
 export const getVerdictClasses = (status?: string) => {
+  if (status === 'attempted') return 'border-slate-500/40 bg-slate-500/10 text-slate-300';
   if (status && PASSING_STATUSES.has(status)) return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400';
   if (status && JUDGING_STATUSES.has(status)) return 'border-amber-500/40 bg-amber-500/10 text-amber-300';
   return 'border-rose-500/40 bg-rose-500/10 text-rose-300';
