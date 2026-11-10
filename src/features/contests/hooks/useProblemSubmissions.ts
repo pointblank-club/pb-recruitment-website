@@ -67,6 +67,8 @@ const mergeSubmissions = (
 export const useProblemSubmissions = (contestId: string, problemId: string, options?: { skip?: boolean }) => {
   const skip = options?.skip ?? false;
   const [activeSubmission, setActiveSubmission] = useState<ActiveSubmission>({ phase: 'idle' });
+  const activeSubmissionRef = useRef(activeSubmission);
+  activeSubmissionRef.current = activeSubmission;
   const [history, setHistory] = useState<SubmissionDetailsResponse[]>([]);
   const [historyPage, setHistoryPage] = useState(0);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
@@ -183,40 +185,18 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
     if (!problemId) return;
 
     const requestId = ++historyRequestRef.current;
+    const scopeToken = scopeTokenRef.current;
     setIsHistoryLoading(true);
     setHistoryError(null);
 
     try {
       const submissions = await contestApi.listUserSubmissions(problemId, 0);
-      if (requestId !== historyRequestRef.current) return;
+      if (requestId !== historyRequestRef.current || scopeToken !== scopeTokenRef.current) return;
       setHistory(submissions);
       setHistoryPage(0);
       setHasMoreHistory(submissions.length === HISTORY_PAGE_SIZE);
-      return submissions;
-    } catch (error) {
-      if (requestId !== historyRequestRef.current) return;
-      setHistoryError(getErrorMessage(error, 'Could not load submission history.'));
-    } finally {
-      if (requestId === historyRequestRef.current) setIsHistoryLoading(false);
-    }
-  }, [problemId]);
 
-  useEffect(() => {
-    const scopeToken = ++scopeTokenRef.current;
-    pollTokenRef.current += 1;
-    setActiveSubmission({ phase: 'idle' });
-    setHistory([]);
-    setHistoryPage(0);
-    setHasMoreHistory(false);
-    setHistoryError(null);
-    setIsHistoryLoading(false);
-
-    if (!skip) {
-      void (async () => {
-        const submissions = await refreshHistory();
-        if (scopeToken !== scopeTokenRef.current) return;
-        if (!submissions || submissions.length === 0) return;
-
+      if (submissions.length > 0 && activeSubmissionRef.current.phase === 'idle') {
         const latest = submissions[0];
         if (isJudging(latest.status)) {
           setActiveSubmission({
@@ -247,15 +227,35 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
             // Keep summary details if detailed fetch fails
           }
         }
-      })();
+      }
+
+      return submissions;
+    } catch (error) {
+      if (requestId !== historyRequestRef.current) return;
+      setHistoryError(getErrorMessage(error, 'Could not load submission history.'));
+    } finally {
+      if (requestId === historyRequestRef.current) setIsHistoryLoading(false);
     }
+  }, [pollSubmission, problemId]);
+
+  useEffect(() => {
+    pollTokenRef.current += 1;
+    scopeTokenRef.current += 1;
+    setActiveSubmission({ phase: 'idle' });
+    setHistory([]);
+    setHistoryPage(0);
+    setHasMoreHistory(false);
+    setHistoryError(null);
+    setIsHistoryLoading(false);
+
+    if (!skip) void refreshHistory();
 
     return () => {
       pollTokenRef.current += 1;
       historyRequestRef.current += 1;
       scopeTokenRef.current += 1;
     };
-  }, [pollSubmission, problemId, refreshHistory, skip]);
+  }, [problemId, refreshHistory, skip]);
 
   const loadMoreHistory = useCallback(async () => {
     if (!problemId || isHistoryLoading || !hasMoreHistory) return;
