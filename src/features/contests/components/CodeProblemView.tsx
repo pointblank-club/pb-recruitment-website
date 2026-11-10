@@ -40,6 +40,7 @@ interface CodeProblemViewProps {
   isContestEnded?: boolean;
   hideIDE?: boolean;
   isLocked?: boolean;
+  isRestrictionsActive?: boolean;
   activeSubmission?: ActiveSubmission;
   history?: SubmissionDetailsResponse[];
   historyError?: string | null;
@@ -118,6 +119,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   onRun,
   hideIDE = false,
   isLocked = false,
+  isRestrictionsActive = false,
   activeSubmission = { phase: 'idle' },
   history = [],
   historyError = null,
@@ -476,6 +478,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
               <ProblemStatementTab
                 problem={problem}
                 hideIDE={hideIDE}
+                isRestrictionsActive={isRestrictionsActive}
                 copiedId={copiedId}
                 onCopy={handleCopy}
                 onLoadSample={handleLoadSampleIntoCustomInput}
@@ -583,18 +586,20 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => handleCopy(code, 'editor-code')}
-                  title="Copy code"
-                  className="p-1.5 rounded hover:bg-[#141b29] text-gray-400 hover:text-white transition-colors"
-                >
-                  {copiedId === 'editor-code' ? (
-                    <Check className="w-3.5 h-3.5 text-[#10b981]" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                </button>
+                {!isRestrictionsActive && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(code, 'editor-code')}
+                    title="Copy code"
+                    className="p-1.5 rounded hover:bg-[#141b29] text-gray-400 hover:text-white transition-colors"
+                  >
+                    {copiedId === 'editor-code' ? (
+                      <Check className="w-3.5 h-3.5 text-[#10b981]" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* Right side: Action buttons */}
@@ -668,7 +673,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                   cursorBlinking: 'smooth',
                   smoothScrolling: true,
                   padding: { top: 12, bottom: 12 },
-                  contextmenu: true,
+                  contextmenu: !isRestrictionsActive,
                   folding: true,
                 }}
               />

@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
 
 export interface ContestOutletContext {
+  isLive: boolean;
   isContestEnded: boolean;
   isAuthenticated: boolean;
   isRegistered: boolean;
@@ -21,6 +22,7 @@ export const ContestLayout = () => {
   const { user } = useAuth();
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [hasElapsedDeadline, setHasElapsedDeadline] = useState(false);
   const [isEndModalOpen, setIsEndModalOpen] = useState(false);
   const hasExitedRef = useRef(false);
   const wasLiveRef = useRef(false);
@@ -32,10 +34,16 @@ export const ContestLayout = () => {
   useEffect(() => {
     hasExitedRef.current = false;
     wasLiveRef.current = false;
+    setHasElapsedDeadline(false);
   }, [contestId]);
 
   useEffect(() => {
     if (!contest) return;
+
+    // Clear hasElapsedDeadline whenever current contest metadata confirms a future deadline
+    if (Date.now() < contest.end_time) {
+      setHasElapsedDeadline(false);
+    }
 
     // Check if the user already ended this contest early on this device
     // Only redirect if the contest is still currently running
@@ -68,20 +76,31 @@ export const ContestLayout = () => {
 
       // If contest is over and user was actively participating in it
       if (now >= endTime) {
+        // Publish elapsed-deadline state immediately before awaiting refetch
+        setHasElapsedDeadline(true);
+        setTimeRemaining(0);
+        setProgress(100);
+
         if (wasLiveRef.current && !hasExitedRef.current && !isLeaderboardPage) {
           if (isRefetchingRef.current) return true;
           isRefetchingRef.current = true;
           const updatedContest = await refetch();
           isRefetchingRef.current = false;
-          // The user may have left (e.g. to the leaderboard) while the refetch was in flight
-          if (cancelled) return true;
           if (updatedContest && Date.now() < updatedContest.end_time) {
+            // Reconcile extension: contest was extended while running
+            setHasElapsedDeadline(false);
+            const newNow = Date.now();
+            const newRemaining = Math.floor((updatedContest.end_time - newNow) / 1000);
+            const newTotal = updatedContest.end_time - updatedContest.start_time;
+            const newElapsed = newNow - updatedContest.start_time;
+            setTimeRemaining(Math.max(0, newRemaining));
+            setProgress(newTotal > 0 ? Math.min(100, Math.max(0, (newElapsed / newTotal) * 100)) : 0);
             return false;
           }
+          // The user may have left (e.g. to the leaderboard) while the refetch was in flight
+          if (cancelled) return true;
 
           hasExitedRef.current = true;
-          setTimeRemaining(0);
-          setProgress(100);
           if (document.fullscreenElement) {
             document.exitFullscreen().catch(() => {});
           }
@@ -90,10 +109,11 @@ export const ContestLayout = () => {
           return true;
         }
 
-        setTimeRemaining(0);
-        setProgress(100);
         return true;
       }
+
+      // Common nonexpired path: contest deadline is in the future
+      setHasElapsedDeadline(false);
 
       // If contest hasn't started yet and user is in problem/test area
       if (now < startTime) {
@@ -184,7 +204,7 @@ export const ContestLayout = () => {
     return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}${location.hash}` }} />;
   }
 
-  const isContestEnded = contest ? Date.now() >= contest.end_time : false;
+  const isContestEnded = contest ? (hasElapsedDeadline || Date.now() >= contest.end_time) : false;
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;
 
   return (
@@ -200,6 +220,7 @@ export const ContestLayout = () => {
       
       <div className="flex-1 min-h-0 overflow-auto flex flex-col">
         <Outlet context={{
+          isLive,
           isContestEnded,
           isAuthenticated: !!user,
           isRegistered: contest?.is_registered ?? false,
