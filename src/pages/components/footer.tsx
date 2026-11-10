@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import logo from "@/assets/logo.png";
 import { Link } from "react-router-dom";
-import { Instagram, Twitter, Linkedin, Trophy, Code2 } from "lucide-react";
+import { Instagram, Twitter, Linkedin, Code2 } from "lucide-react";
 
 export default function Footer() {
   const containerVariants = {
@@ -41,13 +41,6 @@ export default function Footer() {
               className="flex flex-col space-y-2"
               variants={containerVariants}
             >
-              <motion.a
-                href="/contests"
-                className="text-gray-400 hover:text-green transition-colors flex items-center gap-2"
-                variants={fadeInUp}
-              >
-                <Trophy size={20} /> Leaderboard
-              </motion.a>
               <motion.a
                 href="/contests"
                 className="text-gray-400 hover:text-green transition-colors flex items-center gap-2"
