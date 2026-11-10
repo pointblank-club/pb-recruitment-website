@@ -42,17 +42,8 @@ export const ProblemCard = ({ problem, contestId, progress, index }: ProblemCard
       : 'border-[#262C36] bg-[#161B22] hover:border-[#3B4657] hover:bg-[#1C2128]';
 
   const getDisplayName = () => {
-    if (problem.type === 'mcq') {
-      // Strip leading "MCQ", "MCQ 1", "MCQ:", "MCQ -", etc.
-      const cleaned = problem.name.replace(/^mcq\s*[\d]*\s*[-:–.]?\s*/i, '').trim();
-      if (index !== undefined) {
-        return cleaned ? `${index}. ${cleaned}` : `${index}`;
-      }
-      return cleaned || problem.name;
-    }
     if (index !== undefined) {
-      const cleaned = problem.name.replace(/^(\d+|problem\s*\d+)[\.:–-]\s*/i, '').trim() || problem.name;
-      return `${index}. ${cleaned}`;
+      return `${index}. ${problem.name}`;
     }
     return problem.name;
   };
@@ -61,7 +52,11 @@ export const ProblemCard = ({ problem, contestId, progress, index }: ProblemCard
     <Link
       to={`/contests/${contestId}/problems/${problem.id}`}
       onClick={() => {
-        sessionStorage.setItem(`contest_tab_${contestId}`, problem.type);
+        try {
+          sessionStorage.setItem(`contest_tab_${contestId}`, problem.type);
+        } catch {
+          // Ignore storage denial
+        }
       }}
       className={`group flex items-center justify-between w-full px-4 py-3 border transition-all ${currentStripStyle}`}
     >

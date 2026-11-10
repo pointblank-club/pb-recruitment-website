@@ -76,68 +76,6 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
   const historyRequestRef = useRef(0);
   const scopeTokenRef = useRef(0);
 
-  const refreshHistory = useCallback(async () => {
-    if (!problemId) return;
-
-    const requestId = ++historyRequestRef.current;
-    setIsHistoryLoading(true);
-    setHistoryError(null);
-
-    try {
-      const submissions = await contestApi.listUserSubmissions(problemId, 0);
-      if (requestId !== historyRequestRef.current) return;
-      setHistory(submissions);
-      setHistoryPage(0);
-      setHasMoreHistory(submissions.length === HISTORY_PAGE_SIZE);
-    } catch (error) {
-      if (requestId !== historyRequestRef.current) return;
-      setHistoryError(getErrorMessage(error, 'Could not load submission history.'));
-    } finally {
-      if (requestId === historyRequestRef.current) setIsHistoryLoading(false);
-    }
-  }, [problemId]);
-
-  useEffect(() => {
-    const scopeToken = ++scopeTokenRef.current;
-    pollTokenRef.current += 1;
-    setActiveSubmission({ phase: 'idle' });
-    setHistory([]);
-    setHistoryPage(0);
-    setHasMoreHistory(false);
-    setHistoryError(null);
-    setIsHistoryLoading(false);
-
-    if (!skip) void refreshHistory();
-
-    return () => {
-      pollTokenRef.current += 1;
-      historyRequestRef.current += 1;
-      if (scopeTokenRef.current === scopeToken) scopeTokenRef.current += 1;
-    };
-  }, [problemId, refreshHistory, skip]);
-
-  const loadMoreHistory = useCallback(async () => {
-    if (!problemId || isHistoryLoading || !hasMoreHistory) return;
-
-    const nextPage = historyPage + 1;
-    const requestId = ++historyRequestRef.current;
-    setIsHistoryLoading(true);
-    setHistoryError(null);
-
-    try {
-      const submissions = await contestApi.listUserSubmissions(problemId, nextPage);
-      if (requestId !== historyRequestRef.current) return;
-      setHistory((current) => mergeSubmissions(current, submissions));
-      setHistoryPage(nextPage);
-      setHasMoreHistory(submissions.length === HISTORY_PAGE_SIZE);
-    } catch (error) {
-      if (requestId !== historyRequestRef.current) return;
-      setHistoryError(getErrorMessage(error, 'Could not load more submissions.'));
-    } finally {
-      if (requestId === historyRequestRef.current) setIsHistoryLoading(false);
-    }
-  }, [hasMoreHistory, historyPage, isHistoryLoading, problemId]);
-
   const pollSubmission = useCallback(async (summary: SubmissionDetailsResponse) => {
     const pollToken = ++pollTokenRef.current;
     const startedAt = Date.now();
@@ -240,6 +178,89 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
         }
       : current);
   }, []);
+
+  const refreshHistory = useCallback(async () => {
+    if (!problemId) return;
+
+    const requestId = ++historyRequestRef.current;
+    setIsHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const submissions = await contestApi.listUserSubmissions(problemId, 0);
+      if (requestId !== historyRequestRef.current) return;
+      setHistory(submissions);
+      setHistoryPage(0);
+      setHasMoreHistory(submissions.length === HISTORY_PAGE_SIZE);
+
+      if (submissions.length > 0) {
+        const latest = submissions[0];
+        if (isJudging(latest.status)) {
+          setActiveSubmission({
+            id: latest.id,
+            phase: 'polling',
+            status: latest.status,
+            details: latest,
+            message: 'Judging in progress…',
+          });
+          void pollSubmission(latest);
+        } else {
+          setActiveSubmission({
+            id: latest.id,
+            phase: 'completed',
+            status: latest.status,
+            details: latest,
+          });
+        }
+      }
+    } catch (error) {
+      if (requestId !== historyRequestRef.current) return;
+      setHistoryError(getErrorMessage(error, 'Could not load submission history.'));
+    } finally {
+      if (requestId === historyRequestRef.current) setIsHistoryLoading(false);
+    }
+  }, [pollSubmission, problemId]);
+
+  useEffect(() => {
+    const scopeToken = ++scopeTokenRef.current;
+    pollTokenRef.current += 1;
+    setActiveSubmission({ phase: 'idle' });
+    setHistory([]);
+    setHistoryPage(0);
+    setHasMoreHistory(false);
+    setHistoryError(null);
+    setIsHistoryLoading(false);
+
+    if (!skip) void refreshHistory();
+
+    return () => {
+      pollTokenRef.current += 1;
+      historyRequestRef.current += 1;
+      if (scopeTokenRef.current === scopeToken) scopeTokenRef.current += 1;
+    };
+  }, [problemId, refreshHistory, skip]);
+
+  const loadMoreHistory = useCallback(async () => {
+    if (!problemId || isHistoryLoading || !hasMoreHistory) return;
+
+    const nextPage = historyPage + 1;
+    const requestId = ++historyRequestRef.current;
+    setIsHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const submissions = await contestApi.listUserSubmissions(problemId, nextPage);
+      if (requestId !== historyRequestRef.current) return;
+      setHistory((current) => mergeSubmissions(current, submissions));
+      setHistoryPage(nextPage);
+      setHasMoreHistory(submissions.length === HISTORY_PAGE_SIZE);
+    } catch (error) {
+      if (requestId !== historyRequestRef.current) return;
+      setHistoryError(getErrorMessage(error, 'Could not load more submissions.'));
+    } finally {
+      if (requestId === historyRequestRef.current) setIsHistoryLoading(false);
+    }
+  }, [hasMoreHistory, historyPage, isHistoryLoading, problemId]);
 
   const submit = useCallback(async (
     createSubmission: () => Promise<SubmissionResponse>,

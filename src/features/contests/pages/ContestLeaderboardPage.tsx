@@ -69,26 +69,6 @@ export const ContestLeaderboardPage = () => {
     );
   }
 
-  if (!hasStarted) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="bg-[#111622] border border-[#1e2638] rounded-xl p-8 max-w-md text-center">
-          <p className="text-yellow-400 font-semibold mb-2 font-['DM_Sans'] text-lg">Contest Not Started</p>
-          <p className="text-gray-400 text-sm mb-6 font-['DM_Sans']">
-            The leaderboard will be available once the contest begins.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate(`/contests/${contestId}/problems`)}
-            className="px-4 py-2 bg-green text-black font-semibold rounded-md hover:bg-green-600 transition-colors font-['DM_Sans'] text-sm"
-          >
-            Back to Problems
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   if (error || !contest) {
     return (
       <div className="flex-1 flex items-center justify-center p-4">
@@ -113,6 +93,26 @@ export const ContestLeaderboardPage = () => {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasStarted) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="bg-[#111622] border border-[#1e2638] rounded-xl p-8 max-w-md text-center">
+          <p className="text-yellow-400 font-semibold mb-2 font-['DM_Sans'] text-lg">Contest Not Started</p>
+          <p className="text-gray-400 text-sm mb-6 font-['DM_Sans']">
+            The leaderboard will be available once the contest begins.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate(`/contests/${contestId}/problems`)}
+            className="px-4 py-2 bg-green text-black font-semibold rounded-md hover:bg-green-600 transition-colors font-['DM_Sans'] text-sm"
+          >
+            Back to Problems
+          </button>
         </div>
       </div>
     );

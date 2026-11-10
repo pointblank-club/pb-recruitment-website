@@ -9,52 +9,91 @@ interface ProblemTabsProps {
   progress: Record<string, ProblemProgress>;
 }
 
+const safeGetSession = (key: string): string | null => {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const safeSetSession = (key: string, value: string) => {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    // Ignore storage denial
+  }
+};
+
+const resolveTab = (
+  tabParam: string | null,
+  savedTab: string | null,
+  hasMcq: boolean,
+  hasCode: boolean,
+): 'mcq' | 'code' => {
+  if (hasCode && !hasMcq) return 'code';
+  if (hasMcq && !hasCode) return 'mcq';
+  if (tabParam === 'mcq' || tabParam === 'code') return tabParam;
+  if (savedTab === 'mcq' || savedTab === 'code') return savedTab;
+  return hasMcq ? 'mcq' : 'code';
+};
+
 export const ProblemTabs = ({ problems, contestId, progress }: ProblemTabsProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const codeProblems = problems.filter((problem) => problem.type === 'code');
   const mcqProblems = problems.filter((problem) => problem.type === 'mcq');
+  const hasMcq = mcqProblems.length > 0;
+  const hasCode = codeProblems.length > 0;
 
   const [activeTab, setActiveTab] = useState<'mcq' | 'code'>(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'mcq' || tabParam === 'code') {
-      return tabParam;
-    }
-    const saved = sessionStorage.getItem(`contest_tab_${contestId}`);
-    if (saved === 'mcq' || saved === 'code') {
-      return saved;
-    }
-    return mcqProblems.length > 0 ? 'mcq' : 'code';
+    const saved = safeGetSession(`contest_tab_${contestId}`);
+    const resolved = resolveTab(tabParam, saved, hasMcq, hasCode);
+    safeSetSession(`contest_tab_${contestId}`, resolved);
+    return resolved;
   });
 
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if ((tabParam === 'mcq' || tabParam === 'code') && tabParam !== activeTab) {
-      setActiveTab(tabParam);
-      sessionStorage.setItem(`contest_tab_${contestId}`, tabParam);
+    const resolved = resolveTab(tabParam, activeTab, hasMcq, hasCode);
+    if (resolved !== activeTab) {
+      setActiveTab(resolved);
     }
-  }, [searchParams, activeTab, contestId]);
+    safeSetSession(`contest_tab_${contestId}`, resolved);
+
+    if (tabParam && tabParam !== resolved) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('tab', resolved);
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [searchParams, contestId, hasMcq, hasCode, activeTab, setSearchParams]);
 
   const handleTabChange = (tab: 'mcq' | 'code') => {
     setActiveTab(tab);
-    sessionStorage.setItem(`contest_tab_${contestId}`, tab);
-    setSearchParams({ tab }, { replace: true });
+    safeSetSession(`contest_tab_${contestId}`, tab);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', tab);
+        return next;
+      },
+      { replace: true },
+    );
   };
 
-  const effectiveTab =
-    activeTab === 'mcq' && mcqProblems.length === 0 && codeProblems.length > 0
-      ? 'code'
-      : activeTab === 'code' && codeProblems.length === 0 && mcqProblems.length > 0
-        ? 'mcq'
-        : activeTab;
-
-  const activeProblems = effectiveTab === 'mcq' ? mcqProblems : codeProblems;
+  const activeProblems = activeTab === 'mcq' ? mcqProblems : codeProblems;
 
   const isProblemAttempted = (p: Problem) => {
     const s = progress[p.id];
     return s === 'attempted' || s === 'solved' || s === 'judging' || s === 'failed';
   };
   const attemptedCount = activeProblems.filter(isProblemAttempted).length;
-  const unattemptedCount = activeProblems.length - attemptedCount;
+  const unattemptedCount = activeProblems.filter((p) => progress[p.id] === 'unsolved').length;
 
   if (problems.length === 0) {
     return (
@@ -72,9 +111,10 @@ export const ProblemTabs = ({ problems, contestId, progress }: ProblemTabsProps)
         <div className="inline-flex p-1 bg-[#11161F] border border-[#262C36] rounded-[6px] gap-1">
           <button
             type="button"
+            aria-pressed={activeTab === 'mcq'}
             onClick={() => handleTabChange('mcq')}
             className={`px-3.5 py-1.5 rounded-[4px] text-xs sm:text-sm font-medium transition-all select-none cursor-pointer ${
-              effectiveTab === 'mcq'
+              activeTab === 'mcq'
                 ? 'bg-[#262F3D] border border-[#3B4657] text-[#F0F6FC] shadow-sm'
                 : 'bg-transparent border border-transparent text-[#8B949E] hover:text-[#F0F6FC] hover:bg-[#161B22]/50'
             }`}
@@ -83,9 +123,10 @@ export const ProblemTabs = ({ problems, contestId, progress }: ProblemTabsProps)
           </button>
           <button
             type="button"
+            aria-pressed={activeTab === 'code'}
             onClick={() => handleTabChange('code')}
             className={`px-3.5 py-1.5 rounded-[4px] text-xs sm:text-sm font-medium transition-all select-none cursor-pointer ${
-              effectiveTab === 'code'
+              activeTab === 'code'
                 ? 'bg-[#262F3D] border border-[#3B4657] text-[#F0F6FC] shadow-sm'
                 : 'bg-transparent border border-transparent text-[#8B949E] hover:text-[#F0F6FC] hover:bg-[#161B22]/50'
             }`}
@@ -111,7 +152,7 @@ export const ProblemTabs = ({ problems, contestId, progress }: ProblemTabsProps)
       <div className="flex flex-col gap-2.5 sm:gap-3 w-full">
         {activeProblems.length === 0 ? (
           <div className="text-center py-8 text-sm text-[#8B949E] font-['DM_Sans'] bg-[#161B22] border border-[#262C36]">
-            No {effectiveTab === 'mcq' ? 'MCQ' : 'coding'} questions available.
+            No {activeTab === 'mcq' ? 'MCQ' : 'coding'} questions available.
           </div>
         ) : (
           activeProblems.map((problem, idx) => (

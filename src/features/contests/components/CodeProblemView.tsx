@@ -504,20 +504,22 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
 
           {/* Bottom Fixed Navigation Bar - Outside the description box and below it */}
           {totalCodes !== undefined && totalCodes > 1 && (
-            <div className="h-12 bg-[#0b0f17] border-t border-[#1e2636] px-4 flex items-center justify-between flex-shrink-0 gap-3">
+            <div className="h-12 bg-[#0b0f17] border-t border-[#1e2636] px-2 sm:px-4 flex items-center justify-between flex-shrink-0 gap-1.5 sm:gap-3">
               <button
                 type="button"
                 disabled={!prevProblemId}
                 onClick={() => prevProblemId && onNavigate?.(prevProblemId)}
-                className="h-8 px-3 rounded-[4px] text-xs font-medium flex items-center gap-1.5 transition-colors bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#141b29] disabled:hover:text-slate-200"
+                title="Previous Question"
+                className="h-8 px-2 sm:px-3 rounded-[4px] text-xs font-medium flex items-center gap-1 transition-colors bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#141b29] disabled:hover:text-slate-200 shrink-0"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
-                <span>Previous Question</span>
+                <span className="hidden sm:inline">Previous Question</span>
+                <span className="sm:hidden">Prev</span>
               </button>
 
               {codeIndex !== undefined && (
-                <span className="text-xs text-gray-400 font-mono">
-                  Question {codeIndex} of {totalCodes}
+                <span className="text-[11px] sm:text-xs text-gray-400 font-mono truncate text-center">
+                  <span className="hidden sm:inline">Question </span>{codeIndex}/{totalCodes}
                 </span>
               )}
 
@@ -525,9 +527,11 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                 type="button"
                 disabled={!nextProblemId}
                 onClick={() => nextProblemId && onNavigate?.(nextProblemId)}
-                className="h-8 px-3 rounded-[4px] text-xs font-medium flex items-center gap-1.5 transition-colors bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#141b29] disabled:hover:text-slate-200"
+                title="Next Question"
+                className="h-8 px-2 sm:px-3 rounded-[4px] text-xs font-medium flex items-center gap-1 transition-colors bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#141b29] disabled:hover:text-slate-200 shrink-0"
               >
-                <span>Next Question</span>
+                <span className="hidden sm:inline">Next Question</span>
+                <span className="sm:hidden">Next</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
