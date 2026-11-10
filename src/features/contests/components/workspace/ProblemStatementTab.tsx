@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft, ArrowUpRight, Copy, Check } from 'lucide-react';
 import type { Problem } from '../../problem.types';
+import { MathText } from './MathText';
 
 interface ProblemStatementTabProps {
   problem: Problem;
@@ -69,7 +70,7 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
         {/* Problem Description */}
         {problem.description && (
           <div className="space-y-2">
-            <p className="whitespace-pre-line leading-relaxed text-slate-200">{problem.description}</p>
+            <MathText className="whitespace-pre-line leading-relaxed text-slate-200">{problem.description}</MathText>
           </div>
         )}
 
@@ -77,7 +78,7 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
         {problem.input_format && (
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-white">Input Format</h3>
-            <p className="whitespace-pre-line font-mono text-xs text-slate-300 leading-relaxed">{problem.input_format}</p>
+            <MathText className="whitespace-pre-line font-mono text-xs text-slate-300 leading-relaxed">{problem.input_format}</MathText>
           </div>
         )}
 
@@ -85,7 +86,7 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
         {problem.output_format && (
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-white">Output Format</h3>
-            <p className="whitespace-pre-line font-mono text-xs text-slate-300 leading-relaxed">{problem.output_format}</p>
+            <MathText className="whitespace-pre-line font-mono text-xs text-slate-300 leading-relaxed">{problem.output_format}</MathText>
           </div>
         )}
 
@@ -97,7 +98,7 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
               {problem.constraints.map((constraint, index) => (
                 <li key={index} className="flex items-start gap-2">
                   <span className="text-[#10b981] mt-0.5">•</span>
-                  <span className="font-mono">{constraint}</span>
+                  <MathText className="font-mono">{constraint}</MathText>
                 </li>
               ))}
             </ul>
@@ -109,8 +110,6 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
           <div className="space-y-4 pt-2">
             {problem.examples.map((example, index) => {
               const sampleNum = index + 1;
-              const inKey = `sample-in-${sampleNum}`;
-              const outKey = `sample-out-${sampleNum}`;
               return (
                 <div key={index} className="border-t border-[#192233] pt-4 space-y-3">
                   <div className="flex items-center justify-between">
@@ -131,8 +130,8 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {[
-                      { label: 'Input', text: example.input, key: inKey },
-                      { label: 'Output', text: example.output, key: outKey },
+                      { key: `sample-${sampleNum}-input`, label: 'Input', text: example.input },
+                      { key: `sample-${sampleNum}-output`, label: 'Output', text: example.output },
                     ].map((pane) => (
                       <div key={pane.label} className="rounded border border-[#192233] bg-[#06080d] overflow-hidden">
                         <div className="h-8 px-3 bg-[#0c121c] border-b border-[#192233] flex items-center justify-between">
@@ -163,7 +162,7 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
                   {example.explanation && (
                     <div className="p-3 rounded bg-[#06080d] border border-[#192233] text-xs text-slate-300">
                       <span className="font-semibold text-slate-200">Explanation: </span>
-                      <span>{example.explanation}</span>
+                      <MathText>{example.explanation}</MathText>
                     </div>
                   )}
                 </div>

@@ -102,12 +102,6 @@ export default function Navbar() {
           >
             Contest
           </a>
-          <a
-            href="/contests"
-            className="text-gray-300 hover:text-green-600 transition-colors font-medium"
-          >
-            Leaderboard
-          </a>
           {user ? (
             <div className="flex items-center gap-3">
               <button
@@ -170,13 +164,6 @@ export default function Navbar() {
                 className="block text-white hover:text-gray-400 font-medium px-2"
               >
                 Contest
-              </motion.a>
-              <motion.a
-                variants={mobileItemVariants}
-                href="/contests"
-                className="block text-white hover:text-gray-400 font-medium px-2"
-              >
-                Leaderboard
               </motion.a>
               <motion.div variants={mobileItemVariants} className="px-2 flex flex-col gap-3">
                 {user ? (

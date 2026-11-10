@@ -321,7 +321,7 @@ export const ContestProblemPage = () => {
             <div className="flex-1 flex min-h-0 h-full overflow-hidden">
               <div className="w-1/2 min-h-0 h-full border-r border-gray-700 overflow-hidden flex flex-col">
                 <CodeProblemView
-                  key={`${user?.uid || 'guest'}_${problem.id}`}
+                  key={`${user?.uid || 'guest'}_${contestId}_${problem.id}`}
                   problem={problem}
                   contestId={contestId}
                   isContestEnded={true}
@@ -337,6 +337,7 @@ export const ContestProblemPage = () => {
               </div>
               <div className="w-1/2 min-h-0 h-full overflow-hidden flex flex-col">
                 <SubmittedSolutionViewer
+                  isContestEnded={isContestEnded}
                   submission={shownSubmission?.data ?? null}
                   isLoading={isLoadingSubmission}
                   error={submissionError}
@@ -348,7 +349,7 @@ export const ContestProblemPage = () => {
           ) : (
             /* Active contest CodeChef-style 2-column workspace */
             <CodeProblemView
-              key={`${user?.uid || 'guest'}_${problem.id}`}
+              key={`${user?.uid || 'guest'}_${contestId}_${problem.id}`}
               problem={problem}
               contestId={contestId}
               onSubmit={isAuthenticated && !isLocked ? submitCode : undefined}

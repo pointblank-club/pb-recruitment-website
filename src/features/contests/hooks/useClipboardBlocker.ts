@@ -1,5 +1,6 @@
 import { useEffect, type RefObject } from 'react';
 import { toast } from 'react-toastify';
+import { isClipboardAllowed } from '../clipboardGuards';
 
 interface UseClipboardBlockerOptions {
   enabled?: boolean;
@@ -29,6 +30,7 @@ export const useClipboardBlocker = ({
     };
 
     const handleCopy = (e: ClipboardEvent) => {
+      if (isClipboardAllowed(e.target)) return;
       if (!isInsideContainer(e)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -40,6 +42,7 @@ export const useClipboardBlocker = ({
     };
 
     const handlePaste = (e: ClipboardEvent) => {
+      if (isClipboardAllowed(e.target)) return;
       if (!isInsideContainer(e)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -51,6 +54,7 @@ export const useClipboardBlocker = ({
     };
 
     const handleCut = (e: ClipboardEvent) => {
+      if (isClipboardAllowed(e.target)) return;
       if (!isInsideContainer(e)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -62,6 +66,7 @@ export const useClipboardBlocker = ({
     };
 
     const handleContextMenu = (e: MouseEvent) => {
+      if (isClipboardAllowed(e.target)) return;
       if (!isInsideContainer(e)) return;
       e.preventDefault();
       e.stopPropagation();

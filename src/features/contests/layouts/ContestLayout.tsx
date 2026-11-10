@@ -24,12 +24,30 @@ export const ContestLayout = () => {
   const [progress, setProgress] = useState(0);
   const [hasElapsedDeadline, setHasElapsedDeadline] = useState(false);
   const [isEndModalOpen, setIsEndModalOpen] = useState(false);
+  const [isWindowFocused, setIsWindowFocused] = useState(() => document.visibilityState === 'visible' && document.hasFocus());
   const hasExitedRef = useRef(false);
   const wasLiveRef = useRef(false);
   const isRefetchingRef = useRef(false);
 
   const { contest, isLoading: isContestLoading, refetch } = useContest(contestId || '');
   const isLeaderboardPage = location.pathname.endsWith('/leaderboard');
+
+  useEffect(() => {
+    const handleBlur = () => setIsWindowFocused(false);
+    const handleFocus = () => setIsWindowFocused(true);
+    const handleVisibilityChange = () => {
+      setIsWindowFocused(document.visibilityState === 'visible' && document.hasFocus());
+    };
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     hasExitedRef.current = false;
@@ -208,7 +226,7 @@ export const ContestLayout = () => {
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;
 
   return (
-    <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
+    <div className="contest-screen relative w-full bg-black h-screen flex flex-col overflow-hidden">
       <ContestHeader 
         timeRemaining={timeRemaining}
         progress={progress}
@@ -234,6 +252,14 @@ export const ContestLayout = () => {
         onConfirm={handleConfirmEndContest}
         contestName={contest?.name}
       />
+
+      {!isWindowFocused && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#05070a]/95 px-6 text-center text-slate-300 backdrop-blur-2xl">
+          <p className="max-w-sm text-sm font-medium">
+            Contest content is hidden while this window is inactive.
+          </p>
+        </div>
+      )}
     </div>
   );
 };
