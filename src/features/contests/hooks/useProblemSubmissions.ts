@@ -192,34 +192,14 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
       setHistory(submissions);
       setHistoryPage(0);
       setHasMoreHistory(submissions.length === HISTORY_PAGE_SIZE);
-
-      if (submissions.length > 0) {
-        const latest = submissions[0];
-        if (isJudging(latest.status)) {
-          setActiveSubmission({
-            id: latest.id,
-            phase: 'polling',
-            status: latest.status,
-            details: latest,
-            message: 'Judging in progress…',
-          });
-          void pollSubmission(latest);
-        } else {
-          setActiveSubmission({
-            id: latest.id,
-            phase: 'completed',
-            status: latest.status,
-            details: latest,
-          });
-        }
-      }
+      return submissions;
     } catch (error) {
       if (requestId !== historyRequestRef.current) return;
       setHistoryError(getErrorMessage(error, 'Could not load submission history.'));
     } finally {
       if (requestId === historyRequestRef.current) setIsHistoryLoading(false);
     }
-  }, [pollSubmission, problemId]);
+  }, [problemId]);
 
   useEffect(() => {
     const scopeToken = ++scopeTokenRef.current;
@@ -231,14 +211,64 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
     setHistoryError(null);
     setIsHistoryLoading(false);
 
-    if (!skip) void refreshHistory();
+    if (!skip) {
+      void (async () => {
+        const submissions = await refreshHistory();
+        if (scopeToken !== scopeTokenRef.current) return;
+        if (!submissions || submissions.length === 0) return;
+
+        const latest = submissions[0];
+        if (isJudging(latest.status)) {
+          let shouldPoll = false;
+          setActiveSubmission((current) => {
+            if (current.phase === 'idle') {
+              shouldPoll = true;
+              return {
+                id: latest.id,
+                phase: 'polling',
+                status: latest.status,
+                details: latest,
+                message: 'Judging in progress…',
+              };
+            }
+            return current;
+          });
+          if (shouldPoll && scopeToken === scopeTokenRef.current) {
+            void pollSubmission(latest);
+          }
+        } else {
+          setActiveSubmission((current) => (
+            current.phase === 'idle'
+              ? {
+                  id: latest.id,
+                  phase: 'completed',
+                  status: latest.status,
+                  details: latest,
+                }
+              : current
+          ));
+
+          try {
+            const details = await contestApi.getSubmissionDetails(latest.id);
+            if (scopeToken !== scopeTokenRef.current) return;
+            setActiveSubmission((current) => (
+              current.id === latest.id && current.phase === 'completed'
+                ? { ...current, details }
+                : current
+            ));
+          } catch {
+            // Keep summary details if detailed fetch fails
+          }
+        }
+      })();
+    }
 
     return () => {
       pollTokenRef.current += 1;
       historyRequestRef.current += 1;
       if (scopeTokenRef.current === scopeToken) scopeTokenRef.current += 1;
     };
-  }, [problemId, refreshHistory, skip]);
+  }, [pollSubmission, problemId, refreshHistory, skip]);
 
   const loadMoreHistory = useCallback(async () => {
     if (!problemId || isHistoryLoading || !hasMoreHistory) return;
@@ -266,7 +296,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
     createSubmission: () => Promise<SubmissionResponse>,
     metadata: SubmissionMetadata,
   ) => {
-    const scopeToken = scopeTokenRef.current;
+    const scopeToken = ++scopeTokenRef.current;
     pollTokenRef.current += 1;
     setActiveSubmission({
       phase: 'submitting',

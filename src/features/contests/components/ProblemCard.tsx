@@ -43,7 +43,8 @@ export const ProblemCard = ({ problem, contestId, progress, index }: ProblemCard
 
   const getDisplayName = () => {
     if (index !== undefined) {
-      return `${index}. ${problem.name}`;
+      const cleaned = problem.name.replace(/^\d+[.)]\s*/, '');
+      return `${index}. ${cleaned}`;
     }
     return problem.name;
   };
@@ -51,13 +52,6 @@ export const ProblemCard = ({ problem, contestId, progress, index }: ProblemCard
   return (
     <Link
       to={`/contests/${contestId}/problems/${problem.id}`}
-      onClick={() => {
-        try {
-          sessionStorage.setItem(`contest_tab_${contestId}`, problem.type);
-        } catch {
-          // Ignore storage denial
-        }
-      }}
       className={`group flex items-center justify-between w-full px-4 py-3 border transition-all ${currentStripStyle}`}
     >
       <div className="flex-1 min-w-0 pr-4">
