@@ -66,6 +66,7 @@ export const Signup: React.FC = () => {
     
     if (name === 'joiningYear') {
       updatedData[name] = value ? parseInt(value, 10) : "";
+      setErrors(prev => ({ ...prev, id: undefined }));
     }
     
     setFormData(updatedData);
@@ -82,7 +83,8 @@ export const Signup: React.FC = () => {
 
   const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const validateMobile = (mobile: string) => /^\d{10}$/.test(mobile);
-  const validateUSN = (usn: string) => /^1DS[A-Z0-9]{7}$/i.test(usn);
+  const validateUSN = (usn: string) => /^1DS2[1-6](AI|AE|AU|BT|CG|MD|ET|EC|ME|EE|CH|CB|IC|CD|CS|CV|IS|RI|EI|CY)[0-9]{3}$/i.test(usn.trim());
+  const validateAppNumber = (appNo: string) => /^26UGDS[0-9]{4}$/i.test(appNo.trim());
   const validatePassword = (password: string) => /^.{6,}$/.test(password);
 
   const isFirstYear = formData.joiningYear === 1;
@@ -136,19 +138,30 @@ export const Signup: React.FC = () => {
   }, [formData.password, formData.confirmPassword]);
 
   useEffect(() => {
-    if (!formData.id || isFirstYear) {
+    if (!formData.id) {
       setErrors(prev => ({ ...prev, id: undefined }));
       return;
     }
 
     const timeoutId = setTimeout(() => {
-      if (!validateUSN(formData.id)) {
-        setErrors(prev => ({
-          ...prev,
-          id: "USN must start with 1DS and have 10 characters (e.g., 1DS24CG019)"
-        }));
+      if (isFirstYear) {
+        if (!validateAppNumber(formData.id)) {
+          setErrors(prev => ({
+            ...prev,
+            id: "First-year students must provide a valid Application Number (e.g., 26UGDS1234)"
+          }));
+        } else {
+          setErrors(prev => ({ ...prev, id: undefined }));
+        }
       } else {
-        setErrors(prev => ({ ...prev, id: undefined }));
+        if (!validateUSN(formData.id)) {
+          setErrors(prev => ({
+            ...prev,
+            id: "Provide a valid USN (e.g., 1DS24IC015)"
+          }));
+        } else {
+          setErrors(prev => ({ ...prev, id: undefined }));
+        }
       }
     }, 500);
 
@@ -162,7 +175,15 @@ export const Signup: React.FC = () => {
 
     if (!validateEmail(formData.email)) newErrors.email = "Enter a valid email (example: xxx@xxx.com)";
     if (!validateMobile(formData.mobile)) newErrors.mobile = "Mobile number must be 10 digits";
-    if (!isFirstYear && !validateUSN(formData.id)) newErrors.id = "USN must start with 1DS and have 10 characters (e.g., 1DS24CG019)";
+    if (isFirstYear) {
+      if (!validateAppNumber(formData.id)) {
+        newErrors.id = "First-year students must provide a valid Application Number (e.g., 26UGDS1234)";
+      }
+    } else {
+      if (!validateUSN(formData.id)) {
+        newErrors.id = "Provide a valid USN (e.g., 1DS24IC015)";
+      }
+    }
     if (!validatePassword(formData.password)) {
       newErrors.password = "Password must be at least 6 characters";
     }
@@ -192,18 +213,27 @@ export const Signup: React.FC = () => {
 
       setTimeout(() => navigate("/"), 2000);
     } catch (err: any) {
-       let message = "Signup failed. Please try again.";
+      let message = "Signup failed. Please try again.";
 
-      if (err?.code) {
+      const resData = err?.response?.data;
+      if (resData?.field && resData?.error) {
+        setErrors(prev => ({ ...prev, [resData.field]: resData.error }));
+        message = resData.error;
+      } else if (resData?.error) {
+        message = resData.error;
+      } else if (err?.code) {
         switch (err.code) {
           case "auth/email-already-in-use":
             message = "Email already exists";
+            setErrors(prev => ({ ...prev, email: message }));
             break;
           case "auth/invalid-email":
             message = "Invalid email";
+            setErrors(prev => ({ ...prev, email: message }));
             break;
           case "auth/weak-password":
             message = "Password too weak";
+            setErrors(prev => ({ ...prev, password: message }));
             break;
           default:
             message = "Signup failed. Please try again.";
@@ -256,7 +286,7 @@ export const Signup: React.FC = () => {
                 <label htmlFor="id" className="block text-sm font-medium text-gray-300">{isFirstYear ? "Application Number:" : "USN:"}</label>
                 {errors.id && <p className="text-red-500 text-sm font-dm-sans">{errors.id}</p>}
                 <input id="id" name="id" value={formData.id} onChange={handleChange} required
-                  placeholder={isFirstYear ? "Enter application number" : "Enter USN (e.g., 1DS24CS000)"}
+                  placeholder={isFirstYear ? "Enter application number (e.g., 26UGDS1234)" : "Enter USN (e.g., 1DS24CS000)"}
                   className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent ${errors.id ? 'border-red-500' : 'border-white'}`} />
               </div>
 
