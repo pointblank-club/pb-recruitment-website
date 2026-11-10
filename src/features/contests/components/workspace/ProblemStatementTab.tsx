@@ -6,7 +6,7 @@ import type { Problem } from '../../problem.types';
 interface ProblemStatementTabProps {
   problem: Problem;
   hideIDE?: boolean;
-  isLocked?: boolean;
+  isRestrictionsActive?: boolean;
   copiedId: string | null;
   onCopy: (text: string, id: string) => void;
   onLoadSample: (input: string) => void;
@@ -15,7 +15,7 @@ interface ProblemStatementTabProps {
 export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
   problem,
   hideIDE = false,
-  isLocked = false,
+  isRestrictionsActive = false,
   copiedId,
   onCopy,
   onLoadSample,
@@ -23,7 +23,7 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
   const { contestId } = useParams<{ contestId: string }>();
 
   return (
-    <div className={`space-y-4 max-w-4xl mx-auto font-['DM_Sans'] ${!isLocked ? 'select-none' : ''}`}>
+    <div className={`space-y-4 max-w-4xl mx-auto font-['DM_Sans'] ${isRestrictionsActive ? 'select-none' : ''}`}>
       {/* Header Row: Title & Metadata Badges (Sticky) */}
       <div className="sticky -top-5 z-20 bg-[#090d14] -mt-5 pt-5 pb-3 border-b border-[#192130] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -137,7 +137,7 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
                       <div key={pane.label} className="rounded border border-[#192233] bg-[#06080d] overflow-hidden">
                         <div className="h-8 px-3 bg-[#0c121c] border-b border-[#192233] flex items-center justify-between">
                           <span className="text-[11px] font-mono text-slate-400 font-semibold">{pane.label}</span>
-                          {isLocked && (
+                          {!isRestrictionsActive && (
                             <button
                               type="button"
                               onClick={() => onCopy(pane.text, pane.key)}

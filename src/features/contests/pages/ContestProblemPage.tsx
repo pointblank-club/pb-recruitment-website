@@ -26,15 +26,24 @@ export const ContestProblemPage = () => {
     isRegistered = false,
   } = useOutletContext<ContestOutletContext>() || {};
 
+  const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
+
+  // Enable restrictions only for authenticated, registered participants with a successfully loaded problem in a live contest.
+  const isRestrictionsActive =
+    !isContestEnded &&
+    isAuthenticated &&
+    isRegistered &&
+    !isLoading &&
+    !error &&
+    Boolean(problem);
+
   // Disable clipboard operations (copy, paste, cut, contextmenu) during active contest
-  useClipboardBlocker({ enabled: !isContestEnded });
+  useClipboardBlocker({ enabled: isRestrictionsActive });
 
   // For ended contests: only registered + authenticated users see code/submissions.
   // Guests and unregistered users see ONLY the problem statement (hideIDE = true).
   const hideIDE = isContestEnded ? !(isAuthenticated && isRegistered) : !isAuthenticated;
   const isLocked = isContestEnded;
-
-  const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
   const { problems } = useContestProblems(contestId || '');
 
   const mcqProblems = problems.filter((p) => p.type === 'mcq');
@@ -312,6 +321,7 @@ export const ContestProblemPage = () => {
                   isContestEnded={true}
                   hideIDE={true}
                   isLocked={true}
+                  isRestrictionsActive={isRestrictionsActive}
                   prevProblemId={prevCode?.id}
                   nextProblemId={nextCode?.id}
                   codeIndex={currentCodeIndex >= 0 ? currentCodeIndex + 1 : undefined}
@@ -340,6 +350,7 @@ export const ContestProblemPage = () => {
               isContestEnded={isContestEnded}
               hideIDE={hideIDE}
               isLocked={isLocked}
+              isRestrictionsActive={isRestrictionsActive}
               activeSubmission={activeSubmission}
               history={history}
               historyError={historyError}
@@ -363,6 +374,7 @@ export const ContestProblemPage = () => {
             submissionError={mcqSubmissionError}
             onRetryPolling={retryPolling}
             isContestEnded={isContestEnded}
+            isRestrictionsActive={isRestrictionsActive}
             submittedOption={submittedOptionIndex}
             contestId={contestId}
             prevProblemId={prevMcq?.id}

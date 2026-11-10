@@ -26,6 +26,8 @@ export const useClipboardBlocker = ({
     const handleCopy = (e: ClipboardEvent) => {
       if (blockCopy) {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         toast.warning('Copying is disabled during the contest.', {
           toastId: 'clipboard-copy-blocked',
           autoClose: 2000,
@@ -36,6 +38,8 @@ export const useClipboardBlocker = ({
     const handlePaste = (e: ClipboardEvent) => {
       if (blockPaste) {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         toast.warning('Pasting is disabled during the contest.', {
           toastId: 'clipboard-paste-blocked',
           autoClose: 2000,
@@ -46,6 +50,8 @@ export const useClipboardBlocker = ({
     const handleCut = (e: ClipboardEvent) => {
       if (blockCut) {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         toast.warning('Cutting is disabled during the contest.', {
           toastId: 'clipboard-cut-blocked',
           autoClose: 2000,
@@ -56,6 +62,8 @@ export const useClipboardBlocker = ({
     const handleContextMenu = (e: MouseEvent) => {
       if (blockContextMenu) {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
       }
     };
 

@@ -21,6 +21,7 @@ export const ContestLayout = () => {
   const { user } = useAuth();
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [hasElapsedDeadline, setHasElapsedDeadline] = useState(false);
   const [isEndModalOpen, setIsEndModalOpen] = useState(false);
   const hasExitedRef = useRef(false);
   const wasLiveRef = useRef(false);
@@ -32,6 +33,7 @@ export const ContestLayout = () => {
   useEffect(() => {
     hasExitedRef.current = false;
     wasLiveRef.current = false;
+    setHasElapsedDeadline(false);
   }, [contestId]);
 
   useEffect(() => {
@@ -68,6 +70,11 @@ export const ContestLayout = () => {
 
       // If contest is over and user was actively participating in it
       if (now >= endTime) {
+        // Publish elapsed-deadline state immediately before awaiting refetch
+        setHasElapsedDeadline(true);
+        setTimeRemaining(0);
+        setProgress(100);
+
         if (wasLiveRef.current && !hasExitedRef.current && !isLeaderboardPage) {
           if (isRefetchingRef.current) return true;
           isRefetchingRef.current = true;
@@ -76,12 +83,18 @@ export const ContestLayout = () => {
           // The user may have left (e.g. to the leaderboard) while the refetch was in flight
           if (cancelled) return true;
           if (updatedContest && Date.now() < updatedContest.end_time) {
+            // Reconcile extension: contest was extended while running
+            setHasElapsedDeadline(false);
+            const newNow = Date.now();
+            const newRemaining = Math.floor((updatedContest.end_time - newNow) / 1000);
+            const newTotal = updatedContest.end_time - updatedContest.start_time;
+            const newElapsed = newNow - updatedContest.start_time;
+            setTimeRemaining(Math.max(0, newRemaining));
+            setProgress(newTotal > 0 ? Math.min(100, Math.max(0, (newElapsed / newTotal) * 100)) : 0);
             return false;
           }
 
           hasExitedRef.current = true;
-          setTimeRemaining(0);
-          setProgress(100);
           if (document.fullscreenElement) {
             document.exitFullscreen().catch(() => {});
           }
@@ -90,8 +103,6 @@ export const ContestLayout = () => {
           return true;
         }
 
-        setTimeRemaining(0);
-        setProgress(100);
         return true;
       }
 
@@ -184,7 +195,7 @@ export const ContestLayout = () => {
     return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}${location.hash}` }} />;
   }
 
-  const isContestEnded = contest ? Date.now() >= contest.end_time : false;
+  const isContestEnded = contest ? (hasElapsedDeadline || Date.now() >= contest.end_time) : false;
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;
 
   return (

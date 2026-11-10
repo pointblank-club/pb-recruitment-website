@@ -40,6 +40,7 @@ interface CodeProblemViewProps {
   isContestEnded?: boolean;
   hideIDE?: boolean;
   isLocked?: boolean;
+  isRestrictionsActive?: boolean;
   activeSubmission?: ActiveSubmission;
   history?: SubmissionDetailsResponse[];
   historyError?: string | null;
@@ -118,6 +119,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   onRun,
   hideIDE = false,
   isLocked = false,
+  isRestrictionsActive = false,
   activeSubmission = { phase: 'idle' },
   history = [],
   historyError = null,
@@ -476,7 +478,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
               <ProblemStatementTab
                 problem={problem}
                 hideIDE={hideIDE}
-                isLocked={isLocked}
+                isRestrictionsActive={isRestrictionsActive}
                 copiedId={copiedId}
                 onCopy={handleCopy}
                 onLoadSample={handleLoadSampleIntoCustomInput}
@@ -584,7 +586,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                   </button>
                 )}
 
-                {isLocked && (
+                {!isRestrictionsActive && (
                   <button
                     type="button"
                     onClick={() => handleCopy(code, 'editor-code')}
@@ -671,20 +673,8 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                   cursorBlinking: 'smooth',
                   smoothScrolling: true,
                   padding: { top: 12, bottom: 12 },
-                  contextmenu: isLocked,
+                  contextmenu: !isRestrictionsActive,
                   folding: true,
-                }}
-                onMount={(editor) => {
-                  if (!isLocked) {
-                    editor.getDomNode()?.addEventListener(
-                      'paste',
-                      (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      },
-                      true
-                    );
-                  }
                 }}
               />
             </div>
