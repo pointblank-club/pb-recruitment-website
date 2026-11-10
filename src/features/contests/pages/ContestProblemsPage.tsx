@@ -39,6 +39,14 @@ export const ContestProblemsPage = () => {
 
   return (
     <div className="px-6 py-6 flex-1 min-h-0 overflow-y-auto">
+      {/* Header & Subtitle */}
+      <div className="mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1 font-['DM_Sans']">Questions</h1>
+        <p className="text-sm text-[#8B949E] font-['DM_Sans']">
+          Select a question to view details and submit your solution
+        </p>
+      </div>
+
       <ProblemList problems={problems} contestId={contestId} />
 
       {openEndContestModal && problems.length > 0 && (

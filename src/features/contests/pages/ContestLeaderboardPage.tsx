@@ -1,7 +1,6 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Code2 } from 'lucide-react';
-import { toast } from 'react-toastify';
 import { useLeaderboard } from '../hooks/useLeaderboard';
 import { LeaderboardTable } from '../components/LeaderboardTable';
 import { adminApi } from '@/services/api/adminApi';
@@ -11,7 +10,6 @@ export const ContestLeaderboardPage = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
   const leaderboardState = useLeaderboard(contestId || '');
-  const hasRedirectedRef = useRef(false);
   const { user, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -47,22 +45,9 @@ export const ContestLeaderboardPage = () => {
     refresh,
   } = leaderboardState;
 
-  useEffect(() => {
-    if (
-      !isLoading &&
-      contestId &&
-      !hasStarted &&
-      !hasRedirectedRef.current
-    ) {
-      hasRedirectedRef.current = true;
-      toast.info('The contest has not started yet. Leaderboard will be available once the contest begins.');
-      navigate(`/contest/${contestId}`, { replace: true });
-    }
-  }, [isLoading, hasStarted, contest, contestId, navigate]);
-
   if (!contestId) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center p-4">
         <div className="text-center">
           <p className="text-red-500 font-medium font-['DM_Sans']">Invalid contest ID</p>
           <Link to="/contests" className="text-green hover:underline mt-2 inline-block font-['DM_Sans']">
@@ -75,7 +60,7 @@ export const ContestLeaderboardPage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center p-4">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green mx-auto mb-4" />
           <p className="text-gray-400 font-['DM_Sans']">Loading leaderboard...</p>
@@ -84,20 +69,9 @@ export const ContestLeaderboardPage = () => {
     );
   }
 
-  if (!hasStarted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green mx-auto mb-4" />
-          <p className="text-gray-400 font-['DM_Sans']">Contest has not started yet. Redirecting to contest details...</p>
-        </div>
-      </div>
-    );
-  }
-
   if (error || !contest) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="flex-1 flex items-center justify-center p-4">
         <div className="max-w-md w-full">
           <div className="bg-red-950/40 border border-red-500/40 rounded-lg p-6 text-center">
             <p className="text-red-400 font-medium mb-2 font-['DM_Sans']">Error loading leaderboard</p>
@@ -110,14 +84,35 @@ export const ContestLeaderboardPage = () => {
               >
                 Retry
               </button>
-              <Link
-                to="/contests"
-                className="inline-block px-4 py-2 bg-gray-800 text-gray-200 border border-gray-700 font-semibold rounded-md hover:bg-gray-700 transition-colors font-['DM_Sans'] text-sm"
+              <button
+                type="button"
+                onClick={() => navigate(`/contests/${contestId}/problems`)}
+                className="px-4 py-2 bg-gray-800 text-gray-200 border border-gray-700 font-semibold rounded-md hover:bg-gray-700 transition-colors font-['DM_Sans'] text-sm"
               >
-                Back to Contests
-              </Link>
+                Back to Problems
+              </button>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasStarted) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="bg-[#111622] border border-[#1e2638] rounded-xl p-8 max-w-md text-center">
+          <p className="text-yellow-400 font-semibold mb-2 font-['DM_Sans'] text-lg">Contest Not Started</p>
+          <p className="text-gray-400 text-sm mb-6 font-['DM_Sans']">
+            The leaderboard will be available once the contest begins.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate(`/contests/${contestId}/problems`)}
+            className="px-4 py-2 bg-green text-black font-semibold rounded-md hover:bg-green-600 transition-colors font-['DM_Sans'] text-sm"
+          >
+            Back to Problems
+          </button>
         </div>
       </div>
     );
@@ -136,7 +131,7 @@ export const ContestLeaderboardPage = () => {
           <li className="text-gray-600">/</li>
           <li>
             <Link
-              to={`/contest/${contestId}`}
+              to={`/contests/${contestId}/problems`}
               className="text-green-400 hover:text-green-300"
             >
               {contest.name}
