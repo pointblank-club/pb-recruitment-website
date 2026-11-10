@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
 
 export interface ContestOutletContext {
+  isLive: boolean;
   isContestEnded: boolean;
   isAuthenticated: boolean;
   isRegistered: boolean;
@@ -211,6 +212,7 @@ export const ContestLayout = () => {
       
       <div className="flex-1 min-h-0 overflow-auto flex flex-col">
         <Outlet context={{
+          isLive,
           isContestEnded,
           isAuthenticated: !!user,
           isRegistered: contest?.is_registered ?? false,

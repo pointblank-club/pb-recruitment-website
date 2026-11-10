@@ -21,15 +21,18 @@ export const ContestProblemPage = () => {
   const location = useLocation();
   const { user } = useAuth();
   const {
+    isLive = false,
     isContestEnded = false,
     isAuthenticated = false,
     isRegistered = false,
   } = useOutletContext<ContestOutletContext>() || {};
 
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
 
   // Enable restrictions only for authenticated, registered participants with a successfully loaded problem in a live contest.
   const isRestrictionsActive =
+    isLive &&
     !isContestEnded &&
     isAuthenticated &&
     isRegistered &&
@@ -37,8 +40,11 @@ export const ContestProblemPage = () => {
     !error &&
     Boolean(problem);
 
-  // Disable clipboard operations (copy, paste, cut, contextmenu) during active contest
-  useClipboardBlocker({ enabled: isRestrictionsActive });
+  // Disable clipboard operations (copy, paste, cut, contextmenu) during active contest scoped to the workspace
+  useClipboardBlocker({
+    enabled: isRestrictionsActive,
+    containerRef: workspaceRef,
+  });
 
   // For ended contests: only registered + authenticated users see code/submissions.
   // Guests and unregistered users see ONLY the problem statement (hideIDE = true).
@@ -232,7 +238,7 @@ export const ContestProblemPage = () => {
       : null;
 
   return (
-    <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
+    <div ref={workspaceRef} className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
       {/* Informational banners when contest has ended */}
       {isContestEnded && !isAuthenticated && (
         <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">

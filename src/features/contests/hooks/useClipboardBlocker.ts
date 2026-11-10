@@ -1,12 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, type RefObject } from 'react';
 import { toast } from 'react-toastify';
 
 interface UseClipboardBlockerOptions {
   enabled?: boolean;
-  blockCopy?: boolean;
-  blockPaste?: boolean;
-  blockCut?: boolean;
-  blockContextMenu?: boolean;
+  containerRef?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -15,56 +12,60 @@ interface UseClipboardBlockerOptions {
  */
 export const useClipboardBlocker = ({
   enabled = true,
-  blockCopy = true,
-  blockPaste = true,
-  blockCut = true,
-  blockContextMenu = true,
+  containerRef,
 }: UseClipboardBlockerOptions = {}) => {
   useEffect(() => {
     if (!enabled) return;
 
-    const handleCopy = (e: ClipboardEvent) => {
-      if (blockCopy) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        toast.warning('Copying is disabled during the contest.', {
-          toastId: 'clipboard-copy-blocked',
-          autoClose: 2000,
-        });
+    const isInsideContainer = (e: Event) => {
+      if (!containerRef?.current) return true;
+      const target = e.target as Node | null;
+      if (target && containerRef.current.contains(target)) return true;
+      const selection = window.getSelection();
+      if (selection && selection.anchorNode && containerRef.current.contains(selection.anchorNode)) {
+        return true;
       }
+      return false;
+    };
+
+    const handleCopy = (e: ClipboardEvent) => {
+      if (!isInsideContainer(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      toast.warning('Copying is disabled during the contest.', {
+        toastId: 'clipboard-copy-blocked',
+        autoClose: 2000,
+      });
     };
 
     const handlePaste = (e: ClipboardEvent) => {
-      if (blockPaste) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        toast.warning('Pasting is disabled during the contest.', {
-          toastId: 'clipboard-paste-blocked',
-          autoClose: 2000,
-        });
-      }
+      if (!isInsideContainer(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      toast.warning('Pasting is disabled during the contest.', {
+        toastId: 'clipboard-paste-blocked',
+        autoClose: 2000,
+      });
     };
 
     const handleCut = (e: ClipboardEvent) => {
-      if (blockCut) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        toast.warning('Cutting is disabled during the contest.', {
-          toastId: 'clipboard-cut-blocked',
-          autoClose: 2000,
-        });
-      }
+      if (!isInsideContainer(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      toast.warning('Cutting is disabled during the contest.', {
+        toastId: 'clipboard-cut-blocked',
+        autoClose: 2000,
+      });
     };
 
     const handleContextMenu = (e: MouseEvent) => {
-      if (blockContextMenu) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-      }
+      if (!isInsideContainer(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
     };
 
     // Use capturing phase (true) so the blocker runs before child components or libraries process events
@@ -79,5 +80,5 @@ export const useClipboardBlocker = ({
       window.removeEventListener('cut', handleCut, true);
       window.removeEventListener('contextmenu', handleContextMenu, true);
     };
-  }, [enabled, blockCopy, blockPaste, blockCut, blockContextMenu]);
+  }, [enabled, containerRef]);
 };
