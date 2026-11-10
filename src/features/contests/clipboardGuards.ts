@@ -1,6 +1,6 @@
 import type React from 'react';
 
-const isClipboardAllowed = (target: EventTarget | null) =>
+export const isClipboardAllowed = (target: EventTarget | null) =>
   target instanceof Element && !!target.closest('[data-clipboard-allowed="true"]');
 
 export const preventClipboardAction = (event: React.ClipboardEvent<HTMLElement>) => {
