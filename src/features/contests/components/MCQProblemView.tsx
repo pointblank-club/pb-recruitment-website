@@ -63,7 +63,7 @@ export const MCQProblemView = ({
     if (hasSubmitted) return;
 
     if (!selectedAnswer) {
-      alert('Please select an answer before submitting.');
+      setLocalError('Please select an answer before submitting.');
       return;
     }
 
