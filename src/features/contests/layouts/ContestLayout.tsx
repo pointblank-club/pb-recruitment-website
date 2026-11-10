@@ -22,12 +22,52 @@ export const ContestLayout = () => {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isEndModalOpen, setIsEndModalOpen] = useState(false);
+  const [isWindowFocused, setIsWindowFocused] = useState(() => document.hasFocus());
   const hasExitedRef = useRef(false);
   const wasLiveRef = useRef(false);
   const isRefetchingRef = useRef(false);
 
   const { contest, isLoading: isContestLoading, refetch } = useContest(contestId || '');
   const isLeaderboardPage = location.pathname.endsWith('/leaderboard');
+
+  useEffect(() => {
+    const handleBlur = () => setIsWindowFocused(false);
+    const handleFocus = () => setIsWindowFocused(true);
+    const handleVisibilityChange = () => {
+      setIsWindowFocused(document.visibilityState === 'visible' && document.hasFocus());
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'PrintScreen') {
+        event.preventDefault();
+        setIsWindowFocused(false);
+      }
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'PrintScreen' && document.visibilityState === 'visible' && document.hasFocus()) {
+        setIsWindowFocused(true);
+      }
+    };
+    const handleBeforePrint = () => setIsWindowFocused(false);
+    const handleAfterPrint = () => handleVisibilityChange();
+
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     hasExitedRef.current = false;
@@ -188,7 +228,7 @@ export const ContestLayout = () => {
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;
 
   return (
-    <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
+    <div className="contest-screen relative w-full bg-black h-screen flex flex-col overflow-hidden">
       <ContestHeader 
         timeRemaining={timeRemaining}
         progress={progress}
@@ -213,6 +253,14 @@ export const ContestLayout = () => {
         onConfirm={handleConfirmEndContest}
         contestName={contest?.name}
       />
+
+      {!isWindowFocused && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#05070a]/95 px-6 text-center text-slate-300 backdrop-blur-2xl">
+          <p className="max-w-sm text-sm font-medium">
+            Contest content is hidden while this window is inactive.
+          </p>
+        </div>
+      )}
     </div>
   );
 };
