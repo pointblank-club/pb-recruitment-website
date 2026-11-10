@@ -43,7 +43,7 @@ export const ProblemCard = ({ problem, contestId, progress, index }: ProblemCard
 
   const getDisplayName = () => {
     if (index !== undefined) {
-      const cleaned = problem.name.replace(/^\d+[.)]\s*/, '');
+      const cleaned = problem.name.replace(/^\d+[.)]\s+/, '');
       return `${index}. ${cleaned}`;
     }
     return problem.name;

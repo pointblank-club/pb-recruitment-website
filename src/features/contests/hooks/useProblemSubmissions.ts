@@ -219,34 +219,21 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
 
         const latest = submissions[0];
         if (isJudging(latest.status)) {
-          let shouldPoll = false;
-          setActiveSubmission((current) => {
-            if (current.phase === 'idle') {
-              shouldPoll = true;
-              return {
-                id: latest.id,
-                phase: 'polling',
-                status: latest.status,
-                details: latest,
-                message: 'Judging in progress…',
-              };
-            }
-            return current;
+          setActiveSubmission({
+            id: latest.id,
+            phase: 'polling',
+            status: latest.status,
+            details: latest,
+            message: 'Judging in progress…',
           });
-          if (shouldPoll && scopeToken === scopeTokenRef.current) {
-            void pollSubmission(latest);
-          }
+          void pollSubmission(latest);
         } else {
-          setActiveSubmission((current) => (
-            current.phase === 'idle'
-              ? {
-                  id: latest.id,
-                  phase: 'completed',
-                  status: latest.status,
-                  details: latest,
-                }
-              : current
-          ));
+          setActiveSubmission({
+            id: latest.id,
+            phase: 'completed',
+            status: latest.status,
+            details: latest,
+          });
 
           try {
             const details = await contestApi.getSubmissionDetails(latest.id);
@@ -266,7 +253,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
     return () => {
       pollTokenRef.current += 1;
       historyRequestRef.current += 1;
-      if (scopeTokenRef.current === scopeToken) scopeTokenRef.current += 1;
+      scopeTokenRef.current += 1;
     };
   }, [pollSubmission, problemId, refreshHistory, skip]);
 
