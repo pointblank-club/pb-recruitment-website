@@ -66,6 +66,7 @@ export const Signup: React.FC = () => {
     
     if (name === 'joiningYear') {
       updatedData[name] = value ? parseInt(value, 10) : "";
+      setErrors(prev => ({ ...prev, id: undefined }));
     }
     
     setFormData(updatedData);
@@ -82,10 +83,26 @@ export const Signup: React.FC = () => {
 
   const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const validateMobile = (mobile: string) => /^\d{10}$/.test(mobile);
-  const validateUSN = (usn: string) => /^1DS[A-Z0-9]{7}$/i.test(usn);
+  const validateUSN = (usn: string) => /^1DS2[1-6](AI|AE|AU|BT|CG|MD|ET|EC|ME|EE|CH|CB|IC|CD|CS|CV|IS|RI|EI|CY)[0-9]{3}$/i.test(usn.trim());
+  const validateAppNumber = (appNo: string) => /^26UGDS[0-9]{4}$/i.test(appNo.trim());
   const validatePassword = (password: string) => /^.{6,}$/.test(password);
 
   const isFirstYear = formData.joiningYear === 1;
+
+  const validateIdentifier = (id: string, firstYear: boolean): string | undefined => {
+    const trimmed = id.trim();
+    if (!trimmed) return undefined;
+    if (firstYear) {
+      if (!validateAppNumber(trimmed)) {
+        return "First-year students must provide a valid Application Number (e.g., 26UGDS1234)";
+      }
+    } else {
+      if (!validateUSN(trimmed)) {
+        return "Provide a valid USN (e.g., 1DS24IC015)";
+      }
+    }
+    return undefined;
+  };
 
   const checkEmailExists = async (email: string) => {
     email = email.trim().toLowerCase();
@@ -103,8 +120,6 @@ export const Signup: React.FC = () => {
     const timeoutId = setTimeout(() => {
       if (formData.mobile && !validateMobile(formData.mobile)) {
         setErrors(prev => ({ ...prev, mobile: "Mobile number must be 10 digits" }));
-      } else {
-        setErrors(prev => ({ ...prev, mobile: undefined }));
       }
     }, 500);
 
@@ -115,8 +130,6 @@ export const Signup: React.FC = () => {
     const timeoutId = setTimeout(() => {
       if (formData.password && !validatePassword(formData.password)) {
         setErrors(prev => ({ ...prev, password: "Password must be at least 6 characters" }));
-      } else {
-        setErrors(prev => ({ ...prev, password: undefined }));
       }
     }, 500);
 
@@ -136,19 +149,15 @@ export const Signup: React.FC = () => {
   }, [formData.password, formData.confirmPassword]);
 
   useEffect(() => {
-    if (!formData.id || isFirstYear) {
+    if (!formData.id) {
       setErrors(prev => ({ ...prev, id: undefined }));
       return;
     }
 
     const timeoutId = setTimeout(() => {
-      if (!validateUSN(formData.id)) {
-        setErrors(prev => ({
-          ...prev,
-          id: "USN must start with 1DS and have 10 characters (e.g., 1DS24CG019)"
-        }));
-      } else {
-        setErrors(prev => ({ ...prev, id: undefined }));
+      const err = validateIdentifier(formData.id, isFirstYear);
+      if (err) {
+        setErrors(prev => ({ ...prev, id: err }));
       }
     }, 500);
 
@@ -162,7 +171,14 @@ export const Signup: React.FC = () => {
 
     if (!validateEmail(formData.email)) newErrors.email = "Enter a valid email (example: xxx@xxx.com)";
     if (!validateMobile(formData.mobile)) newErrors.mobile = "Mobile number must be 10 digits";
-    if (!isFirstYear && !validateUSN(formData.id)) newErrors.id = "USN must start with 1DS and have 10 characters (e.g., 1DS24CG019)";
+    const idError = validateIdentifier(formData.id, isFirstYear);
+    if (!formData.id.trim()) {
+      newErrors.id = isFirstYear
+        ? "First-year students must provide a valid Application Number (e.g., 26UGDS1234)"
+        : "Provide a valid USN (e.g., 1DS24IC015)";
+    } else if (idError) {
+      newErrors.id = idError;
+    }
     if (!validatePassword(formData.password)) {
       newErrors.password = "Password must be at least 6 characters";
     }
@@ -175,13 +191,14 @@ export const Signup: React.FC = () => {
       return;
     }
 
-    if (await checkEmailExists(formData.email)) {
-      setErrors(prev => ({ ...prev, email: "Email already exists" }));
-      return;
-    }
+    setLoading(true);
 
     try {
-      setLoading(true);
+      if (await checkEmailExists(formData.email)) {
+        setErrors(prev => ({ ...prev, email: "Email already exists" }));
+        return;
+      }
+
       await signUpUser({ ...formData, joiningYear: formData.joiningYear as number });
       
       setPopup({
@@ -192,18 +209,48 @@ export const Signup: React.FC = () => {
 
       setTimeout(() => navigate("/"), 2000);
     } catch (err: any) {
-       let message = "Signup failed. Please try again.";
+      let message = "Signup failed. Please try again.";
 
-      if (err?.code) {
+      const resData = err?.response?.data;
+      if (resData?.errors && Array.isArray(resData.errors)) {
+        const fieldMap: Record<string, keyof typeof errors> = {
+          usn: 'id',
+          mobile_number: 'mobile',
+          email: 'email',
+          password: 'password',
+        };
+        const newErr: typeof errors = {};
+        for (const item of resData.errors) {
+          const mappedField = fieldMap[item.field] || (item.field as keyof typeof errors);
+          if (mappedField && typeof item.message === 'string') {
+            newErr[mappedField] = item.message;
+            message = item.message;
+          }
+        }
+        if (Object.keys(newErr).length > 0) {
+          setErrors(prev => ({ ...prev, ...newErr }));
+        }
+      } else if (resData?.field && typeof resData?.error === "string") {
+        const field = resData.field as keyof typeof errors;
+        setErrors(prev => ({ ...prev, [field]: resData.error }));
+        message = resData.error;
+      } else if (typeof resData?.error === "string") {
+        message = resData.error;
+      } else if (typeof resData?.message === "string") {
+        message = resData.message;
+      } else if (err?.code) {
         switch (err.code) {
           case "auth/email-already-in-use":
             message = "Email already exists";
+            setErrors(prev => ({ ...prev, email: message }));
             break;
           case "auth/invalid-email":
             message = "Invalid email";
+            setErrors(prev => ({ ...prev, email: message }));
             break;
           case "auth/weak-password":
             message = "Password too weak";
+            setErrors(prev => ({ ...prev, password: message }));
             break;
           default:
             message = "Signup failed. Please try again.";
@@ -234,105 +281,108 @@ export const Signup: React.FC = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-300">Full Name:</label>
-                  <input id="name" name="name" value={formData.name} onChange={handleChange} required placeholder="Enter your full name"
-                    className="w-full px-4 py-3 border border-white rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent" />
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="joiningYear" className="block text-sm font-medium text-gray-300">Year of Study:</label>
-                  <select id="joiningYear" name="joiningYear" value={formData.joiningYear || ""} onChange={handleChange} required
-                    className="w-full px-4 py-3 bg-black border border-white rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 cursor-pointer">
-                    <option value="">Select Year of Study</option>
-                    <option value={1}>1</option>
-                    <option value={2}>2</option>
-                    <option value={3}>3</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label htmlFor="id" className="block text-sm font-medium text-gray-300">{isFirstYear ? "Application Number:" : "USN:"}</label>
-                {errors.id && <p className="text-red-500 text-sm font-dm-sans">{errors.id}</p>}
-                <input id="id" name="id" value={formData.id} onChange={handleChange} required
-                  placeholder={isFirstYear ? "Enter application number" : "Enter USN (e.g., 1DS24CS000)"}
-                  className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent ${errors.id ? 'border-red-500' : 'border-white'}`} />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-300">Email:</label>
-                  <input id="email" name="email" type="email" value={formData.email} onChange={handleChange} required placeholder="Enter your email"
-                    className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent ${errors.email ? 'border-red-500' : 'border-white'}`} />
-                </div>
-
-                <div className="space-y-2">
-                  <label htmlFor="mobile" className="block text-sm font-medium text-gray-300">Mobile Number:</label>
-                  <input id="mobile" name="mobile" type="tel" value={formData.mobile} onChange={handleChange} required placeholder="Enter mobile number"
-                    className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent ${errors.mobile ? 'border-red-500' : 'border-white'}`} />
-                  {errors.mobile && <p className="text-red-500 text-sm font-dm-sans">{errors.mobile}</p>}
-                </div>
-              </div>
-
-              <div className="space-y-2" ref={dropdownRef}>
-                <label htmlFor="branch" className="block text-sm font-medium text-gray-300">
-                  Branch:
-                </label>
-                <div className="relative">
-                  <div 
-                    className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-pointer flex items-center justify-between hover:bg-gray-750 transition-colors"
-                    onClick={() => setShowBranchDropdown(!showBranchDropdown)}
-                  >
-                    <span className={formData.branch ? "text-white" : "text-gray-400"}>
-                      {formData.branch || "Select Branch"}
-                    </span>
-                    <svg 
-                      className={`w-5 h-5 transition-transform ${showBranchDropdown ? 'rotate-180' : ''}`}
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+              <fieldset disabled={loading} className="space-y-6 disabled:opacity-70">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label htmlFor="name" className="block text-sm font-medium text-gray-300">Full Name:</label>
+                    <input id="name" name="name" value={formData.name} onChange={handleChange} required placeholder="Enter your full name"
+                      className="w-full px-4 py-3 border border-white rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent" />
                   </div>
-                  
-                  {showBranchDropdown && (
-                    <div className="absolute z-10 w-full mt-2 bg-gray-800 border border-white rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {BRANCHES.map((branch) => (
-                        <div
-                          key={branch}
-                          className="px-4 py-3 text-white hover:bg-gray-700 cursor-pointer transition-colors"
-                          onClick={() => handleBranchSelect(branch)}
-                        >
-                          {branch}
-                        </div>
-                      ))}
+                  <div className="space-y-2">
+                    <label htmlFor="joiningYear" className="block text-sm font-medium text-gray-300">Year of Study:</label>
+                    <select id="joiningYear" name="joiningYear" value={formData.joiningYear || ""} onChange={handleChange} required
+                      className="w-full px-4 py-3 bg-black border border-white rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 cursor-pointer">
+                      <option value="">Select Year of Study</option>
+                      <option value={1}>1</option>
+                      <option value={2}>2</option>
+                      <option value={3}>3</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="id" className="block text-sm font-medium text-gray-300">{isFirstYear ? "Application Number:" : "USN:"}</label>
+                  {errors.id && <p className="text-red-500 text-sm font-dm-sans">{errors.id}</p>}
+                  <input id="id" name="id" value={formData.id} onChange={handleChange} required
+                    placeholder={isFirstYear ? "Enter application number (e.g., 26UGDS1234)" : "Enter USN (e.g., 1DS24CS000)"}
+                    className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent ${errors.id ? 'border-red-500' : 'border-white'}`} />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-300">Email:</label>
+                    <input id="email" name="email" type="email" value={formData.email} onChange={handleChange} required placeholder="Enter your email"
+                      className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent ${errors.email ? 'border-red-500' : 'border-white'}`} />
+                    {errors.email && <p className="text-red-500 text-sm font-dm-sans">{errors.email}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="mobile" className="block text-sm font-medium text-gray-300">Mobile Number:</label>
+                    <input id="mobile" name="mobile" type="tel" value={formData.mobile} onChange={handleChange} required placeholder="Enter mobile number"
+                      className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent ${errors.mobile ? 'border-red-500' : 'border-white'}`} />
+                    {errors.mobile && <p className="text-red-500 text-sm font-dm-sans">{errors.mobile}</p>}
+                  </div>
+                </div>
+
+                <div className="space-y-2" ref={dropdownRef}>
+                  <label htmlFor="branch" className="block text-sm font-medium text-gray-300">
+                    Branch:
+                  </label>
+                  <div className="relative">
+                    <div 
+                      className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-pointer flex items-center justify-between hover:bg-gray-750 transition-colors"
+                      onClick={() => !loading && setShowBranchDropdown(!showBranchDropdown)}
+                    >
+                      <span className={formData.branch ? "text-white" : "text-gray-400"}>
+                        {formData.branch || "Select Branch"}
+                      </span>
+                      <svg 
+                        className={`w-5 h-5 transition-transform ${showBranchDropdown ? 'rotate-180' : ''}`}
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
                     </div>
-                  )}
+                    
+                    {showBranchDropdown && (
+                      <div className="absolute z-10 w-full mt-2 bg-gray-800 border border-white rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {BRANCHES.map((branch) => (
+                          <div
+                            key={branch}
+                            className="px-4 py-3 text-white hover:bg-gray-700 cursor-pointer transition-colors"
+                            onClick={() => handleBranchSelect(branch)}
+                          >
+                            {branch}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-300">Password:</label>
-                  <input id="password" name="password" type="password" value={formData.password} onChange={handleChange} required placeholder="Enter password"
-                    className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent ${errors.password ? 'border-red-500' : 'border-white'}`} />
-                  {errors.password && <p className="text-red-500 text-sm font-dm-sans">{errors.password}</p>}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label htmlFor="password" className="block text-sm font-medium text-gray-300">Password:</label>
+                    <input id="password" name="password" type="password" value={formData.password} onChange={handleChange} required placeholder="Enter password"
+                      className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent ${errors.password ? 'border-red-500' : 'border-white'}`} />
+                    {errors.password && <p className="text-red-500 text-sm font-dm-sans">{errors.password}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300">Confirm Password:</label>
+                    <input id="confirmPassword" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} required placeholder="Re-enter password"
+                      className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent ${errors.confirmPassword ? 'border-red-500' : 'border-white'}`} />
+                    {errors.confirmPassword && <p className="text-red-500 text-sm font-dm-sans">{errors.confirmPassword}</p>}
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300">Confirm Password:</label>
-                  <input id="confirmPassword" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} required placeholder="Re-enter password"
-                    className={`w-full px-4 py-3 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-transparent ${errors.confirmPassword ? 'border-red-500' : 'border-white'}`} />
-                  {errors.confirmPassword && <p className="text-red-500 text-sm font-dm-sans">{errors.confirmPassword}</p>}
-                </div>
-              </div>
-
-              <button type="submit" disabled={loading}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-900">
-                {loading ? "Creating Account..." : "Create Account"}
-              </button>
+                <button type="submit" disabled={loading}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-900 cursor-pointer disabled:cursor-not-allowed">
+                  {loading ? "Creating Account..." : "Create Account"}
+                </button>
+              </fieldset>
             </form>
 
             <div className="mt-6 text-center">

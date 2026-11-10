@@ -27,10 +27,10 @@ class AuthApiService {
 
   async signup(data: SignupPayload): Promise<void> {
     const payload = {
-      name: data.name,
-      usn: data.id,
-      email: data.email,
-      mobile_number: data.mobile,
+      name: data.name.trim(),
+      usn: data.id.trim().toUpperCase(),
+      email: data.email.trim().toLowerCase(),
+      mobile_number: data.mobile.trim(),
       current_year: data.joiningYear,
       department: getDepartmentFromBranch(data.branch),
       password: data.password,
