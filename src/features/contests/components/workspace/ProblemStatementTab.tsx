@@ -2,7 +2,6 @@ import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft, ArrowUpRight } from 'lucide-react';
 import type { Problem } from '../../problem.types';
-import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../../clipboardGuards';
 import { MathText } from './MathText';
 
 interface ProblemStatementTabProps {
@@ -19,14 +18,7 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
   const { contestId } = useParams<{ contestId: string }>();
 
   return (
-    <div
-      className="space-y-4 max-w-4xl mx-auto font-['DM_Sans'] select-none"
-      onCopyCapture={preventClipboardAction}
-      onCutCapture={preventClipboardAction}
-      onPasteCapture={preventClipboardAction}
-      onKeyDownCapture={preventClipboardShortcut}
-      onContextMenu={preventContextMenu}
-    >
+    <div className="space-y-4 max-w-4xl mx-auto font-['DM_Sans'] select-none">
       {/* Header Row: Title & Metadata Badges */}
       <div className="pb-3 border-b border-[#192130] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">

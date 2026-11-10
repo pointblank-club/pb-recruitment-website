@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -41,6 +41,14 @@ export const MCQProblemView = ({
   const [justSubmitted, setJustSubmitted] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const requestScopeRef = useRef(0);
+
+  useEffect(() => {
+    const scope = ++requestScopeRef.current;
+    return () => {
+      if (requestScopeRef.current === scope) requestScopeRef.current += 1;
+    };
+  }, [problem.id]);
 
   const hasSubmitted =
     (submittedOption !== null && submittedOption !== undefined) ||
@@ -73,19 +81,24 @@ export const MCQProblemView = ({
       return;
     }
 
+    const requestScope = requestScopeRef.current;
+    const isRequestCurrent = () => requestScopeRef.current === requestScope;
+
     try {
       setIsSubmitting(true);
       setLocalError(null);
       await onSubmit(parseInt(selectedAnswer));
+      if (!isRequestCurrent()) return;
       setJustSubmitted(selectedAnswer);
       if (nextProblemId) onNavigate?.(nextProblemId);
     } catch (error) {
+      if (!isRequestCurrent()) return;
       console.error('Submission error:', error);
       if (error instanceof Error && error.message) {
         setLocalError(error.message);
       }
     } finally {
-      setIsSubmitting(false);
+      if (isRequestCurrent()) setIsSubmitting(false);
     }
   };
 

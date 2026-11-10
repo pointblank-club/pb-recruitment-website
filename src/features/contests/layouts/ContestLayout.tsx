@@ -22,7 +22,7 @@ export const ContestLayout = () => {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isEndModalOpen, setIsEndModalOpen] = useState(false);
-  const [isWindowFocused, setIsWindowFocused] = useState(() => document.hasFocus());
+  const [isWindowFocused, setIsWindowFocused] = useState(() => document.visibilityState === 'visible' && document.hasFocus());
   const hasExitedRef = useRef(false);
   const wasLiveRef = useRef(false);
   const isRefetchingRef = useRef(false);
@@ -36,35 +36,13 @@ export const ContestLayout = () => {
     const handleVisibilityChange = () => {
       setIsWindowFocused(document.visibilityState === 'visible' && document.hasFocus());
     };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'PrintScreen') {
-        event.preventDefault();
-        setIsWindowFocused(false);
-      }
-    };
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key === 'PrintScreen' && document.visibilityState === 'visible' && document.hasFocus()) {
-        setIsWindowFocused(true);
-      }
-    };
-    const handleBeforePrint = () => setIsWindowFocused(false);
-    const handleAfterPrint = () => handleVisibilityChange();
-
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('beforeprint', handleBeforePrint);
-    window.addEventListener('afterprint', handleAfterPrint);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('beforeprint', handleBeforePrint);
-      window.removeEventListener('afterprint', handleAfterPrint);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
