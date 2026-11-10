@@ -77,6 +77,7 @@ export const MCQProblemView = ({
       setLocalError(null);
       await onSubmit(parseInt(selectedAnswer));
       setJustSubmitted(selectedAnswer);
+      if (nextProblemId) onNavigate?.(nextProblemId);
     } catch (error) {
       console.error('Submission error:', error);
       if (error instanceof Error && error.message) {
