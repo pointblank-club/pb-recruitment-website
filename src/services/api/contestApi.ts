@@ -361,7 +361,7 @@ export interface SubmissionDetailsResponse {
   problem_id: string;
   contest_id: string;
   type: SubmissionType;
-  status: SubmissionStatus;
+  status?: SubmissionStatus;
   score?: number;
   max_score?: number;
   language?: string;

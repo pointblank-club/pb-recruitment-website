@@ -90,9 +90,7 @@ export const ContestProblemPage = () => {
     if (activeSubmission.phase === 'completed' && activeSubmission.id && activeSubmission.status) {
       if (notifiedSubmissionRef.current === activeSubmission.id) return;
       notifiedSubmissionRef.current = activeSubmission.id;
-      if (problem?.type === 'mcq') {
-        toast.success('Answer submitted successfully');
-      } else {
+      if (problem?.type !== 'mcq') {
         const verdict = formatVerdict(activeSubmission.status);
         if (activeSubmission.status === 'accepted' || activeSubmission.status === 'completed') {
           toast.success(`Submission successful: ${verdict}`);
