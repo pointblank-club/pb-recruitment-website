@@ -109,11 +109,11 @@ export const MCQProblemView = ({
   return (
     <div
       className="flex-1 flex flex-col bg-black text-white select-none"
-      onCopyCapture={preventClipboardAction}
-      onCutCapture={preventClipboardAction}
-      onPasteCapture={preventClipboardAction}
-      onKeyDownCapture={preventClipboardShortcut}
-      onContextMenu={preventContextMenu}
+      onCopyCapture={isContestEnded ? undefined : preventClipboardAction}
+      onCutCapture={isContestEnded ? undefined : preventClipboardAction}
+      onPasteCapture={isContestEnded ? undefined : preventClipboardAction}
+      onKeyDownCapture={isContestEnded ? undefined : preventClipboardShortcut}
+      onContextMenu={isContestEnded ? undefined : preventContextMenu}
     >
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6 space-y-6">

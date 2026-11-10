@@ -304,6 +304,7 @@ export const ContestProblemPage = () => {
               </div>
               <div className="w-1/2 min-h-0 h-full overflow-hidden flex flex-col">
                 <SubmittedSolutionViewer
+                  isContestEnded={isContestEnded}
                   submission={shownSubmission?.data ?? null}
                   isLoading={isLoadingSubmission}
                   error={submissionError}

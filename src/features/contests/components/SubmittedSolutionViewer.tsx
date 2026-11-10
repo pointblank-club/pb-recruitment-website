@@ -13,6 +13,7 @@ interface SubmittedSolutionViewerProps {
   onRetry?: () => void;
   /** True when the history list loaded successfully (even if empty) */
   hasHistory?: boolean;
+  isContestEnded?: boolean;
 }
 
 export const SubmittedSolutionViewer = ({
@@ -21,6 +22,7 @@ export const SubmittedSolutionViewer = ({
   error,
   onRetry,
   hasHistory = false,
+  isContestEnded = false,
 }: SubmittedSolutionViewerProps) => {
   const decodedCode = submission?.code ? decodeBase64(submission.code) : '';
 
@@ -76,11 +78,11 @@ export const SubmittedSolutionViewer = ({
   return (
     <div
       className="flex-1 flex flex-col h-full bg-black text-white overflow-hidden font-['DM_Sans']"
-      onCopyCapture={preventClipboardAction}
-      onCutCapture={preventClipboardAction}
-      onPasteCapture={preventClipboardAction}
-      onKeyDownCapture={preventClipboardShortcut}
-      onContextMenu={preventContextMenu}
+      onCopyCapture={isContestEnded ? undefined : preventClipboardAction}
+      onCutCapture={isContestEnded ? undefined : preventClipboardAction}
+      onPasteCapture={isContestEnded ? undefined : preventClipboardAction}
+      onKeyDownCapture={isContestEnded ? undefined : preventClipboardShortcut}
+      onContextMenu={isContestEnded ? undefined : preventContextMenu}
     >
       {/* Header bar matching CodeProblemView right pane */}
       <div className="h-10 border-b border-gray-700 px-4 bg-gray-900/50 flex items-center justify-between flex-shrink-0">

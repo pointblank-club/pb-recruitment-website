@@ -183,6 +183,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
               </div>
               <textarea
                 id="custom-input-textarea"
+                data-clipboard-allowed="true"
                 value={customInput}
                 onChange={(e) => {
                   onInvalidateRun();

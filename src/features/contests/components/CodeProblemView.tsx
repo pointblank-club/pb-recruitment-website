@@ -110,6 +110,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   onRun,
   hideIDE = false,
   isLocked = false,
+  isContestEnded = false,
   activeSubmission = { phase: 'idle' },
   history = [],
   historyError = null,
@@ -345,11 +346,11 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   return (
     <div
       className="flex-1 min-h-0 flex flex-col bg-[#05070a] text-slate-200 overflow-hidden font-['DM_Sans'] select-text"
-      onCopyCapture={preventClipboardAction}
-      onCutCapture={preventClipboardAction}
-      onPasteCapture={preventClipboardAction}
-      onKeyDownCapture={preventClipboardShortcut}
-      onContextMenu={preventContextMenu}
+      onCopyCapture={isContestEnded ? undefined : preventClipboardAction}
+      onCutCapture={isContestEnded ? undefined : preventClipboardAction}
+      onPasteCapture={isContestEnded ? undefined : preventClipboardAction}
+      onKeyDownCapture={isContestEnded ? undefined : preventClipboardShortcut}
+      onContextMenu={isContestEnded ? undefined : preventContextMenu}
     >
       {/* Main Split Workspace Container */}
       <div

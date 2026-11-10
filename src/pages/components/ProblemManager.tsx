@@ -387,9 +387,11 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                   className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
                   required
                 />
-                <p className="mt-1 text-xs text-gray-500">
-                  Plain text by default. Start with <code>:::markdown</code> on its own line to enable Markdown and LaTeX.
-                </p>
+                {formData.type === "code" && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Plain text by default. Start with <code>:::markdown</code> on its own line to enable Markdown and LaTeX.
+                  </p>
+                )}
               </div>
 
               {formData.type === "mcq" && (
