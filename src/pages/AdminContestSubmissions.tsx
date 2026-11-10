@@ -122,6 +122,7 @@ export default function AdminContestSubmissions() {
     ])
       .then(([contest, allProblems, allRegistrations]) => {
         if (cancelled) return;
+        if (!contest) throw new Error(`Contest ${contestId} was not found.`);
         setContestName(contest.name ?? contestId);
         // Only keep coding problems
         const coding = allProblems.filter((p) => p.type === "code");
