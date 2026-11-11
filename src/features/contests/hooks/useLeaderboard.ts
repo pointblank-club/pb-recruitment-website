@@ -134,12 +134,13 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
           const status = err.response?.status;
           if (status === 403 && errorResponse === "contest has not started yet") {
             isNotStarted = true;
+            pollingErrorsRef.current = 0;
             setHasStarted(false);
             setLeaderboard([]);
           }
         }
         if (!isNotStarted) {
-          if (!isBackground || !hasLoadedDataRef.current) {
+          if (!isBackground || !hasLoadedDataRef.current || pollingErrorsRef.current >= 3) {
             setLeaderboardError(err instanceof Error ? err.message : "Failed to fetch leaderboard");
           }
         }
@@ -191,7 +192,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
       cancelled = true;
       cancelTimer?.();
     };
-  }, [contestId, page, fetchLeaderboard, fetchContest, refreshIntervalMs, refreshCycle]);
+  }, [contestId, page, fetchLeaderboard, fetchContest, refreshIntervalMs, refreshCycle, currentUserId]);
 
   const currentUserRank = useMemo(() => {
     return leaderboard.find((entry) => entry.user_id === currentUserId);

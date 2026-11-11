@@ -11,6 +11,7 @@ export const ContestProblemsPage = () => {
     problems,
     isLoading,
     error,
+    refresh,
   } = useContestProblems(contestId || '');
 
   if (!contestId) {
@@ -29,10 +30,11 @@ export const ContestProblemsPage = () => {
     );
   }
 
-  if (error) {
+  if (error && problems.length === 0) {
     return (
       <div className="px-6 py-6">
         <div className="text-red-400 font-['DM_Sans']">Error: {error}</div>
+        <button type="button" onClick={refresh}>Retry</button>
       </div>
     );
   }
@@ -47,6 +49,7 @@ export const ContestProblemsPage = () => {
         </p>
       </div>
 
+      {error && <div role="status">Updates stopped: {error} <button type="button" onClick={refresh}>Retry</button></div>}
       <ProblemList problems={problems} contestId={contestId} />
 
       {openEndContestModal && problems.length > 0 && (

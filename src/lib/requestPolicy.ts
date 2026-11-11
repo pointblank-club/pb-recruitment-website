@@ -4,13 +4,13 @@ export const jitterDelay = (delay: number) => Math.round(delay * (1 + Math.rando
 
 // Browser timers overflow after about 25 days; split long Retry-After waits into safe chunks.
 export const requestTimeout = (callback: () => void, delay: number): (() => void) => {
-  const deadline = Date.now() + delay;
+  const deadline = performance.now() + delay;
   let timer: ReturnType<typeof setTimeout>;
   const schedule = () => {
     timer = setTimeout(() => {
-      if (Date.now() < deadline) schedule();
+      if (performance.now() < deadline) schedule();
       else callback();
-    }, Math.min(Math.max(0, deadline - Date.now()), 2_147_483_647));
+    }, Math.min(Math.max(0, deadline - performance.now()), 2_147_483_647));
   };
   schedule();
   return () => clearTimeout(timer);
@@ -21,12 +21,21 @@ export const isPermanentRequestError = (error: unknown) => {
   return status !== undefined && status >= 400 && status < 500 && status !== 408 && status !== 429;
 };
 
+export const parseRetryAfterMs = (headers: unknown): number | undefined => {
+  if (typeof headers !== 'object' || headers === null) return undefined;
+  const values = headers as Record<string, unknown>;
+  const value = values['retry-after'] ?? values['Retry-After'];
+  if (typeof value !== 'string' && typeof value !== 'number') return undefined;
+  const text = String(value).trim();
+  const delay = /^\d+$/.test(text) ? Number(text) * 1000
+    : /^[A-Za-z]{3,9}(?:,| )/.test(text) ? Date.parse(text) - Date.now() : NaN;
+  return Number.isFinite(delay) ? Math.max(0, delay) : undefined;
+};
+
 export const retryAfterDelay = (error: unknown): number => {
   if (!axios.isAxiosError(error)) return 0;
   const status = error.response?.status;
   if (status !== 429 && status !== 503) return 0;
-  const value = error.response?.headers?.['retry-after'];
-  if (typeof value !== 'string') return status === 429 ? 1000 : 0;
-  const delay = /^\d+$/.test(value.trim()) ? Number(value) * 1000 : Date.parse(value) - Date.now();
-  return Number.isFinite(delay) ? Math.max(0, delay) : 1000;
+  const headers = error.response?.headers;
+  return parseRetryAfterMs(headers) ?? (status === 429 || headers?.['retry-after'] !== undefined ? 1000 : 0);
 };

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import type { Problem } from '../problem.types';
 import { contestApi } from '@/services/api/contestApi';
@@ -6,6 +6,8 @@ import { isPermanentRequestError, jitterDelay, requestTimeout, retryAfterDelay }
 
 export const useContestProblems = (contestId: string) => {
   const { user } = useAuth();
+  const [refreshCycle, setRefreshCycle] = useState(0);
+  const refresh = useCallback(() => setRefreshCycle((cycle) => cycle + 1), []);
   const scope = `${contestId}:${user?.uid ?? ''}`;
   const [result, setResult] = useState<{
     scope: string;
@@ -38,10 +40,10 @@ export const useContestProblems = (contestId: string) => {
         if (controller.signal.aborted) return;
         consecutiveErrors += 1;
         if (hasLoaded && consecutiveErrors < 3 && !isPermanentRequestError(err)) schedule(retryAfterDelay(err));
-        else setResult({
-          scope, problems: [], isLoading: false,
+        else setResult((current) => ({
+          scope, problems: current.scope === scope ? current.problems : [], isLoading: false,
           error: err instanceof Error ? err.message : 'Failed to fetch problems',
-        });
+        }));
       }
     };
 
@@ -50,9 +52,9 @@ export const useContestProblems = (contestId: string) => {
       controller.abort();
       cancelTimer?.();
     };
-  }, [contestId, scope]);
+  }, [contestId, scope, refreshCycle]);
 
   return result.scope === scope
-    ? result
-    : { problems: [], isLoading: true, error: null };
+    ? { ...result, refresh }
+    : { problems: [], isLoading: true, error: null, refresh };
 };
