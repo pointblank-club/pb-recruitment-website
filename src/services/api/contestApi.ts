@@ -456,7 +456,10 @@ class ContestApiService {
           kind: 'error',
           httpStatus,
           message,
-          retryAfterMs: httpStatus === 429 ? parseRetryAfterMs(error.response?.headers) : undefined,
+          // Preserve the tab-switch queue's existing bounded wait; its timer is separate from submission polling.
+          retryAfterMs: httpStatus === 429
+            ? Math.min(parseRetryAfterMs(error.response?.headers) ?? 0, 30_000) || undefined
+            : undefined,
         };
       }
       return {

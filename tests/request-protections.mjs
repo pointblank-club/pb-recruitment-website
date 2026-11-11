@@ -66,6 +66,12 @@ const apiModule = {
 vm.runInNewContext(compile(read('src/services/api/contestApi.ts')), apiModule);
 const api = apiModule.exports.contestApi;
 const submit = (code = 'int main(){}', language = 'cpp') => api.submitCodeSolution('contest', 'problem', code, language);
+for (const [value, expected] of [['17', 17000], ['3000000', 30000], ['not-a-date', undefined]]) {
+  outcome = error(429, value);
+  const result = await api.recordTabSwitch('contest', { observation_id: randomUUID(), generation: 0, count: 1 });
+  assert.equal(result.retryAfterMs, expected, 'tab-switch waits keep their existing 30-second bound');
+}
+
 outcome = new Error('response lost');
 await assert.rejects(submit());
 const first = requests.at(-1).key;
