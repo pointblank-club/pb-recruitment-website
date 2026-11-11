@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronLeft, LogOut } from 'lucide-react';
+import { ChevronLeft, LogOut, AlertTriangle } from 'lucide-react';
 
 interface ContestHeaderProps {
   timeRemaining: number;
@@ -8,6 +8,9 @@ interface ContestHeaderProps {
   contestId?: string;
   onSubmitContest?: () => void;
   isContestEnded?: boolean;
+  tabSwitchCount?: number;
+  pendingTabSwitchCount?: number;
+  maxTabSwitches?: number;
 }
 
 export const ContestHeader = ({ 
@@ -17,6 +20,9 @@ export const ContestHeader = ({
   contestId,
   onSubmitContest,
   isContestEnded = false,
+  tabSwitchCount,
+  pendingTabSwitchCount = 0,
+  maxTabSwitches = 5,
 }: ContestHeaderProps) => {
   const location = useLocation();
 
@@ -87,6 +93,26 @@ export const ContestHeader = ({
             </div>
           ) : (
             <div className="flex items-center gap-4">
+              {tabSwitchCount !== undefined && (tabSwitchCount > 0 || pendingTabSwitchCount > 0) && (
+                <div
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border font-['DM_Sans'] ${
+                    tabSwitchCount >= Math.max(1, maxTabSwitches - 1)
+                      ? 'bg-red-500/10 text-red-400 border-red-500/40 animate-pulse'
+                      : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                  }`}
+                  title={`${tabSwitchCount} of ${maxTabSwitches} confirmed tab switches used${
+                    pendingTabSwitchCount > 0 ? ` (${pendingTabSwitchCount} pending sync)` : ''
+                  }`}
+                >
+                  <AlertTriangle size={14} className={tabSwitchCount >= Math.max(1, maxTabSwitches - 1) ? 'text-red-400' : 'text-amber-400'} />
+                  <span>
+                    Tab Switches: {tabSwitchCount}/{maxTabSwitches}
+                    {pendingTabSwitchCount > 0 && (
+                      <span className="ml-1 opacity-80">(+{pendingTabSwitchCount} syncing)</span>
+                    )}
+                  </span>
+                </div>
+              )}
               <div className="text-right flex flex-col justify-center">
                 <div className="text-xs text-gray-400 font-['DM_Sans']">Time remaining</div>
                 <div className={`text-xl font-['DM_Sans'] font-mono ${getTimeColor()}`}>

@@ -7,7 +7,7 @@ import { MCQProblemView } from '../components/MCQProblemView';
 import { SubmittedSolutionViewer } from '../components/SubmittedSolutionViewer';
 import { useProblemSubmissions } from '../hooks/useProblemSubmissions';
 import type { ContestOutletContext } from '../layouts/ContestLayout';
-import { contestApi, type SubmissionDetailsResponse } from '@/services/api/contestApi';
+import { contestApi, isTabSwitchTerminationSubmissionError, type SubmissionDetailsResponse } from '@/services/api/contestApi';
 import { AlertCircle, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'react-toastify';
@@ -30,6 +30,8 @@ const ContestProblemContent = () => {
     isContestEnded = false,
     isAuthenticated = false,
     isRegistered = false,
+    isTabSwitchTerminated = false,
+    onTabSwitchTerminated,
   } = useOutletContext<ContestOutletContext>() || {};
 
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -54,7 +56,8 @@ const ContestProblemContent = () => {
   // For ended contests: only registered + authenticated users see code/submissions.
   // Guests and unregistered users see ONLY the problem statement (hideIDE = true).
   const hideIDE = isContestEnded ? !(isAuthenticated && isRegistered) : !isAuthenticated;
-  const isLocked = isContestEnded;
+  const isLocked = isContestEnded || isTabSwitchTerminated;
+  const lockReason: 'ended' | 'tab_switch' = isTabSwitchTerminated && !isContestEnded ? 'tab_switch' : 'ended';
   const { problems } = useContestProblems(contestId || '');
 
   const mcqProblems = problems.filter((p) => p.type === 'mcq');
@@ -89,6 +92,28 @@ const ContestProblemContent = () => {
   } = useProblemSubmissions(contestId || '', problemId || '', {
     skip: !isAuthenticated || (isContestEnded && !isRegistered),
   });
+
+  const handleSubmitCode = async (code: string, language: string) => {
+    try {
+      await submitCode(code, language);
+    } catch (submitError) {
+      if (isTabSwitchTerminationSubmissionError(submitError)) {
+        onTabSwitchTerminated?.();
+      }
+      throw submitError;
+    }
+  };
+
+  const handleSubmitMCQ = async (selectedOption: number) => {
+    try {
+      await submitMCQ(selectedOption);
+    } catch (submitError) {
+      if (isTabSwitchTerminationSubmissionError(submitError)) {
+        onTabSwitchTerminated?.();
+      }
+      throw submitError;
+    }
+  };
 
   const notifiedSubmissionRef = useRef<string | null>(null);
   useEffect(() => {
@@ -355,11 +380,12 @@ const ContestProblemContent = () => {
               key={`${user?.uid || 'guest'}_${contestId}_${problem.id}`}
               problem={problem}
               contestId={contestId}
-              onSubmit={isAuthenticated && !isLocked ? submitCode : undefined}
+              onSubmit={isAuthenticated && !isLocked ? handleSubmitCode : undefined}
               onRun={isAuthenticated && !isLocked ? runCode : undefined}
               isContestEnded={isContestEnded}
               hideIDE={hideIDE}
               isLocked={isLocked}
+              lockReason={lockReason}
               isRestrictionsActive={isRestrictionsActive}
               activeSubmission={activeSubmission}
               history={history}
@@ -380,7 +406,7 @@ const ContestProblemContent = () => {
           <MCQProblemView
             key={problem.id}
             problem={problem}
-            onSubmit={canSubmitMCQ ? submitMCQ : undefined}
+            onSubmit={canSubmitMCQ ? handleSubmitMCQ : undefined}
             submissionError={mcqSubmissionError}
             onRetryPolling={retryPolling}
             isContestEnded={isContestEnded}

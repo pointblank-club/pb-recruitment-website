@@ -41,6 +41,7 @@ interface CodeProblemViewProps {
   isContestEnded?: boolean;
   hideIDE?: boolean;
   isLocked?: boolean;
+  lockReason?: 'ended' | 'tab_switch';
   isRestrictionsActive?: boolean;
   activeSubmission?: ActiveSubmission;
   history?: SubmissionDetailsResponse[];
@@ -120,6 +121,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   onRun,
   hideIDE = false,
   isLocked = false,
+  lockReason = 'ended',
   isContestEnded = false,
   isRestrictionsActive = false,
   activeSubmission = { phase: 'idle' },
@@ -615,7 +617,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
               {isLocked ? (
                 <div className="flex items-center gap-1.5 text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/30 px-3 py-1 rounded shrink-0">
                   <Lock className="w-3.5 h-3.5" />
-                  <span>Contest Ended · Read Only</span>
+                  <span>{lockReason === 'tab_switch' ? 'Session Locked · Read Only' : 'Contest Ended · Read Only'}</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2.5 shrink-0">
@@ -705,6 +707,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
               customInput={customInput}
               setCustomInput={setCustomInput}
               isLocked={isLocked}
+              lockReason={lockReason}
               sampleInput={sample1?.input}
               isRunning={isRunning}
               runResult={runResult}

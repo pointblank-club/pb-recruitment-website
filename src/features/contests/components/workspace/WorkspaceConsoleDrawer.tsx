@@ -23,6 +23,7 @@ interface WorkspaceConsoleDrawerProps {
   customInput: string;
   setCustomInput: (val: string) => void;
   isLocked: boolean;
+  lockReason?: 'ended' | 'tab_switch';
   sampleInput?: string;
   isRunning: boolean;
   runResult: ConsoleRunResult | null;
@@ -41,6 +42,7 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
   customInput,
   setCustomInput,
   isLocked,
+  lockReason = 'ended',
   sampleInput,
   isRunning,
   runResult,
@@ -189,7 +191,13 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
                   onInvalidateRun();
                   setCustomInput(e.target.value);
                 }}
-                placeholder={isLocked ? 'Editor is locked (contest ended)' : 'Enter your custom input here...'}
+                placeholder={
+                  isLocked
+                    ? lockReason === 'tab_switch'
+                      ? 'Editor is locked (session terminated)'
+                      : 'Editor is locked (contest ended)'
+                    : 'Enter your custom input here...'
+                }
                 disabled={isLocked}
                 className="flex-1 bg-[#141b29] border border-[#243047] rounded p-2.5 text-xs font-mono text-white focus:outline-none focus:border-[#10b981] resize-none leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed"
               />

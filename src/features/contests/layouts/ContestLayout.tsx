@@ -1,18 +1,23 @@
 import { Navigate, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
+import { ShieldAlert, LogOut } from 'lucide-react';
 import { ContestHeader } from '../components/ContestHeader';
 import { ContestParticipationGate } from '../components/ContestParticipationGate';
 import { EndContestModal } from '../components/EndContestModal';
+import { TabSwitchWarningModal } from '../components/TabSwitchWarningModal';
 import { useContest } from '../hooks/useContest';
+import { useTabSwitchTracker } from '../hooks/useTabSwitchTracker';
 import { useAuth } from '@/lib/AuthContext';
-import { getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
+import { MAX_TAB_SWITCHES, getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
 
 export interface ContestOutletContext {
   isLive: boolean;
   isContestEnded: boolean;
   isAuthenticated: boolean;
   isRegistered: boolean;
+  isTabSwitchTerminated?: boolean;
+  onTabSwitchTerminated?: () => void;
   openEndContestModal?: () => void;
 }
 
@@ -25,6 +30,7 @@ export const ContestLayout = () => {
   const [progress, setProgress] = useState(0);
   const [hasElapsedDeadline, setHasElapsedDeadline] = useState(false);
   const [isEndModalOpen, setIsEndModalOpen] = useState(false);
+  const [hasEnteredContest, setHasEnteredContest] = useState(false);
   const [isWindowFocused, setIsWindowFocused] = useState(() => document.visibilityState === 'visible' && document.hasFocus());
   const hasExitedRef = useRef(false);
   const wasLiveRef = useRef(false);
@@ -32,6 +38,45 @@ export const ContestLayout = () => {
 
   const { contest, isLoading: isContestLoading, refetch } = useContest(contestId || '');
   const isLeaderboardPage = location.pathname.endsWith('/leaderboard');
+
+  const isLive = !!contest && Date.now() >= contest.start_time && Date.now() < contest.end_time;
+  const isContestEnded = contest ? (hasElapsedDeadline || Date.now() >= contest.end_time) : false;
+  const isSubmittedManually = Boolean(
+    user?.uid && contestId && getContestSubmitted(contestId, user.uid)
+  );
+  const isTrackingActive = Boolean(
+    isLive && !isContestEnded && user?.uid && contest?.is_registered && !isLeaderboardPage && !isSubmittedManually
+  );
+  const isCountingEnabled = isTrackingActive && hasEnteredContest;
+
+  const {
+    tabSwitchCount,
+    pendingSyncCount,
+    maxSwitches,
+    isWarningModalOpen,
+    isTerminated: isTabSwitchTerminated,
+    isServerConfirmedTermination,
+    apiStatus: tabSwitchApiStatus,
+    closeWarningModal,
+    openWarningModal,
+    notifyServerTermination,
+  } = useTabSwitchTracker({
+    contestId,
+    userId: user?.uid,
+    isSessionActive: isTrackingActive,
+    isCountingEnabled,
+    maxSwitches: MAX_TAB_SWITCHES,
+  });
+
+  useEffect(() => {
+    setHasEnteredContest(false);
+  }, [contestId, user?.uid]);
+
+  useEffect(() => {
+    if (isTabSwitchTerminated && document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, [isTabSwitchTerminated]);
 
   useEffect(() => {
     const handleBlur = () => setIsWindowFocused(false);
@@ -64,7 +109,7 @@ export const ContestLayout = () => {
       setHasElapsedDeadline(false);
     }
 
-    // Check if the user already ended this contest early on this device
+    // Check if the user already manually ended this contest on this device
     // Only redirect if the contest is still currently running
     const isSubmittedEarly = Boolean(
       user?.uid && contestId && getContestSubmitted(contestId, user.uid)
@@ -223,15 +268,13 @@ export const ContestLayout = () => {
   }
 
   // Guests can browse ended contests; a live contest needs a login (the effect above sends upcoming ones to details).
-  const isLive = !!contest && Date.now() >= contest.start_time && Date.now() < contest.end_time;
   if (!user && isLive && !isLeaderboardPage) {
     return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}${location.hash}` }} />;
   }
 
-  const isContestEnded = contest ? (hasElapsedDeadline || Date.now() >= contest.end_time) : false;
   const isParticipating = !!user && !!contest?.is_registered && isLive && !isLeaderboardPage &&
-    !hasExitedRef.current && !getContestSubmitted(contestId, user.uid);
-  const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;
+    !hasExitedRef.current && !isSubmittedManually && !isTabSwitchTerminated;
+  const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0 && !isTabSwitchTerminated && !isSubmittedManually;
 
   return (
     <div className="contest-screen relative w-full bg-black h-screen flex flex-col overflow-hidden">
@@ -242,7 +285,51 @@ export const ContestLayout = () => {
         contestId={contestId}
         onSubmitContest={canEnd ? handleOpenEndModal : undefined}
         isContestEnded={isContestEnded}
+        tabSwitchCount={isTrackingActive && tabSwitchApiStatus !== 'unsupported' ? tabSwitchCount : undefined}
+        pendingTabSwitchCount={isTrackingActive && tabSwitchApiStatus !== 'unsupported' ? pendingSyncCount : 0}
+        maxTabSwitches={maxSwitches}
       />
+
+      {isTrackingActive && isTabSwitchTerminated && (
+        <div
+          role="alert"
+          className="bg-red-950/80 border-b border-red-800/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-['DM_Sans']"
+        >
+          <div className="flex items-center gap-2 text-red-200">
+            <ShieldAlert className="w-4 h-4 text-red-400 flex-shrink-0" />
+            <span>
+              {isServerConfirmedTermination ? (
+                <>
+                  <strong>Session Locked ({tabSwitchCount}/{maxSwitches} tab switches):</strong>{' '}
+                  Editing and new submissions are disabled. Previously submitted answers and local code drafts are preserved.
+                </>
+              ) : (
+                <>
+                  <strong>Verifying session lock status...</strong>{' '}
+                  Submissions are temporarily paused while confirming your session status with the server.
+                </>
+              )}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openWarningModal}
+              className="px-2.5 py-1 rounded bg-red-900/60 hover:bg-red-800/70 border border-red-700 text-red-100 font-medium transition-colors"
+            >
+              Details
+            </button>
+            <button
+              type="button"
+              onClick={handleLeaveContest}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-semibold transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Exit Contest
+            </button>
+          </div>
+        </div>
+      )}
       
       <div className="flex-1 min-h-0 overflow-auto flex flex-col">
         <Outlet context={{
@@ -250,6 +337,8 @@ export const ContestLayout = () => {
           isContestEnded,
           isAuthenticated: !!user,
           isRegistered: contest?.is_registered ?? false,
+          isTabSwitchTerminated,
+          onTabSwitchTerminated: notifyServerTermination,
           openEndContestModal: canEnd ? handleOpenEndModal : undefined,
         } satisfies ContestOutletContext} />
       </div>
@@ -267,6 +356,8 @@ export const ContestLayout = () => {
           isExitingRef={hasExitedRef}
           endTime={contest!.end_time}
           onLeave={handleLeaveContest}
+          suspended={isWarningModalOpen || isEndModalOpen}
+          onEnteredChange={setHasEnteredContest}
         />
       )}
 
@@ -277,6 +368,17 @@ export const ContestLayout = () => {
           </p>
         </div>
       )}
+
+      <TabSwitchWarningModal
+        isOpen={isTrackingActive && tabSwitchApiStatus !== 'unsupported' && isWarningModalOpen}
+        count={tabSwitchCount}
+        pendingCount={pendingSyncCount}
+        maxSwitches={maxSwitches}
+        isTerminated={isTabSwitchTerminated}
+        isServerConfirmed={isServerConfirmedTermination}
+        onAcknowledge={closeWarningModal}
+        onExitContest={handleLeaveContest}
+      />
     </div>
   );
 };
