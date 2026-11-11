@@ -160,7 +160,7 @@ export const ContestParticipationGate = ({
           </Button>
         </>
       )}
-      <Button type="button" variant="outline" className="mt-3 w-full" onClick={onLeave}>
+      <Button type="button" variant="outline" className="mt-3 w-full border-gray-600 bg-gray-800 text-white hover:bg-gray-700 hover:text-white" onClick={onLeave}>
         Leave contest
       </Button>
     </dialog>
