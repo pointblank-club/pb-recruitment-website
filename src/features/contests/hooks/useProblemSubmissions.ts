@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+import { isPermanentRequestError, jitterDelay, retryAfterDelay } from '@/lib/requestPolicy';
 import {
   contestApi,
   type SubmissionDetailsResponse,
@@ -83,10 +84,13 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
     const startedAt = Date.now();
     let delay = FIRST_POLL_DELAY_MS;
     let consecutiveErrors = 0;
+    let retryAfter = 0;
 
     while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
-      await wait(delay);
+      await wait(Math.min(Math.max(jitterDelay(delay), retryAfter), POLL_TIMEOUT_MS - (Date.now() - startedAt)));
       if (pollToken !== pollTokenRef.current) return;
+      if (Date.now() - startedAt >= POLL_TIMEOUT_MS) break;
+      retryAfter = 0;
 
       try {
         const statusResponse = await contestApi.getSubmissionStatus(summary.id);
@@ -149,7 +153,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
         if (pollToken !== pollTokenRef.current) return;
         consecutiveErrors += 1;
 
-        if (consecutiveErrors >= 3) {
+        if (consecutiveErrors >= 3 || isPermanentRequestError(error)) {
           setActiveSubmission((current) => current.id === summary.id
             ? {
                 ...current,
@@ -166,6 +170,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
         setActiveSubmission((current) => current.id === summary.id
           ? { ...current, message: 'Verdict check failed. Retrying…' }
           : current);
+        retryAfter = retryAfterDelay(error);
       }
 
       delay = Math.min(Math.round(delay * 1.6), MAX_POLL_DELAY_MS);

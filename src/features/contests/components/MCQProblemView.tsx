@@ -6,6 +6,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Save, ListChecks, CheckCircle2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import type { Problem } from '../problem.types';
 import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
+import { useRequestCooldown } from '../hooks/useRequestCooldown';
 
 interface MCQProblemViewProps {
   problem: Problem;
@@ -43,6 +44,7 @@ export const MCQProblemView = ({
   const [justSubmitted, setJustSubmitted] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const { isCoolingDown, coolDown } = useRequestCooldown();
   const requestScopeRef = useRef(0);
 
   useEffect(() => {
@@ -71,7 +73,7 @@ export const MCQProblemView = ({
   }, [hasSubmitted]);
 
   const handleSubmit = async () => {
-    if (hasSubmitted) return;
+    if (hasSubmitted || isSubmitting || isCoolingDown) return;
 
     if (!selectedAnswer) {
       setLocalError('Please select an answer before submitting.');
@@ -94,6 +96,7 @@ export const MCQProblemView = ({
       setJustSubmitted(selectedAnswer);
       if (nextProblemId) onNavigate?.(nextProblemId);
     } catch (error) {
+      coolDown(error);
       if (!isRequestCurrent()) return;
       console.error('Submission error:', error);
       if (error instanceof Error && error.message) {
@@ -320,7 +323,7 @@ export const MCQProblemView = ({
                   <Button
                     onClick={handleSubmit}
                     size="sm"
-                    disabled={isSubmitting || !selectedAnswer || options.length === 0}
+                    disabled={isSubmitting || isCoolingDown || !selectedAnswer || options.length === 0}
                     className="flex items-center gap-2 text-xs bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-700 disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? (
@@ -331,7 +334,7 @@ export const MCQProblemView = ({
                     ) : (
                       <>
                         <Save className="w-3.5 h-3.5" />
-                        Submit Answer
+                        {isCoolingDown ? 'Please wait…' : 'Submit Answer'}
                       </>
                     )}
                   </Button>

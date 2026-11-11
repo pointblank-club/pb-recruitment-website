@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import type { Problem } from '../problem.types';
 import { contestApi } from '@/services/api/contestApi';
+import { isPermanentRequestError, jitterDelay, requestTimeout, retryAfterDelay } from '@/lib/requestPolicy';
 
 export const useContestProblems = (contestId: string) => {
   const { user } = useAuth();
@@ -16,12 +17,13 @@ export const useContestProblems = (contestId: string) => {
   useEffect(() => {
     if (!contestId) return;
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelTimer: (() => void) | undefined;
     let delay = 2000;
     let hasLoaded = false;
+    let consecutiveErrors = 0;
 
-    const schedule = () => {
-      timer = setTimeout(() => { void fetchProblems(); }, delay);
+    const schedule = (retryAfter = 0) => {
+      cancelTimer = requestTimeout(() => { void fetchProblems(); }, Math.max(jitterDelay(delay), retryAfter));
       delay = Math.min(delay * 2, 15000);
     };
     const fetchProblems = async () => {
@@ -29,11 +31,13 @@ export const useContestProblems = (contestId: string) => {
         const problems = await contestApi.getContestProblems(contestId, controller.signal);
         if (controller.signal.aborted) return;
         hasLoaded = true;
+        consecutiveErrors = 0;
         setResult({ scope, problems, isLoading: false, error: null });
         if (problems.some((problem) => problem.progress === 'judging')) schedule();
       } catch (err) {
         if (controller.signal.aborted) return;
-        if (hasLoaded) schedule();
+        consecutiveErrors += 1;
+        if (hasLoaded && consecutiveErrors < 3 && !isPermanentRequestError(err)) schedule(retryAfterDelay(err));
         else setResult({
           scope, problems: [], isLoading: false,
           error: err instanceof Error ? err.message : 'Failed to fetch problems',
@@ -44,7 +48,7 @@ export const useContestProblems = (contestId: string) => {
     void fetchProblems();
     return () => {
       controller.abort();
-      if (timer !== undefined) clearTimeout(timer);
+      cancelTimer?.();
     };
   }, [contestId, scope]);
 

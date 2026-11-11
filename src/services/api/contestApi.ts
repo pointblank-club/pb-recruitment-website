@@ -31,6 +31,7 @@ interface MockSubmission {
 class ContestApiService {
   private axiosInstance: AxiosInstance;
   private mockSubmissions = new Map<string, MockSubmission>();
+  private pendingCodeSubmissions = new Map<string, { payload: string; key: string }>();
 
   constructor() {
     this.axiosInstance = axios.create({
@@ -163,25 +164,43 @@ class ContestApiService {
     language: string
   ): Promise<SubmissionResponse> {
     const encodedCode = encodeBase64(code);
-    const response = await this.axiosInstance.post<SubmissionResponse>(
-      '/submission/submit',
-      {
-        contest_id: contestId,
-        problem_id: problemId,
-        code: encodedCode,
-        language,
-        type: 'code',
-      },
-      // Preparation (5s), dispatch (10s), bookkeeping (10s), and response margin.
-      { timeout: 30_000 },
-    );
-    this.rememberMockSubmission(response.data.submission_id, {
-      contestId,
-      problemId,
-      type: 'code',
+    const payload = {
+      contest_id: contestId,
+      problem_id: problemId,
+      code: encodedCode,
       language,
-    });
-    return response.data;
+      type: 'code',
+    };
+    const scope = `${auth.currentUser?.uid}:${contestId}:${problemId}`;
+    const serialized = JSON.stringify(payload);
+    let pending = this.pendingCodeSubmissions.get(scope);
+    if (!pending || pending.payload !== serialized) {
+      pending = { payload: serialized, key: crypto.randomUUID() };
+      this.pendingCodeSubmissions.set(scope, pending);
+    }
+    try {
+      const response = await this.axiosInstance.post<SubmissionResponse>(
+        '/submission/submit',
+        payload,
+        // Preparation (5s), dispatch (10s), bookkeeping (10s), and response margin.
+        { timeout: 30_000, headers: { 'Idempotency-Key': pending.key } },
+      );
+      if (this.pendingCodeSubmissions.get(scope) === pending) this.pendingCodeSubmissions.delete(scope);
+      this.rememberMockSubmission(response.data.submission_id, {
+        contestId,
+        problemId,
+        type: 'code',
+        language,
+      });
+      return response.data;
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      if (status !== undefined && status >= 400 && status < 500 && status !== 408 && status !== 429
+          && this.pendingCodeSubmissions.get(scope) === pending) {
+        this.pendingCodeSubmissions.delete(scope);
+      }
+      throw error;
+    }
   }
 
   async submitMCQAnswer(
