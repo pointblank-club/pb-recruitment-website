@@ -1,10 +1,20 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Trophy } from "lucide-react";
 import type { Contest } from "@/models/contest";
 import { useAuth } from "@/lib/AuthContext";
-import { getContestRegistered, getContestSubmitted, getContestTerminatedByTabSwitch } from "@/lib/contestStorage";
+import {
+  MAX_TAB_SWITCHES,
+  getContestRegistered,
+  getContestSubmitted,
+  getTabSwitchStateKey,
+  readLocalTabSwitchState,
+} from "@/lib/contestStorage";
+import {
+  isEffectivelyTerminated,
+  reconcileContestSessionStatus,
+} from "@/features/contests/tabSwitchSync";
 
 interface ContestCardProps {
   contest: Contest;
@@ -24,9 +34,58 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
   const isSubmittedEarly = Boolean(
     user?.uid && getContestSubmitted(contest.id, user.uid)
   );
-  const isTerminatedByTabSwitch = Boolean(
-    user?.uid && getContestTerminatedByTabSwitch(contest.id, user.uid)
-  );
+  const [isTerminatedByTabSwitch, setIsTerminatedByTabSwitch] = useState<boolean>(() => {
+    if (!user?.uid) return false;
+    const local = readLocalTabSwitchState(contest.id, user.uid);
+    return isEffectivelyTerminated(local, local.hasServerSnapshot ? 'supported' : 'idle', MAX_TAB_SWITCHES);
+  });
+
+  useEffect(() => {
+    const uid = user?.uid;
+    if (!uid) {
+      setIsTerminatedByTabSwitch(false);
+      return;
+    }
+
+    const local = readLocalTabSwitchState(contest.id, uid);
+    const localTerminated = isEffectivelyTerminated(
+      local,
+      local.hasServerSnapshot ? 'supported' : 'idle',
+      MAX_TAB_SWITCHES
+    );
+    setIsTerminatedByTabSwitch(localTerminated);
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== getTabSwitchStateKey(contest.id, uid)) return;
+      const latest = readLocalTabSwitchState(contest.id, uid);
+      setIsTerminatedByTabSwitch(
+        isEffectivelyTerminated(latest, latest.hasServerSnapshot ? 'supported' : 'idle', MAX_TAB_SWITCHES)
+      );
+    };
+    window.addEventListener('storage', handleStorage);
+
+    if (!isRegistered || !isOngoing || !localTerminated) {
+      return () => window.removeEventListener('storage', handleStorage);
+    }
+
+    const controller = new AbortController();
+    void reconcileContestSessionStatus({
+      contestId: contest.id,
+      userId: uid,
+      maxSwitches: MAX_TAB_SWITCHES,
+      signal: controller.signal,
+    }).then((outcome) => {
+      if (controller.signal.aborted || outcome.aborted) return;
+      setIsTerminatedByTabSwitch(
+        isEffectivelyTerminated(outcome.state, outcome.apiStatus, MAX_TAB_SWITCHES)
+      );
+    }).catch(() => {});
+
+    return () => {
+      controller.abort();
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [contest.id, user?.uid, isRegistered, isOngoing]);
 
   const handleEnterContest = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -91,7 +150,7 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
             >
               View Problems
             </motion.button>
-          ) : (isSubmittedEarly || isTerminatedByTabSwitch) ? (
+          ) : isSubmittedEarly ? (
             <motion.button
               type="button"
               whileHover={{ scale: 1.02 }}
@@ -102,7 +161,20 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
               }}
               className="flex-1 py-2 px-4 rounded-lg font-semibold transition-all bg-gray-800 text-green-400 border border-green-500/30 hover:bg-gray-750"
             >
-              {isTerminatedByTabSwitch ? "Session Locked" : "View Leaderboard"}
+              View Leaderboard
+            </motion.button>
+          ) : isTerminatedByTabSwitch ? (
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClick();
+              }}
+              className="flex-1 py-2 px-4 rounded-lg font-semibold transition-all bg-red-950/60 text-red-300 border border-red-700/60 hover:bg-red-900/50"
+            >
+              Session Locked
             </motion.button>
           ) : isRegistered ? (
             isOngoing ? (

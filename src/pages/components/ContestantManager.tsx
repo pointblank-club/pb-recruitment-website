@@ -4,11 +4,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Code2, RotateCcw } from "lucide-react";
 import { toast } from "react-toastify";
-import {
-  clearContestTabSwitches,
-  clearContestTerminatedByTabSwitch,
-  clearContestSubmitted,
-} from "@/lib/contestStorage";
+import { MAX_TAB_SWITCHES } from "@/lib/contestStorage";
 
 export interface Contestant {
   id: string;
@@ -19,6 +15,7 @@ export interface Contestant {
   score: number;
   tabSwitchCount?: number;
   isTerminatedByTabSwitch?: boolean;
+  resetGeneration?: number;
 }
 
 interface ContestantManagerProps {
@@ -54,10 +51,7 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
     setResettingMap((prev) => ({ ...prev, [id]: true }));
 
     try {
-      await adminApi.resetContestantTabSwitches(targetContestId, id);
-      clearContestTabSwitches(targetContestId, id);
-      clearContestTerminatedByTabSwitch(targetContestId, id);
-      clearContestSubmitted(targetContestId, id);
+      const response = await adminApi.resetContestantTabSwitches(targetContestId, id);
 
       if (contestIdRef.current === targetContestId) {
         setContestants((prev) =>
@@ -67,6 +61,7 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                   ...c,
                   tabSwitchCount: 0,
                   isTerminatedByTabSwitch: false,
+                  resetGeneration: response.generation,
                 }
               : c
           )
@@ -228,16 +223,21 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                       <span className="text-gray-500">Tab Switches:</span>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span
+                          title={
+                            contestant.resetGeneration !== undefined
+                              ? `Reset generation: ${contestant.resetGeneration}`
+                              : undefined
+                          }
                           className={`px-2 py-0.5 rounded text-xs font-semibold border ${
-                            (contestant.tabSwitchCount ?? 0) >= 5 || contestant.isTerminatedByTabSwitch
+                            (contestant.tabSwitchCount ?? 0) >= MAX_TAB_SWITCHES || contestant.isTerminatedByTabSwitch
                               ? "bg-red-900/60 text-red-300 border-red-700"
                               : (contestant.tabSwitchCount ?? 0) > 0
                               ? "bg-amber-900/60 text-amber-300 border-amber-700"
                               : "bg-gray-900 text-gray-400 border-gray-700"
                           }`}
                         >
-                          {contestant.tabSwitchCount ?? 0} / 5
-                          {((contestant.tabSwitchCount ?? 0) >= 5 || contestant.isTerminatedByTabSwitch) && " (Terminated)"}
+                          {contestant.tabSwitchCount ?? 0} / {MAX_TAB_SWITCHES}
+                          {((contestant.tabSwitchCount ?? 0) >= MAX_TAB_SWITCHES || contestant.isTerminatedByTabSwitch) && " (Terminated)"}
                         </span>
                       </div>
                     </div>

@@ -62,95 +62,117 @@ export const removeContestRegistered = (contestId: string, userId: string): void
   }
 };
 
-export const getContestTabSwitches = (contestId: string, userId: string): number => {
-  try {
-    const val = localStorage.getItem(`contest_tab_switches_${contestId}_${userId}`);
-    if (!val) return 0;
-    const parsed = parseInt(val, 10);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-  } catch {
-    return 0;
+export const MAX_TAB_SWITCHES = 5;
+
+export interface PendingTabSwitchEvent {
+  observation_id: string;
+  generation: number;
+  created_at: number;
+}
+
+export interface LocalTabSwitchState {
+  serverCount: number;
+  isTerminated: boolean;
+  resetGeneration: number;
+  pendingEvents: PendingTabSwitchEvent[];
+  hasServerSnapshot: boolean;
+  updatedAt: number;
+}
+
+export const createEmptyTabSwitchState = (): LocalTabSwitchState => ({
+  serverCount: 0,
+  isTerminated: false,
+  resetGeneration: 0,
+  pendingEvents: [],
+  hasServerSnapshot: false,
+  updatedAt: 0,
+});
+
+export const getTabSwitchStateKey = (contestId: string, userId: string): string =>
+  `contest_tab_state_${contestId}_${userId}`;
+
+const toNonNegInt = (value: unknown, fallback = 0): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return fallback;
   }
+  return Math.floor(value);
 };
 
-export const setContestTabSwitches = (contestId: string, userId: string, count: number): void => {
-  try {
-    localStorage.setItem(`contest_tab_switches_${contestId}_${userId}`, count.toString());
-  } catch {
-    // Ignore storage failure
+export const normalizeTabSwitchState = (raw: unknown): LocalTabSwitchState => {
+  if (typeof raw !== 'object' || raw === null) {
+    return createEmptyTabSwitchState();
   }
+  const obj = raw as Record<string, unknown>;
+  const resetGeneration = toNonNegInt(obj.resetGeneration, 0);
+  const serverCount = Math.min(MAX_TAB_SWITCHES, toNonNegInt(obj.serverCount, 0));
+  const isTerminated = Boolean(obj.isTerminated);
+  const hasServerSnapshot = Boolean(obj.hasServerSnapshot);
+  const updatedAt = toNonNegInt(obj.updatedAt, 0);
+
+  const seenIds = new Set<string>();
+  const pendingEvents: PendingTabSwitchEvent[] = [];
+  if (Array.isArray(obj.pendingEvents) && !isTerminated) {
+    for (const item of obj.pendingEvents) {
+      if (typeof item !== 'object' || item === null) continue;
+      const evt = item as Record<string, unknown>;
+      const rawId = evt.observation_id ?? evt.event_id;
+      if (typeof rawId !== 'string' || rawId.length === 0) continue;
+      const evtGen = toNonNegInt(evt.generation ?? evt.reset_generation, -1);
+      if (evtGen !== resetGeneration) continue;
+      if (seenIds.has(rawId)) continue;
+      seenIds.add(rawId);
+      pendingEvents.push({
+        observation_id: rawId,
+        generation: evtGen,
+        created_at: toNonNegInt(evt.created_at, 0),
+      });
+    }
+  }
+
+  return {
+    serverCount,
+    isTerminated,
+    resetGeneration,
+    pendingEvents,
+    hasServerSnapshot,
+    updatedAt,
+  };
 };
 
-export const incrementContestTabSwitches = (contestId: string, userId: string): number => {
-  try {
-    const current = getContestTabSwitches(contestId, userId);
-    const next = current + 1;
-    setContestTabSwitches(contestId, userId, next);
-    return next;
-  } catch {
-    return 1;
-  }
-};
-
-export const clearContestTabSwitches = (contestId: string, userId: string): void => {
+const clearLegacyTabSwitchKeys = (contestId: string, userId: string): void => {
   try {
     localStorage.removeItem(`contest_tab_switches_${contestId}_${userId}`);
-  } catch {
-    // Ignore storage failure
-  }
-};
-
-export const getContestTerminatedByTabSwitch = (contestId: string, userId: string): boolean => {
-  try {
-    return localStorage.getItem(`contest_tab_switches_terminated_${contestId}_${userId}`) === 'true';
-  } catch {
-    return false;
-  }
-};
-
-export const setContestTerminatedByTabSwitch = (contestId: string, userId: string, terminated: boolean): void => {
-  try {
-    if (terminated) {
-      localStorage.setItem(`contest_tab_switches_terminated_${contestId}_${userId}`, 'true');
-    } else {
-      localStorage.removeItem(`contest_tab_switches_terminated_${contestId}_${userId}`);
-    }
-  } catch {
-    // Ignore storage failure
-  }
-};
-
-export const clearContestTerminatedByTabSwitch = (contestId: string, userId: string): void => {
-  try {
     localStorage.removeItem(`contest_tab_switches_terminated_${contestId}_${userId}`);
-  } catch {
-    // Ignore storage failure
-  }
-};
-
-export const getContestPendingTabSwitchSync = (contestId: string, userId: string): number => {
-  try {
-    const val = localStorage.getItem(`contest_pending_tab_sync_${contestId}_${userId}`);
-    if (!val) return 0;
-    const parsed = parseInt(val, 10);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-  } catch {
-    return 0;
-  }
-};
-
-export const setContestPendingTabSwitchSync = (contestId: string, userId: string, count: number): void => {
-  try {
-    localStorage.setItem(`contest_pending_tab_sync_${contestId}_${userId}`, count.toString());
-  } catch {
-    // Ignore storage failure
-  }
-};
-
-export const clearContestPendingTabSwitchSync = (contestId: string, userId: string): void => {
-  try {
     localStorage.removeItem(`contest_pending_tab_sync_${contestId}_${userId}`);
   } catch {
     // Ignore storage failure
   }
 };
+
+export const readLocalTabSwitchState = (contestId: string, userId: string): LocalTabSwitchState => {
+  try {
+    const raw = localStorage.getItem(getTabSwitchStateKey(contestId, userId));
+    if (!raw) return createEmptyTabSwitchState();
+    return normalizeTabSwitchState(JSON.parse(raw));
+  } catch {
+    return createEmptyTabSwitchState();
+  }
+};
+
+export const writeLocalTabSwitchState = (
+  contestId: string,
+  userId: string,
+  state: LocalTabSwitchState
+): boolean => {
+  try {
+    const normalized = normalizeTabSwitchState(state);
+    localStorage.setItem(getTabSwitchStateKey(contestId, userId), JSON.stringify(normalized));
+    clearLegacyTabSwitchKeys(contestId, userId);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const getContestTerminatedByTabSwitch = (contestId: string, userId: string): boolean =>
+  readLocalTabSwitchState(contestId, userId).isTerminated;

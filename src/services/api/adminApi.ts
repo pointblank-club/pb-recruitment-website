@@ -18,6 +18,7 @@ export interface ContestRegistration {
   disqualified?: boolean;
   tab_switch_count?: number;
   is_tab_switch_terminated?: boolean;
+  reset_generation?: number;
 }
 
 export interface PlagiarismReport {
@@ -160,6 +161,12 @@ const normalizeProblemSummary = (
   time_limit: problem.time_limit,
   memory_limit: problem.memory_limit,
 });
+
+export interface ResetTabSwitchesResponse {
+  success: boolean;
+  message: string;
+  generation: number;
+}
 
 class AdminApiService {
   private axiosInstance: AxiosInstance;
@@ -408,8 +415,8 @@ class AdminApiService {
   async resetContestantTabSwitches(
     contestId: string,
     userId: string
-  ): Promise<{ success: boolean; message: string }> {
-    const response = await this.axiosInstance.post<{ success: boolean; message: string }>(
+  ): Promise<ResetTabSwitchesResponse> {
+    const response = await this.axiosInstance.post<ResetTabSwitchesResponse>(
       `/admin/contests/${contestId}/contestants/${userId}/reset-tab-switches`
     );
     return response.data;

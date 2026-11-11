@@ -8,15 +8,18 @@ import { contestApi } from "@/services/api/contestApi";
 import { Popup } from "@/components/ui/popup";
 import { useAuth } from "@/lib/AuthContext";
 import {
+  MAX_TAB_SWITCHES,
   getContestSubmitted,
   getContestRegistered,
   setContestRegistered,
   removeContestRegistered,
-  getContestTerminatedByTabSwitch,
-  clearContestTabSwitches,
-  clearContestTerminatedByTabSwitch,
-  clearContestSubmitted,
+  getTabSwitchStateKey,
+  readLocalTabSwitchState,
 } from "@/lib/contestStorage";
+import {
+  isEffectivelyTerminated,
+  reconcileContestSessionStatus,
+} from "@/features/contests/tabSwitchSync";
 
 interface ContestTimelineProps {
   contest: Contest;
@@ -173,36 +176,78 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
     }
   };
 
-  const [isTerminatedByTabSwitch, setIsTerminatedByTabSwitch] = useState<boolean>(() =>
-    Boolean(user?.uid && getContestTerminatedByTabSwitch(contest.id, user.uid))
-  );
+  const [isTerminatedByTabSwitch, setIsTerminatedByTabSwitch] = useState<boolean>(() => {
+    if (!user?.uid) return false;
+    const local = readLocalTabSwitchState(contest.id, user.uid);
+    return isEffectivelyTerminated(local, local.hasServerSnapshot ? 'supported' : 'idle', MAX_TAB_SWITCHES);
+  });
   const [isSubmittedEarly, setIsSubmittedEarly] = useState<boolean>(() =>
     Boolean(user?.uid && getContestSubmitted(contest.id, user.uid))
   );
 
   useEffect(() => {
-    setIsTerminatedByTabSwitch(Boolean(user?.uid && getContestTerminatedByTabSwitch(contest.id, user.uid)));
-    setIsSubmittedEarly(Boolean(user?.uid && getContestSubmitted(contest.id, user.uid)));
+    const uid = user?.uid;
+    setIsSubmittedEarly(Boolean(uid && getContestSubmitted(contest.id, uid)));
+    if (!uid) {
+      setIsTerminatedByTabSwitch(false);
+      return;
+    }
 
-    if (!user?.uid) return;
-    let cancelled = false;
+    const initialLocal = readLocalTabSwitchState(contest.id, uid);
+    setIsTerminatedByTabSwitch(
+      isEffectivelyTerminated(initialLocal, initialLocal.hasServerSnapshot ? 'supported' : 'idle', MAX_TAB_SWITCHES)
+    );
 
-    contestApi.getContestSessionStatus(contest.id).then((session) => {
-      if (cancelled || !session) return;
-      if (!session.is_tab_switch_terminated && session.tab_switch_count === 0) {
-        clearContestTabSwitches(contest.id, user.uid);
-        clearContestTerminatedByTabSwitch(contest.id, user.uid);
-        clearContestSubmitted(contest.id, user.uid);
-        setIsTerminatedByTabSwitch(false);
-        setIsSubmittedEarly(false);
-      } else if (session.is_tab_switch_terminated) {
-        setIsTerminatedByTabSwitch(true);
-        setIsSubmittedEarly(true);
+    const controller = new AbortController();
+    const runReconcile = () => {
+      void reconcileContestSessionStatus({
+        contestId: contest.id,
+        userId: uid,
+        maxSwitches: MAX_TAB_SWITCHES,
+        signal: controller.signal,
+      }).then((outcome) => {
+        if (controller.signal.aborted || outcome.aborted) return;
+        setIsTerminatedByTabSwitch(
+          isEffectivelyTerminated(outcome.state, outcome.apiStatus, MAX_TAB_SWITCHES)
+        );
+      }).catch(() => {});
+    };
+
+    runReconcile();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') runReconcile();
+    };
+    const handleFocusOrOnline = () => {
+      runReconcile();
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== getTabSwitchStateKey(contest.id, uid)) return;
+      const latest = readLocalTabSwitchState(contest.id, uid);
+      setIsTerminatedByTabSwitch(
+        isEffectivelyTerminated(latest, latest.hasServerSnapshot ? 'supported' : 'idle', MAX_TAB_SWITCHES)
+      );
+      setIsSubmittedEarly(Boolean(getContestSubmitted(contest.id, uid)));
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocusOrOnline);
+    window.addEventListener('online', handleFocusOrOnline);
+    window.addEventListener('storage', handleStorage);
+
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible' && navigator.onLine !== false) {
+        runReconcile();
       }
-    }).catch(() => {});
+    }, 15_000);
 
     return () => {
-      cancelled = true;
+      controller.abort();
+      clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocusOrOnline);
+      window.removeEventListener('online', handleFocusOrOnline);
+      window.removeEventListener('storage', handleStorage);
     };
   }, [contest.id, user?.uid]);
 
@@ -287,19 +332,19 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
               <div className="bg-red-950/40 border border-red-700/60 rounded-xl p-4 mb-6 flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <h4 className="text-red-300 font-semibold text-sm">Contest Session Terminated (Tab Switches Exceeded)</h4>
+                  <h4 className="text-red-300 font-semibold text-sm">Contest Session Locked (Tab Switches Exceeded)</h4>
                   <p className="text-gray-400 text-xs mt-1">
-                    Your session was terminated because 5 tab switches were detected. Your existing submissions and code drafts are preserved.
+                    Your session was locked because {MAX_TAB_SWITCHES} tab switches were detected. Your existing submissions and local code drafts are preserved.
                     If an administrator resets your violations, you will be able to resume immediately.
                   </p>
                 </div>
               </div>
             )}
             <p className="text-gray-300 mb-6">
-              {isTerminatedByTabSwitch
-                ? "Your contest session was ended due to exceeding the maximum allowed tab switches (5/5)."
-                : isSubmittedEarly
+              {isSubmittedEarly
                 ? "You have already completed and submitted your test for this contest."
+                : isTerminatedByTabSwitch
+                ? `Your contest session was locked due to exceeding the maximum allowed tab switches (${MAX_TAB_SWITCHES}/${MAX_TAB_SWITCHES}).`
                 : contestEnded
                 ? "This contest has ended. You can view the problems and check out the final leaderboard."
                 : contestStarted
@@ -332,25 +377,6 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
                   Leaderboard
                 </motion.button>
               </div>
-            ) : isTerminatedByTabSwitch ? (
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  type="button"
-                  disabled
-                  className="flex-1 py-3 px-6 rounded-lg font-bold text-lg bg-red-950/60 border border-red-800 text-red-400 cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <AlertTriangle size={20} />
-                  Session Locked (5 Tab Switches)
-                </button>
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => navigate(`/contests/${contest.id}/leaderboard`)}
-                  className="py-3 px-6 rounded-lg font-bold text-lg bg-gray-900 border border-gray-700 text-gray-200 hover:text-white hover:border-gray-500 transition-all flex items-center justify-center gap-2"
-                >
-                  Leaderboard
-                </motion.button>
-              </div>
             ) : isSubmittedEarly ? (
               <motion.button
                 whileHover={{ scale: 1.03 }}
@@ -361,6 +387,25 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
                 View Leaderboard
                 <ChevronRight size={20} />
               </motion.button>
+            ) : isTerminatedByTabSwitch ? (
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  disabled
+                  className="flex-1 py-3 px-6 rounded-lg font-bold text-lg bg-red-950/60 border border-red-800 text-red-400 cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <AlertTriangle size={20} />
+                  Session Locked ({MAX_TAB_SWITCHES} Tab Switches)
+                </button>
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => navigate(`/contests/${contest.id}/leaderboard`)}
+                  className="py-3 px-6 rounded-lg font-bold text-lg bg-gray-900 border border-gray-700 text-gray-200 hover:text-white hover:border-gray-500 transition-all flex items-center justify-center gap-2"
+                >
+                  Leaderboard
+                </motion.button>
+              </div>
             ) : (
               <motion.button
                 whileHover={canStart || canRegister ? { scale: 1.05 } : {}}

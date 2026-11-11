@@ -5,9 +5,17 @@ interface ContestParticipationGateProps {
   isExitingRef: RefObject<boolean>;
   endTime: number;
   onLeave: () => void;
+  suspended?: boolean;
+  onEnteredChange?: (entered: boolean) => void;
 }
 
-export const ContestParticipationGate = ({ isExitingRef, endTime, onLeave }: ContestParticipationGateProps) => {
+export const ContestParticipationGate = ({
+  isExitingRef,
+  endTime,
+  onLeave,
+  suspended = false,
+  onEnteredChange,
+}: ContestParticipationGateProps) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [hasEntered, setHasEntered] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(() => !!document.fullscreenElement);
@@ -17,7 +25,11 @@ export const ContestParticipationGate = ({ isExitingRef, endTime, onLeave }: Con
   const fullscreenSupported = document.fullscreenEnabled &&
     typeof document.documentElement.requestFullscreen === 'function';
   const needsFullscreen = !isFullscreen && !demoWithoutFullscreen;
-  const showGate = !hasEntered || needsFullscreen;
+  const showGate = !suspended && (!hasEntered || needsFullscreen);
+
+  useEffect(() => {
+    onEnteredChange?.(hasEntered);
+  }, [hasEntered, onEnteredChange]);
 
   useEffect(() => {
     const shouldIgnore = () => isExitingRef.current || Date.now() >= endTime;

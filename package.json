@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:tab-switch": "node tests/tab-switch-sync.mjs",
     "test:mcq": "node tests/mcq-attempted-status.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",

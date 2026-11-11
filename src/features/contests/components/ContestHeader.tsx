@@ -94,13 +94,13 @@ export const ContestHeader = ({
               {tabSwitchCount !== undefined && tabSwitchCount > 0 && (
                 <div
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border font-['DM_Sans'] ${
-                    tabSwitchCount >= 4
+                    tabSwitchCount >= Math.max(1, maxTabSwitches - 1)
                       ? 'bg-red-500/10 text-red-400 border-red-500/40 animate-pulse'
                       : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                   }`}
                   title={`${tabSwitchCount} of ${maxTabSwitches} allowed tab switches used`}
                 >
-                  <AlertTriangle size={14} className={tabSwitchCount >= 4 ? 'text-red-400' : 'text-amber-400'} />
+                  <AlertTriangle size={14} className={tabSwitchCount >= Math.max(1, maxTabSwitches - 1) ? 'text-red-400' : 'text-amber-400'} />
                   <span>Tab Switches: {tabSwitchCount}/{maxTabSwitches}</span>
                 </div>
               )}

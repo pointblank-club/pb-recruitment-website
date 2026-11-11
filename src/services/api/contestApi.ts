@@ -17,6 +17,56 @@ import { auth } from '@/lib/firebase';
 import { encodeBase64 } from '@/lib/base64';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const TAB_SWITCH_REQUEST_TIMEOUT_MS = 10_000;
+
+interface IdentityScopedRequestConfig {
+  _expectedUserId?: string;
+}
+
+const isAbortedError = (error: unknown, signal?: AbortSignal): boolean =>
+  Boolean(signal?.aborted) || axios.isCancel(error) || (error instanceof Error && error.name === 'AbortError');
+
+const isUnsupportedStatus = (status?: number): boolean =>
+  status === 404 || status === 405 || status === 501;
+
+const extractServerErrorMessage = (data: unknown): string | undefined => {
+  if (typeof data === 'object' && data !== null) {
+    if ('error' in data) {
+      const err = (data as { error?: unknown }).error;
+      if (typeof err === 'string' && err) return err;
+    }
+    if ('errors' in data) {
+      const errs = (data as { errors?: unknown }).errors;
+      if (Array.isArray(errs) && errs.length > 0) {
+        const first = errs[0];
+        if (typeof first === 'string' && first) return first;
+        if (typeof first === 'object' && first !== null && 'message' in first && typeof (first as { message?: unknown }).message === 'string') {
+          return (first as { message: string }).message;
+        }
+      }
+    }
+  }
+  return undefined;
+};
+
+const parseRetryAfterMs = (headers: unknown): number | undefined => {
+  if (typeof headers !== 'object' || headers === null) return undefined;
+  const raw = (headers as Record<string, unknown>)['retry-after'] ?? (headers as Record<string, unknown>)['Retry-After'];
+  if (typeof raw !== 'string' && typeof raw !== 'number') return undefined;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds > 0) {
+    return Math.min(seconds * 1000, 30_000);
+  }
+  return undefined;
+};
+
+export const isTabSwitchTerminationSubmissionError = (error: unknown): boolean => {
+  if (!axios.isAxiosError(error) || error.response?.status !== 403) {
+    return false;
+  }
+  const message = extractServerErrorMessage(error.response?.data) || error.message || '';
+  return /tab[\s_-]*switch/i.test(message) && /terminat/i.test(message);
+};
 // TODO(PBR-2): Delete mockJudgingSetting, MOCK_SUBMISSION_JUDGING, MockSubmission,
 // mockSubmissions, rememberMockSubmission, and all mock branches when the judge ships.
 const MOCK_SUBMISSION_JUDGING =
@@ -41,14 +91,30 @@ class ContestApiService {
     });
     this.axiosInstance.interceptors.request.use(
       async (config) => {
+        if (config.signal?.aborted) {
+          return Promise.reject(new axios.CanceledError('Request aborted before dispatch.'));
+        }
+
+        const expectedUserId = (config as IdentityScopedRequestConfig)._expectedUserId;
+        delete (config as IdentityScopedRequestConfig)._expectedUserId;
+
         const user = auth.currentUser;
+        if (expectedUserId && user && user.uid !== expectedUserId) {
+          return Promise.reject(new axios.CanceledError('Authenticated account changed before request dispatch.'));
+        }
+
         if (user && config.headers) {
           try {
             const token = await user.getIdToken();
+            if (config.signal?.aborted) {
+              return Promise.reject(new axios.CanceledError('Request aborted during auth token fetch.'));
+            }
+            if (expectedUserId && auth.currentUser?.uid !== expectedUserId) {
+              return Promise.reject(new axios.CanceledError('Authenticated account changed during auth token fetch.'));
+            }
             if (token) {
               config.headers.Authorization = `Bearer ${token}`;
             }
-
           } catch (error) {
             console.error('Error getting auth token:', error);
           }
@@ -318,34 +384,174 @@ class ContestApiService {
 
   async recordTabSwitch(
     contestId: string,
-    count: number
-  ): Promise<{ tab_switch_count: number; is_terminated: boolean }> {
-    const response = await this.axiosInstance.post<{ tab_switch_count: number; is_terminated: boolean }>(
-      `/contests/${contestId}/tab-switch`,
-      { count }
-    );
-    return response.data;
+    payload: RecordTabSwitchPayload,
+    options?: TabSwitchRequestOptions
+  ): Promise<RecordTabSwitchResult> {
+    if (options?.signal?.aborted) {
+      return { kind: 'error', message: 'Request aborted.', aborted: true };
+    }
+    if (options?.expectedUserId && auth.currentUser && auth.currentUser.uid !== options.expectedUserId) {
+      return { kind: 'error', message: 'Authenticated account changed.', aborted: true };
+    }
+
+    try {
+      const response = await this.axiosInstance.post<Partial<TabSwitchReportResponse>>(
+        `/contests/${contestId}/tab-switch`,
+        {
+          observation_id: payload.observation_id,
+          generation: payload.generation,
+          count: payload.count,
+        },
+        {
+          signal: options?.signal,
+          timeout: options?.timeoutMs ?? TAB_SWITCH_REQUEST_TIMEOUT_MS,
+          _expectedUserId: options?.expectedUserId,
+        } as Record<string, unknown>
+      );
+      const raw = response.data;
+      return {
+        kind: 'ok',
+        data: {
+          tab_switch_count: Number(raw?.tab_switch_count ?? 0),
+          is_terminated: Boolean(raw?.is_terminated),
+          generation: Number(raw?.generation ?? 0),
+        },
+      };
+    } catch (error) {
+      if (isAbortedError(error, options?.signal)) {
+        return { kind: 'error', message: 'Request aborted.', aborted: true };
+      }
+      if (axios.isAxiosError(error)) {
+        const httpStatus = error.response?.status;
+        const data = error.response?.data as Partial<TabSwitchReportResponse> | undefined;
+        const message = extractServerErrorMessage(data) || error.message || 'Failed to record tab switch.';
+
+        if (isUnsupportedStatus(httpStatus)) {
+          return { kind: 'unsupported', httpStatus: httpStatus!, message };
+        }
+        if (httpStatus === 401 || httpStatus === 403) {
+          return { kind: 'unauthorized', httpStatus, message };
+        }
+        if (httpStatus === 409 || httpStatus === 412) {
+          return {
+            kind: 'stale_generation',
+            httpStatus,
+            message,
+            data: data
+              ? {
+                  tab_switch_count: data.tab_switch_count,
+                  is_terminated: data.is_terminated,
+                  generation: data.generation,
+                }
+              : undefined,
+          };
+        }
+        if (httpStatus === 400 || httpStatus === 413 || httpStatus === 422) {
+          return { kind: 'invalid', httpStatus, message };
+        }
+        return {
+          kind: 'error',
+          httpStatus,
+          message,
+          retryAfterMs: httpStatus === 429 ? parseRetryAfterMs(error.response?.headers) : undefined,
+        };
+      }
+      return {
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Failed to record tab switch.',
+      };
+    }
   }
 
   async getContestSessionStatus(
-    contestId: string
-  ): Promise<ContestSessionStatus | null> {
+    contestId: string,
+    options?: TabSwitchRequestOptions
+  ): Promise<SessionStatusFetchResult> {
+    if (options?.signal?.aborted) {
+      return { kind: 'error', message: 'Request aborted.', aborted: true };
+    }
+    if (options?.expectedUserId && auth.currentUser && auth.currentUser.uid !== options.expectedUserId) {
+      return { kind: 'error', message: 'Authenticated account changed.', aborted: true };
+    }
+
     try {
-      const response = await this.axiosInstance.get<ContestSessionStatus>(
-        `/contests/${contestId}/session-status`
+      const response = await this.axiosInstance.get<Partial<ContestSessionStatus>>(
+        `/contests/${contestId}/session-status`,
+        {
+          signal: options?.signal,
+          timeout: options?.timeoutMs ?? TAB_SWITCH_REQUEST_TIMEOUT_MS,
+          _expectedUserId: options?.expectedUserId,
+        } as Record<string, unknown>
       );
-      return response.data;
-    } catch {
-      return null;
+      const raw = response.data;
+      return {
+        kind: 'ok',
+        status: {
+          tab_switch_count: Number(raw?.tab_switch_count ?? 0),
+          is_tab_switch_terminated: Boolean(raw?.is_tab_switch_terminated),
+          generation: Number(raw?.generation ?? 0),
+        },
+      };
+    } catch (error) {
+      if (isAbortedError(error, options?.signal)) {
+        return { kind: 'error', message: 'Request aborted.', aborted: true };
+      }
+      if (axios.isAxiosError(error)) {
+        const httpStatus = error.response?.status;
+        const message = extractServerErrorMessage(error.response?.data) || error.message || 'Failed to fetch contest session status.';
+        if (isUnsupportedStatus(httpStatus)) {
+          return { kind: 'unsupported', httpStatus: httpStatus!, message };
+        }
+        if (httpStatus === 401 || httpStatus === 403) {
+          return { kind: 'unauthorized', httpStatus, message };
+        }
+        return { kind: 'error', httpStatus, message };
+      }
+      return {
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Failed to fetch contest session status.',
+      };
     }
   }
+}
+
+export interface TabSwitchRequestOptions {
+  signal?: AbortSignal;
+  expectedUserId?: string;
+  timeoutMs?: number;
+}
+
+export interface RecordTabSwitchPayload {
+  observation_id: string;
+  generation: number;
+  count: number;
+}
+
+export interface TabSwitchReportResponse {
+  tab_switch_count: number;
+  is_terminated: boolean;
+  generation: number;
 }
 
 export interface ContestSessionStatus {
   tab_switch_count: number;
   is_tab_switch_terminated: boolean;
-  is_submitted?: boolean;
+  generation: number;
 }
+
+export type SessionStatusFetchResult =
+  | { kind: 'ok'; status: ContestSessionStatus }
+  | { kind: 'unsupported'; httpStatus: number; message?: string }
+  | { kind: 'unauthorized'; httpStatus: number; message?: string }
+  | { kind: 'error'; httpStatus?: number; message: string; aborted?: boolean };
+
+export type RecordTabSwitchResult =
+  | { kind: 'ok'; data: TabSwitchReportResponse }
+  | { kind: 'stale_generation'; httpStatus: number; data?: Partial<TabSwitchReportResponse>; message?: string }
+  | { kind: 'unsupported'; httpStatus: number; message?: string }
+  | { kind: 'unauthorized'; httpStatus: number; message?: string }
+  | { kind: 'invalid'; httpStatus: number; message?: string }
+  | { kind: 'error'; httpStatus?: number; message: string; aborted?: boolean; retryAfterMs?: number };
 
 export interface SubmissionResponse {
   submission_id: string;

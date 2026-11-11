@@ -6,6 +6,7 @@ interface TabSwitchWarningModalProps {
   count: number;
   maxSwitches?: number;
   isTerminated: boolean;
+  isServerConfirmed?: boolean;
   onAcknowledge: () => void;
   onExitContest: () => void;
 }
@@ -15,6 +16,7 @@ export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
   count,
   maxSwitches = 5,
   isTerminated,
+  isServerConfirmed = true,
   onAcknowledge,
   onExitContest,
 }) => {
@@ -43,29 +45,23 @@ export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
       aria-labelledby="tab-switch-dialog-title"
       onCancel={(e) => {
         e.preventDefault();
-        if (!isTerminated) {
-          onAcknowledge();
-        } else {
-          onExitContest();
-        }
+        onAcknowledge();
       }}
       className="bg-black border border-gray-700 rounded-2xl p-0 max-w-md w-full shadow-2xl text-white backdrop:bg-black/85 backdrop:backdrop-blur-md m-auto outline-none"
     >
       <div className="relative p-6 font-['DM_Sans']">
-        {!isTerminated && (
-          <button
-            type="button"
-            onClick={onAcknowledge}
-            aria-label="Close dialog"
-            className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onAcknowledge}
+          aria-label="Close dialog"
+          className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
 
         {isTerminated ? (
           <div>
-            {/* Terminated State */}
+            {/* Terminated / Locked State */}
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/40 flex items-center justify-center flex-shrink-0 animate-pulse">
                 <ShieldAlert className="w-6 h-6 text-red-400" />
@@ -75,32 +71,46 @@ export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
                   id="tab-switch-dialog-title"
                   className="text-xl font-bold text-red-400"
                 >
-                  Contest Terminated
+                  Contest Session Locked
                 </h3>
                 <p className="text-xs text-gray-400">
-                  Maximum tab switches exceeded ({count}/{maxSwitches})
+                  Maximum tab switches reached ({count}/{maxSwitches})
                 </p>
               </div>
             </div>
 
             <div className="space-y-3 mb-6 text-sm text-gray-300">
-              <div className="bg-red-950/40 border border-red-800/50 rounded-lg p-3 text-red-200 text-xs">
-                ⚠️ You have reached <strong>{count} tab switches</strong>. As per test integrity rules, your contest session has been ended automatically.
+              <div className="bg-red-950/40 border border-red-800/50 rounded-lg p-3 text-red-200 text-xs space-y-1">
+                <p>
+                  You have reached <strong>{count} tab switches</strong>. Your contest session is locked and further submissions are disabled.
+                </p>
+                {!isServerConfirmed && (
+                  <p className="text-amber-300">
+                    Waiting for network connectivity to sync this session state with the server.
+                  </p>
+                )}
               </div>
               <p className="text-xs text-gray-400">
-                • All code and MCQ answers you submitted before this termination remain saved.
+                • All code and MCQ answers you already submitted remain saved.
                 <br />
-                • Unsubmitted code drafts are preserved locally and won't be lost.
+                • Your current local code drafts and view state remain intact in read-only mode.
                 <br />
-                • If this termination was due to a technical error or emergency, please contact the contest administrator to reactivate your session.
+                • If this lock was triggered in error, contact a contest administrator to reset your violations so you can resume without losing progress.
               </p>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex flex-col sm:flex-row gap-2.5 justify-end">
+              <button
+                type="button"
+                onClick={onAcknowledge}
+                className="flex-1 py-2.5 px-4 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-semibold text-sm transition-colors"
+              >
+                View Read-Only Workspace
+              </button>
               <button
                 type="button"
                 onClick={onExitContest}
-                className="w-full py-2.5 px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-sm transition-colors shadow-lg shadow-red-600/30"
+                className="flex-1 py-2.5 px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-sm transition-colors shadow-lg shadow-red-600/30"
               >
                 Exit Contest
               </button>
@@ -128,7 +138,7 @@ export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
 
             <div className="space-y-3 mb-6 text-sm text-gray-300">
               <div className="bg-amber-950/40 border border-amber-800/50 rounded-lg p-3 text-amber-200 text-xs">
-                You navigated away from the contest tab. You have <strong>{remaining} {remaining === 1 ? 'warning' : 'warnings'} remaining</strong> before automatic contest termination.
+                You navigated away from the contest tab. You have <strong>{remaining} {remaining === 1 ? 'warning' : 'warnings'} remaining</strong> before your session is locked.
               </div>
 
               {/* Progress visualizer */}
@@ -154,7 +164,7 @@ export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
               </div>
 
               <p className="text-xs text-gray-400">
-                Please remain on this tab until you finish. Switching tabs {maxSwitches} times will immediately lock and submit your contest.
+                Please remain on this tab until you finish. Switching tabs {maxSwitches} times will lock your session and disable further submissions.
               </p>
             </div>
 

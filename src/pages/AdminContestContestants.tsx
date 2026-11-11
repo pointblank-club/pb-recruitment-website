@@ -5,7 +5,6 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/footer";
 import ContestantManager, { type Contestant } from "./components/ContestantManager";
 import { adminApi } from "@/services/api/adminApi";
-import { getContestTabSwitches, getContestTerminatedByTabSwitch } from "@/lib/contestStorage";
 
 const AdminContestContestants: React.FC = () => {
   const { contestId } = useParams<{ contestId: string }>();
@@ -57,12 +56,9 @@ const AdminContestContestants: React.FC = () => {
               ? new Date(reg.registered_at * 1000).toLocaleDateString()
               : "N/A",
             score: reg.score ?? 0,
-            tabSwitchCount: reg.tab_switch_count !== undefined
-              ? reg.tab_switch_count
-              : getContestTabSwitches(contestId, reg.user_id),
-            isTerminatedByTabSwitch: reg.is_tab_switch_terminated !== undefined
-              ? reg.is_tab_switch_terminated
-              : getContestTerminatedByTabSwitch(contestId, reg.user_id),
+            tabSwitchCount: reg.tab_switch_count ?? 0,
+            isTerminatedByTabSwitch: Boolean(reg.is_tab_switch_terminated),
+            resetGeneration: reg.reset_generation ?? 0,
           };
         });
 
