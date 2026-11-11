@@ -15,7 +15,7 @@ import {
 import { Contest } from "@/models/contest";
 import { auth } from '@/lib/firebase';
 import { encodeBase64 } from '@/lib/base64';
-import { parseRetryAfterMs } from '@/lib/requestPolicy';
+import { jitterDelay, parseRetryAfterMs, requestTimeout } from '@/lib/requestPolicy';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const TAB_SWITCH_REQUEST_TIMEOUT_MS = 10_000;
@@ -237,20 +237,55 @@ class ContestApiService {
       pending = { payload: serialized, key: crypto.randomUUID() };
       this.pendingCodeSubmissions.set(scope, pending);
     }
-    const response = await this.axiosInstance.post<SubmissionResponse>(
-      '/submission/submit',
-      payload,
-      // Preparation (5s), dispatch (10s), bookkeeping (10s), and response margin.
-      { timeout: 30_000, headers: { 'Idempotency-Key': pending.key }, _expectedUserId: user.uid } as Record<string, unknown>,
-    );
-    if (this.pendingCodeSubmissions.get(scope) === pending) this.pendingCodeSubmissions.delete(scope);
-    this.rememberMockSubmission(response.data.submission_id, {
-      contestId,
-      problemId,
-      type: 'code',
-      language,
+    const deadline = performance.now() + 30_000;
+    const controller = new AbortController();
+    let cancelDeadline = () => {};
+    let cancelWait = () => {};
+    const timeout = new Promise<never>((_, reject) => {
+      cancelDeadline = requestTimeout(() => {
+        controller.abort();
+        reject(new axios.AxiosError('Submission request timed out.', 'ECONNABORTED'));
+      }, 30_000);
     });
-    return response.data;
+    try {
+      for (let attempt = 0; ; attempt += 1) {
+        if (auth.currentUser?.uid !== user.uid) {
+          throw new axios.CanceledError('Authenticated account changed before submission retry.');
+        }
+        try {
+          const response = await Promise.race([this.axiosInstance.post<SubmissionResponse>(
+            '/submission/submit',
+            payload,
+            {
+              timeout: Math.max(1, deadline - performance.now()),
+              headers: { 'Idempotency-Key': pending.key },
+              _expectedUserId: user.uid,
+              signal: controller.signal,
+            } as Record<string, unknown>,
+          ), timeout]);
+          if (this.pendingCodeSubmissions.get(scope) === pending) this.pendingCodeSubmissions.delete(scope);
+          this.rememberMockSubmission(response.data.submission_id, {
+            contestId,
+            problemId,
+            type: 'code',
+            language,
+          });
+          return response.data;
+        } catch (error) {
+          if (isAbortedError(error) || !axios.isAxiosError(error) || attempt >= 2) throw error;
+          const status = error.response?.status;
+          if (status !== undefined && ![429, 500, 502, 503, 504].includes(status)) throw error;
+          const delay = jitterDelay(Math.max(500 * 2 ** attempt, parseRetryAfterMs(error.response?.headers) ?? 0));
+          if (delay >= deadline - performance.now()) throw error;
+          await Promise.race([new Promise<void>((resolve) => { cancelWait = requestTimeout(resolve, delay); }), timeout]);
+          if (performance.now() >= deadline) throw error;
+        }
+      }
+    } finally {
+      cancelWait();
+      cancelDeadline();
+      controller.abort();
+    }
   }
 
   async submitMCQAnswer(
