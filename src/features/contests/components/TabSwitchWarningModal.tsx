@@ -23,23 +23,49 @@ export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
   onExitContest,
 }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
 
     if (isOpen) {
+      const active = document.activeElement;
+      if (
+        !previousFocusRef.current &&
+        active instanceof HTMLElement &&
+        active !== document.body &&
+        !active.closest('dialog')
+      ) {
+        previousFocusRef.current = active;
+      }
       if (!dialog.open) {
         dialog.showModal();
       }
-    } else {
-      if (dialog.open) {
-        dialog.close();
-      }
+      return () => {
+        if (dialog.open) {
+          dialog.close();
+        }
+        const target = previousFocusRef.current;
+        previousFocusRef.current = null;
+        if (
+          target &&
+          target.isConnected &&
+          !target.hasAttribute('disabled') &&
+          !document.querySelector('dialog[open]')
+        ) {
+          target.focus({ preventScroll: true });
+        }
+      };
     }
+
+    if (dialog.open) {
+      dialog.close();
+    }
+    return undefined;
   }, [isOpen]);
 
-  const remaining = Math.max(0, maxSwitches - count);
+  const remaining = Math.max(0, maxSwitches - (count + pendingCount));
 
   return (
     <dialog

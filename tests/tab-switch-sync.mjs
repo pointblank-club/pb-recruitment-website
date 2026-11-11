@@ -1159,4 +1159,109 @@ const { storage, sync, api, createHookModule } = loadModules({ authState, axiosA
   mounted.unmount();
 }
 
+// ─── Test 14: Lower Server Generation (H1 No-Loop) & Remaining Count Text ──────────
+{
+  // A) Initial GET /session-status when client localStorage holds higher generation than server
+  resetSimBackend();
+  env.localStorage.clear();
+  authState.currentUser.uid = 'u1';
+  storage.writeLocalTabSwitchState('c1', 'u1', {
+    serverCount: 1,
+    isTerminated: false,
+    resetGeneration: 2,
+    pendingEvents: [{ observation_id: 'stale-gen2-obs', generation: 2, created_at: 100 }],
+    hasServerSnapshot: true,
+    updatedAt: 100,
+  });
+  simBackend.sessions.set('c1:u1', { count: 0, terminated: false, gen: 0, events: new Set() });
+
+  const mounted = mountHook(createHookModule, {
+    contestId: 'c1',
+    userId: 'u1',
+    isSessionActive: true,
+    isCountingEnabled: true,
+    maxSwitches: 5,
+  });
+  await delay(20);
+  await flushMicrotasks();
+
+  assert.equal(
+    simBackend.requests.filter((r) => r.endpoint === 'tab-switch').length,
+    0,
+    'Initial GET adopting lower gen=0 must drop stale gen=2 pending events with 0 POSTs'
+  );
+  assert.equal(storage.readLocalTabSwitchState('c1', 'u1').resetGeneration, 0);
+  assert.equal(mounted.current.tabSwitchCount, 0);
+  assert.equal(mounted.current.pendingSyncCount, 0);
+
+  // B) Mid-session POST 409 returning server gen=0 while client was at gen=2 must adopt gen=0 cleanly (no loop!)
+  mounted.unmount();
+  resetSimBackend();
+  env.localStorage.clear();
+  simBackend.sessions.set('c1:u1', { count: 0, terminated: false, gen: 2, events: new Set() });
+
+  const mountedLoopCheck = mountHook(createHookModule, {
+    contestId: 'c1',
+    userId: 'u1',
+    isSessionActive: true,
+    isCountingEnabled: true,
+    maxSwitches: 5,
+  });
+  await delay(20);
+  await flushMicrotasks();
+
+  // Drop server generation from 2 -> 0 without GET running first, then trigger tab switch
+  simBackend.sessions.set('c1:u1', { count: 0, terminated: false, gen: 0, events: new Set() });
+  env.setVisibility('hidden');
+  env.setVisibility('visible');
+  await delay(200);
+  await flushMicrotasks();
+
+  const postsOnMismatch = simBackend.requests.filter((r) => r.endpoint === 'tab-switch');
+  assert.equal(postsOnMismatch.length, 1, '409 with lower server generation must drop gen-2 event cleanly and never spin');
+  assert.equal(storage.readLocalTabSwitchState('c1', 'u1').resetGeneration, 0);
+  assert.equal(mountedLoopCheck.current.tabSwitchCount, 0);
+  assert.equal(mountedLoopCheck.current.pendingSyncCount, 0);
+
+  // Subsequent switch under adopted gen=0 succeeds cleanly!
+  env.setVisibility('hidden');
+  env.setVisibility('visible');
+  await delay(30);
+  await flushMicrotasks();
+  assert.equal(mountedLoopCheck.current.tabSwitchCount, 1);
+  assert.equal(mountedLoopCheck.current.pendingSyncCount, 0);
+  mountedLoopCheck.unmount();
+
+  // C) Warning toast & modal remaining calculation must account for pending (offline/unconfirmed) switches
+  resetSimBackend();
+  env.localStorage.clear();
+  toastCalls.length = 0;
+  simBackend.mode = 'offline';
+  const mountedOffline = mountHook(createHookModule, {
+    contestId: 'c1',
+    userId: 'u1',
+    isSessionActive: true,
+    isCountingEnabled: true,
+    maxSwitches: 5,
+  });
+  await delay(20);
+  await flushMicrotasks();
+
+  env.setVisibility('hidden');
+  env.setVisibility('visible');
+  await flushMicrotasks();
+  env.setVisibility('hidden');
+  env.setVisibility('visible');
+  await flushMicrotasks();
+
+  const warnMessages = toastCalls.filter((t) => t.kind === 'warn').map((t) => t.m);
+  assert.equal(warnMessages.length, 2);
+  assert.match(warnMessages[0], /4 switches remaining/, 'First offline switch leaves 4 remaining');
+  assert.match(warnMessages[1], /3 switches remaining/, 'Second offline switch leaves 3 remaining');
+
+  const modalSrc = read('src/features/contests/components/TabSwitchWarningModal.tsx');
+  assert.match(modalSrc, /Math\.max\(0,\s*maxSwitches\s*-\s*\(count\s*\+\s*pendingCount\)\)/);
+  mountedOffline.unmount();
+}
+
 console.log('All tab-switch state, idempotency, reset-generation, identity isolation, lifecycle, convergence, and storage tests passed.');

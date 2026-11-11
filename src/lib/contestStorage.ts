@@ -274,7 +274,7 @@ export const removePendingTabSwitchObservation = (
 export const clearStaleTabSwitchObservations = (
   contestId: string,
   userId: string,
-  minGeneration: number,
+  activeGeneration: number,
   clearAll: boolean
 ): void => {
   try {
@@ -286,7 +286,7 @@ export const clearStaleTabSwitchObservations = (
       const suffix = key.slice(getPendingObservationPrefix(contestId, userId).length);
       const sepIdx = suffix.indexOf('_');
       const keyGen = sepIdx > 0 ? Number(suffix.slice(0, sepIdx)) : NaN;
-      if (!Number.isFinite(keyGen) || keyGen < minGeneration) {
+      if (!Number.isFinite(keyGen) || keyGen !== activeGeneration) {
         localStorage.removeItem(key);
       }
     }

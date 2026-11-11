@@ -214,6 +214,7 @@ export const useTabSwitchTracker = ({
       if (!isScopeActive(scope)) return;
 
       let retryAttempt = 0;
+      let conflictAttempt = 0;
 
       while (isScopeActive(scope)) {
         const statusBeforeReconcile = getStatus(scope);
@@ -243,7 +244,7 @@ export const useTabSwitchTracker = ({
         }
 
         const head = scope.state.pendingEvents[0];
-        if (head.generation < scope.state.resetGeneration) {
+        if (head.generation !== scope.state.resetGeneration) {
           scope.state = dropStalePendingEvents(scope.state, head.generation);
           removePendingTabSwitchObservation(scope.contestId, scope.userId, head.generation, head.observation_id);
           writeLocalTabSwitchSnapshot(scope.contestId, scope.userId, scope.state);
@@ -269,6 +270,7 @@ export const useTabSwitchTracker = ({
 
         if (result.kind === 'ok') {
           retryAttempt = 0;
+          conflictAttempt = 0;
           scope.apiStatus = 'supported';
           scope.provisionalLock = false;
           const latestStorage = readLocalTabSwitchState(scope.contestId, scope.userId);
@@ -297,6 +299,7 @@ export const useTabSwitchTracker = ({
         }
 
         if (result.kind === 'stale_generation') {
+          conflictAttempt++;
           retryAttempt = 0;
           scope.apiStatus = 'supported';
           scope.provisionalLock = false;
@@ -311,8 +314,13 @@ export const useTabSwitchTracker = ({
                 generation: result.data.generation,
               },
               scope.maxSwitches,
-              head.observation_id
+              head.observation_id,
+              Date.now(),
+              { acceptLowerGeneration: merged.resetGeneration === head.generation }
             );
+            if (scope.state.pendingEvents.some((event) => event.observation_id === head.observation_id)) {
+              scope.state = dropStalePendingEvents(scope.state, head.generation, head.observation_id);
+            }
             removePendingTabSwitchObservation(scope.contestId, scope.userId, head.generation, head.observation_id);
             writeLocalTabSwitchSnapshot(scope.contestId, scope.userId, scope.state);
             publishScopeState(scope);
@@ -329,6 +337,14 @@ export const useTabSwitchTracker = ({
             writeLocalTabSwitchSnapshot(scope.contestId, scope.userId, scope.state);
             publishScopeState(scope);
             await reconcileScope(scope);
+          }
+
+          if (scope.state.pendingEvents.length > 0 && !scope.state.isTerminated) {
+            if (conflictAttempt >= 5) {
+              break;
+            }
+            const conflictWaitMs = Math.min(1000 * Math.pow(2, conflictAttempt - 1), 16_000);
+            await waitRetry(scope, conflictWaitMs);
           }
           continue;
         }
@@ -570,6 +586,7 @@ export const useTabSwitchTracker = ({
 
       const count = getDisplayedTabSwitchCount(scope.state, scope.maxSwitches);
       const pending = getPendingTabSwitchCount(scope.state);
+      const remaining = Math.max(0, scope.maxSwitches - (count + pending));
       const terminatedNow = isEffectivelyTerminated(scope.state, scope.apiStatus, scope.maxSwitches);
       setIsWarningModalOpen(true);
 
@@ -577,11 +594,11 @@ export const useTabSwitchTracker = ({
         toast.error(`Session Locked: Maximum ${scope.maxSwitches} tab switches reached.`);
       } else if (pending > 0) {
         toast.warn(
-          `Tab switch detected (Confirmed: ${count}/${scope.maxSwitches}, +${pending} syncing).`
+          `Tab switch detected (Confirmed: ${count}/${scope.maxSwitches}, +${pending} syncing). ${remaining} ${remaining === 1 ? 'switch' : 'switches'} remaining before contest lock.`
         );
       } else {
         toast.warn(
-          `Tab switch detected (${count}/${scope.maxSwitches})! ${Math.max(0, scope.maxSwitches - count)} switches remaining before contest lock.`
+          `Tab switch detected (${count}/${scope.maxSwitches})! ${remaining} ${remaining === 1 ? 'switch' : 'switches'} remaining before contest lock.`
         );
       }
     };

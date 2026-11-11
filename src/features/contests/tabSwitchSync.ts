@@ -95,26 +95,27 @@ export const reconcileServerSnapshot = (
   snapshot: ServerTabSwitchSnapshot,
   maxSwitches: number = MAX_TAB_SWITCHES,
   acknowledgedObservationId?: string,
-  now: number = Date.now()
+  now: number = Date.now(),
+  options: { acceptLowerGeneration?: boolean } = {}
 ): LocalTabSwitchState => {
   const safeMax = Math.max(1, maxSwitches);
   const serverGen = Math.max(0, Math.floor(Number(snapshot.generation) || 0));
   const serverCount = Math.max(0, Math.min(safeMax, Math.floor(Number(snapshot.tab_switch_count) || 0)));
   const serverTerminated = Boolean(snapshot.is_tab_switch_terminated || serverCount >= safeMax);
 
-  // Ignore delayed responses belonging to an older reset generation.
-  if (serverGen < localState.resetGeneration) {
+  // Ignore delayed responses belonging to an older reset generation unless explicitly authoritative.
+  if (serverGen < localState.resetGeneration && !options.acceptLowerGeneration) {
     return localState;
   }
 
   const bumpUpdatedAt = Math.max(now, localState.updatedAt + 1);
 
-  // Server advanced generation: discard pre-reset counts, termination, ack tombstones, and queued retries.
-  if (serverGen > localState.resetGeneration) {
+  // Server generation changed (forward reset OR authoritative lower gen): adopt server state & drop mismatched retries.
+  if (serverGen !== localState.resetGeneration) {
     const remainingPending = serverTerminated
       ? []
       : localState.pendingEvents.filter(
-          (event) => event.generation >= serverGen && event.observation_id !== acknowledgedObservationId
+          (event) => event.generation === serverGen && event.observation_id !== acknowledgedObservationId
         );
 
     return {
@@ -165,7 +166,10 @@ export const dropStalePendingEvents = (
   return {
     ...localState,
     pendingEvents: localState.pendingEvents.filter(
-      (event) => event.generation > rejectedGeneration && !nextAcked.has(event.observation_id)
+      (event) =>
+        event.generation === localState.resetGeneration &&
+        event.generation !== rejectedGeneration &&
+        !nextAcked.has(event.observation_id)
     ),
     ackedIds: Array.from(nextAcked).slice(-32),
     updatedAt: Math.max(now, localState.updatedAt + 1),
@@ -268,9 +272,17 @@ export const reconcileContestSessionStatus = async ({
   const baseline = mergeLocalTabSwitchStates(initialBaseline, latestBaseline);
 
   if (result.kind === 'ok') {
-    const nextState = reconcileServerSnapshot(baseline, result.status, maxSwitches);
+    const acceptLowerGeneration = baseline.resetGeneration === initialBaseline.resetGeneration;
+    const nextState = reconcileServerSnapshot(
+      baseline,
+      result.status,
+      maxSwitches,
+      undefined,
+      Date.now(),
+      { acceptLowerGeneration }
+    );
     writeLocalTabSwitchSnapshot(contestId, userId, nextState);
-    const resetDetected = nextState.resetGeneration > initialBaseline.resetGeneration;
+    const resetDetected = nextState.resetGeneration !== initialBaseline.resetGeneration;
     return {
       state: nextState,
       apiStatus: 'supported',

@@ -9,6 +9,20 @@ interface ContestParticipationGateProps {
   onEnteredChange?: (entered: boolean) => void;
 }
 
+const canRestoreFocusTarget = (
+  target: HTMLElement | null,
+  exitingRef: RefObject<boolean>,
+  suspendedStateRef: RefObject<boolean>
+): target is HTMLElement =>
+  Boolean(
+    !exitingRef.current &&
+      !suspendedStateRef.current &&
+      target &&
+      target.isConnected &&
+      !target.hasAttribute('disabled') &&
+      !document.querySelector('dialog[open]')
+  );
+
 export const ContestParticipationGate = ({
   isExitingRef,
   endTime,
@@ -17,6 +31,9 @@ export const ContestParticipationGate = ({
   onEnteredChange,
 }: ContestParticipationGateProps) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const suspendedRef = useRef(suspended);
+  suspendedRef.current = suspended;
   const [hasEntered, setHasEntered] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(() => !!document.fullscreenElement);
   const [demoWithoutFullscreen, setDemoWithoutFullscreen] = useState(false);
@@ -44,9 +61,46 @@ export const ContestParticipationGate = ({
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (showGate && dialog && !dialog.open) dialog.showModal();
-    return () => { dialog?.close(); };
-  }, [showGate]);
+    if (!showGate) {
+      if (dialog?.open) dialog.close();
+      return undefined;
+    }
+
+    const active = document.activeElement;
+    if (
+      !previousFocusRef.current &&
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      !active.closest('dialog')
+    ) {
+      previousFocusRef.current = active;
+    }
+
+    if (dialog && !dialog.open) dialog.showModal();
+
+    return () => {
+      if (dialog?.open) dialog.close();
+      if (suspendedRef.current) {
+        // Keep the captured focus target across modal suspension so closing Return-to-Fullscreen restores it.
+        return;
+      }
+      const target = previousFocusRef.current;
+      previousFocusRef.current = null;
+      if (canRestoreFocusTarget(target, isExitingRef, suspendedRef)) {
+        target.focus({ preventScroll: true });
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(() => {
+            if (
+              canRestoreFocusTarget(target, isExitingRef, suspendedRef) &&
+              (document.activeElement === document.body || document.activeElement === null)
+            ) {
+              target.focus({ preventScroll: true });
+            }
+          });
+        }
+      }
+    };
+  }, [showGate, isExitingRef]);
 
   const continueContest = async () => {
     setRequestError('');
