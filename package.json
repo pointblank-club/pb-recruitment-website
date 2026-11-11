@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test:mcq": "node tests/mcq-attempted-status.mjs",
+    "test:security": "node tests/request-protections.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

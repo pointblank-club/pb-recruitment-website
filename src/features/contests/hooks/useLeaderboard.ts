@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import axios from "axios";
+import { isPermanentRequestError, jitterDelay, requestTimeout, retryAfterDelay } from '@/lib/requestPolicy';
 import type { LeaderboardEntry, Contest } from "../problem.types";
 import { contestApi } from "@/services/api/contestApi";
 import { useAuth } from "@/lib/AuthContext";
@@ -7,6 +8,7 @@ import { useAuth } from "@/lib/AuthContext";
 export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30000) => {
   const { user } = useAuth();
   const [page, setPage] = useState(0);
+  const [refreshCycle, setRefreshCycle] = useState(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [totalParticipants, setTotalParticipants] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -28,6 +30,8 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
   const isFetchingContestRef = useRef(false);
   const isFetchingLeaderboardRef = useRef(false);
   const hasLoadedDataRef = useRef(false);
+  const pollingErrorsRef = useRef(0);
+  const retryAfterRef = useRef(0);
 
   const fetchContest = useCallback(async () => {
     if (!contestId) {
@@ -118,20 +122,25 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
         setLeaderboardError(null);
         setHasStarted(true);
         hasLoadedDataRef.current = true;
+        pollingErrorsRef.current = 0;
+        retryAfterRef.current = 0;
       } catch (err: unknown) {
         if (generation !== requestGenRef.current) return;
+        pollingErrorsRef.current = isPermanentRequestError(err) ? 3 : pollingErrorsRef.current + 1;
+        retryAfterRef.current = retryAfterDelay(err);
         let isNotStarted = false;
         if (axios.isAxiosError(err)) {
           const errorResponse = err.response?.data?.error;
           const status = err.response?.status;
           if (status === 403 && errorResponse === "contest has not started yet") {
             isNotStarted = true;
+            pollingErrorsRef.current = 0;
             setHasStarted(false);
             setLeaderboard([]);
           }
         }
         if (!isNotStarted) {
-          if (!isBackground || !hasLoadedDataRef.current) {
+          if (!isBackground || !hasLoadedDataRef.current || pollingErrorsRef.current >= 3) {
             setLeaderboardError(err instanceof Error ? err.message : "Failed to fetch leaderboard");
           }
         }
@@ -161,21 +170,29 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
       }
     }
 
-    fetchLeaderboard(page, false);
-
-    const interval = refreshIntervalMs ? setInterval(() => {
+    let cancelled = false;
+    let cancelTimer: (() => void) | undefined;
+    pollingErrorsRef.current = 0;
+    const refreshPage = async (background: boolean) => {
       if (!isFetchingContestRef.current && (!contestRef.current || contestErrorRef.current)) {
-        fetchContest();
+        void fetchContest();
       }
-      fetchLeaderboard(page, true);
-    }, refreshIntervalMs) : undefined;
+      await fetchLeaderboard(page, background);
+      if (!cancelled && refreshIntervalMs && pollingErrorsRef.current < 3) {
+        cancelTimer = requestTimeout(() => void refreshPage(true), Math.max(
+          jitterDelay(refreshIntervalMs * 2 ** pollingErrorsRef.current), retryAfterRef.current,
+        ));
+      }
+    };
+    void refreshPage(false);
 
     const genRef = requestGenRef;
     return () => {
       genRef.current++;
-      clearInterval(interval);
+      cancelled = true;
+      cancelTimer?.();
     };
-  }, [contestId, page, fetchLeaderboard, fetchContest, refreshIntervalMs]);
+  }, [contestId, page, fetchLeaderboard, fetchContest, refreshIntervalMs, refreshCycle, currentUserId]);
 
   const currentUserRank = useMemo(() => {
     return leaderboard.find((entry) => entry.user_id === currentUserId);
@@ -185,11 +202,8 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
   const isLoading = (isLeaderboardLoading || isContestLoading) && !error;
 
   const refresh = useCallback(() => {
-    if (!contest || contestError) {
-      fetchContest();
-    }
-    fetchLeaderboard(page, false);
-  }, [contest, contestError, fetchContest, fetchLeaderboard, page]);
+    setRefreshCycle((cycle) => cycle + 1);
+  }, []);
 
   return {
     leaderboard,

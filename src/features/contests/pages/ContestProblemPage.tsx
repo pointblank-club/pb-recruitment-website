@@ -58,7 +58,7 @@ const ContestProblemContent = () => {
   const hideIDE = isContestEnded ? !(isAuthenticated && isRegistered) : !isAuthenticated;
   const isLocked = isContestEnded || isTabSwitchTerminated;
   const lockReason: 'ended' | 'tab_switch' = isTabSwitchTerminated && !isContestEnded ? 'tab_switch' : 'ended';
-  const { problems } = useContestProblems(contestId || '');
+  const { problems, error: problemsError, refresh: refreshProblems } = useContestProblems(contestId || '');
 
   const mcqProblems = problems.filter((p) => p.type === 'mcq');
   const currentMcqIndex = mcqProblems.findIndex((p) => p.id === problemId);
@@ -267,6 +267,7 @@ const ContestProblemContent = () => {
 
   return (
     <div ref={workspaceRef} className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
+      {problemsError && <div role="status">Problem updates stopped: {problemsError} <button type="button" onClick={refreshProblems}>Retry</button></div>}
       {/* Informational banners when contest has ended */}
       {isContestEnded && !isAuthenticated && (
         <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/70 border-b border-gray-700 text-sm text-gray-300 flex-shrink-0">

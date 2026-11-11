@@ -7,35 +7,6 @@ import { toast } from "react-toastify";
 import Navbar from "./components/Navbar";
 import Footer from "./components/footer";
 
-// Simple markdown renderer for preview
-const renderMarkdown = (markdown: string): string => {
-  if (!markdown) return "";
-  
-  const html = markdown
-    // Headers
-    .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold text-green-400 mt-4 mb-2">$1</h3>')
-    .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold text-green-400 mt-5 mb-3">$1</h2>')
-    .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold text-green-400 mt-6 mb-4">$1</h1>')
-    // Bold
-    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-gray-200">$1</strong>')
-    // Italic
-    .replace(/\*(.*?)\*/g, '<em class="italic text-gray-300">$1</em>')
-    // Code blocks
-    .replace(/```(.*?)```/gs, '<pre class="bg-gray-800 p-3 rounded my-2 overflow-x-auto"><code class="text-green-300">$1</code></pre>')
-    // Inline code
-    .replace(/`(.*?)`/g, '<code class="bg-gray-800 px-2 py-1 rounded text-green-300">$1</code>')
-    // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-green-400 hover:text-green-300 underline" target="_blank" rel="noopener noreferrer">$1</a>')
-    // Unordered lists
-    .replace(/^\* (.+)$/gim, '<li class="ml-4">$1</li>')
-    .replace(/(<li class="ml-4">.*<\/li>)/s, '<ul class="list-disc list-inside my-2 text-gray-300">$1</ul>')
-    // Line breaks
-    .replace(/\n\n/g, '<br/><br/>')
-    .replace(/\n/g, '<br/>');
-  
-  return html;
-};
-
 const getSaveErrorMessage = (error: unknown): string => {
   if (axios.isAxiosError(error)) {
     const data: unknown = error.response?.data;
@@ -253,21 +224,20 @@ const AddContest: React.FC = () => {
                 </div>
                 {showMarkdownPreview ? (
                   <div 
-                    className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-3 text-gray-300 min-h-[120px]"
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(formData.description) }}
-                  />
+                    className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-3 text-gray-300 min-h-[120px] whitespace-pre-wrap"
+                  >{formData.description}</div>
                 ) : (
                   <textarea
                     name="description"
                     value={formData.description}
                     onChange={handleInputChange}
-                    placeholder="Enter contest description with markdown support (optional)&#10;&#10;**Bold text**, *italic*, `code`, [link](url)&#10;# Header, ## Subheader&#10;* List item"
+                    placeholder="Enter contest description (optional)"
                     rows={8}
                     className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-3 text-gray-300 focus:border-green-500 focus:outline-none resize-none font-mono"
                   />
                 )}
                 <p className="text-gray-500 text-sm mt-1">
-                  Supports markdown: **bold**, *italic*, `code`, [links](url), # headers, * lists
+                  Descriptions are displayed as plain text.
                 </p>
               </div>
 

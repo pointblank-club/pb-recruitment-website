@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
 import { setProblemAttempted } from '@/lib/contestStorage';
 import { useCodeDraft } from '../hooks/useCodeDraft';
+import { useRequestCooldown } from '../hooks/useRequestCooldown';
 import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
 import {
   Play,
@@ -170,6 +171,8 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   const [runResult, setRunResult] = useState<ConsoleRunResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isCoolingDown: runCooldown, coolDown: coolDownRun } = useRequestCooldown();
+  const { isCoolingDown: submitCooldown, coolDown: coolDownSubmit } = useRequestCooldown();
 
   // Clipboard feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -223,6 +226,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
 
   // Run Code logic
   const handleRunCode = useCallback(async () => {
+    if (isRunning || runCooldown) return;
     if (!code.trim()) {
       setRunResult({ errorText: 'Code is empty.' });
       setConsoleTab('output');
@@ -255,15 +259,17 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
         compile_output: result.compile_output,
       });
     } catch (error) {
+      coolDownRun(error);
       if (inputRevision !== inputRevisionRef.current) return;
       setRunResult({ errorText: getRunErrorMessage(error) });
     } finally {
       setIsRunning(false);
     }
-  }, [code, customInput, onRun, selectedLanguage, problem.contest_id, problem.id, user]);
+  }, [code, customInput, onRun, selectedLanguage, problem.contest_id, problem.id, user, isRunning, runCooldown, coolDownRun]);
 
   // Submit Code logic
   const handleSubmit = async () => {
+    if (isSubmitting || submitCooldown) return;
     if (!onSubmit) {
       console.log('Submitting code:', { code, language: selectedLanguage });
       return;
@@ -275,6 +281,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
       setConsoleTab('latest_result');
       await onSubmit(code, selectedLanguage);
     } catch (error) {
+      coolDownSubmit(error);
       console.error('Submission error:', error);
     } finally {
       setIsSubmitting(false);
@@ -623,7 +630,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                 <div className="flex items-center gap-2.5 shrink-0">
                   <Button
                     onClick={handleRunCode}
-                    disabled={isRunning || !code.trim()}
+                    disabled={isRunning || runCooldown || !code.trim()}
                     size="sm"
                     className="h-8 px-3.5 text-xs font-semibold bg-[#ffffff] hover:bg-slate-200 text-[#090d14] flex items-center gap-1.5 shadow-sm transition-all"
                   >
@@ -635,14 +642,14 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                     ) : (
                       <>
                         <Play className="w-3.5 h-3.5 fill-[#090d14]" />
-                        <span>Run</span>
+                        <span>{runCooldown ? 'Run · Wait' : 'Run'}</span>
                       </>
                     )}
                   </Button>
 
                   <Button
                     onClick={handleSubmit}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || submitCooldown}
                     size="sm"
                     className="h-8 px-4 text-xs font-semibold bg-[#16a34a] hover:bg-[#15803d] text-white flex items-center gap-1.5 shadow-sm transition-all"
                   >
@@ -654,7 +661,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                     ) : (
                       <>
                         <Send className="w-3.5 h-3.5" />
-                        <span>Submit</span>
+                        <span>{submitCooldown ? 'Submit · Wait' : 'Submit'}</span>
                       </>
                     )}
                   </Button>

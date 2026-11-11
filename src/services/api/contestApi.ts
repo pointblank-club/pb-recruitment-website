@@ -15,6 +15,7 @@ import {
 import { Contest } from "@/models/contest";
 import { auth } from '@/lib/firebase';
 import { encodeBase64 } from '@/lib/base64';
+import { parseRetryAfterMs } from '@/lib/requestPolicy';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const TAB_SWITCH_REQUEST_TIMEOUT_MS = 10_000;
@@ -49,17 +50,6 @@ const extractServerErrorMessage = (data: unknown): string | undefined => {
   return undefined;
 };
 
-const parseRetryAfterMs = (headers: unknown): number | undefined => {
-  if (typeof headers !== 'object' || headers === null) return undefined;
-  const raw = (headers as Record<string, unknown>)['retry-after'] ?? (headers as Record<string, unknown>)['Retry-After'];
-  if (typeof raw !== 'string' && typeof raw !== 'number') return undefined;
-  const seconds = Number(raw);
-  if (Number.isFinite(seconds) && seconds > 0) {
-    return Math.min(seconds * 1000, 30_000);
-  }
-  return undefined;
-};
-
 export const isTabSwitchTerminationSubmissionError = (error: unknown): boolean => {
   if (!axios.isAxiosError(error) || error.response?.status !== 403) {
     return false;
@@ -81,6 +71,8 @@ interface MockSubmission {
 class ContestApiService {
   private axiosInstance: AxiosInstance;
   private mockSubmissions = new Map<string, MockSubmission>();
+  // shortcut: unresolved payloads remain for this tab; reconcile saved history before adding eviction.
+  private pendingCodeSubmissions = new Map<string, { payload: string; key: string }>();
 
   constructor() {
     this.axiosInstance = axios.create({
@@ -99,7 +91,7 @@ class ContestApiService {
         delete (config as IdentityScopedRequestConfig)._expectedUserId;
 
         const user = auth.currentUser;
-        if (expectedUserId && user && user.uid !== expectedUserId) {
+        if (expectedUserId && user?.uid !== expectedUserId) {
           return Promise.reject(new axios.CanceledError('Authenticated account changed before request dispatch.'));
         }
 
@@ -229,18 +221,29 @@ class ContestApiService {
     language: string
   ): Promise<SubmissionResponse> {
     const encodedCode = encodeBase64(code);
+    const payload = {
+      contest_id: contestId,
+      problem_id: problemId,
+      code: encodedCode,
+      language,
+      type: 'code',
+    };
+    const user = auth.currentUser;
+    if (!user) throw new axios.CanceledError('Sign in before submitting.');
+    const serialized = JSON.stringify(payload);
+    const scope = JSON.stringify([user.uid, serialized]);
+    let pending = this.pendingCodeSubmissions.get(scope);
+    if (!pending || pending.payload !== serialized) {
+      pending = { payload: serialized, key: crypto.randomUUID() };
+      this.pendingCodeSubmissions.set(scope, pending);
+    }
     const response = await this.axiosInstance.post<SubmissionResponse>(
       '/submission/submit',
-      {
-        contest_id: contestId,
-        problem_id: problemId,
-        code: encodedCode,
-        language,
-        type: 'code',
-      },
+      payload,
       // Preparation (5s), dispatch (10s), bookkeeping (10s), and response margin.
-      { timeout: 30_000 },
+      { timeout: 30_000, headers: { 'Idempotency-Key': pending.key }, _expectedUserId: user.uid } as Record<string, unknown>,
     );
+    if (this.pendingCodeSubmissions.get(scope) === pending) this.pendingCodeSubmissions.delete(scope);
     this.rememberMockSubmission(response.data.submission_id, {
       contestId,
       problemId,
@@ -453,7 +456,10 @@ class ContestApiService {
           kind: 'error',
           httpStatus,
           message,
-          retryAfterMs: httpStatus === 429 ? parseRetryAfterMs(error.response?.headers) : undefined,
+          // Preserve the tab-switch queue's existing bounded wait; its timer is separate from submission polling.
+          retryAfterMs: httpStatus === 429
+            ? Math.min(parseRetryAfterMs(error.response?.headers) ?? 0, 30_000) || undefined
+            : undefined,
         };
       }
       return {
