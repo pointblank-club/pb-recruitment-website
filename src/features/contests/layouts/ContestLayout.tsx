@@ -45,7 +45,7 @@ export const ContestLayout = () => {
     user?.uid && contestId && getContestSubmitted(contestId, user.uid)
   );
   const isTrackingActive = Boolean(
-    isLive && !isContestEnded && user?.uid && contest?.is_registered && !isLeaderboardPage && !isSubmittedManually
+    isLive && !isContestEnded && user?.uid && contest?.is_registered && !isSubmittedManually
   );
   const isCountingEnabled = isTrackingActive && hasEnteredContest;
 
@@ -272,7 +272,7 @@ export const ContestLayout = () => {
     return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}${location.hash}` }} />;
   }
 
-  const isParticipating = !!user && !!contest?.is_registered && isLive && !isLeaderboardPage &&
+  const isParticipating = !!user && !!contest?.is_registered && isLive &&
     !hasExitedRef.current && !isSubmittedManually && !isTabSwitchTerminated;
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0 && !isTabSwitchTerminated && !isSubmittedManually;
 
