@@ -51,6 +51,7 @@ export const ContestLayout = () => {
 
   const {
     tabSwitchCount,
+    pendingSyncCount,
     maxSwitches,
     isWarningModalOpen,
     isTerminated: isTabSwitchTerminated,
@@ -285,6 +286,7 @@ export const ContestLayout = () => {
         onSubmitContest={canEnd ? handleOpenEndModal : undefined}
         isContestEnded={isContestEnded}
         tabSwitchCount={isTrackingActive && tabSwitchApiStatus !== 'unsupported' ? tabSwitchCount : undefined}
+        pendingTabSwitchCount={isTrackingActive && tabSwitchApiStatus !== 'unsupported' ? pendingSyncCount : 0}
         maxTabSwitches={maxSwitches}
       />
 
@@ -296,9 +298,17 @@ export const ContestLayout = () => {
           <div className="flex items-center gap-2 text-red-200">
             <ShieldAlert className="w-4 h-4 text-red-400 flex-shrink-0" />
             <span>
-              <strong>Session Locked ({tabSwitchCount}/{maxSwitches} tab switches):</strong>{' '}
-              Editing and new submissions are disabled. Previously submitted answers and local code drafts are preserved.
-              {!isServerConfirmedTermination && ' (Syncing lock state with server...)'}
+              {isServerConfirmedTermination ? (
+                <>
+                  <strong>Session Locked ({tabSwitchCount}/{maxSwitches} tab switches):</strong>{' '}
+                  Editing and new submissions are disabled. Previously submitted answers and local code drafts are preserved.
+                </>
+              ) : (
+                <>
+                  <strong>Verifying session lock status...</strong>{' '}
+                  Submissions are temporarily paused while confirming your session status with the server.
+                </>
+              )}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -362,6 +372,7 @@ export const ContestLayout = () => {
       <TabSwitchWarningModal
         isOpen={isTrackingActive && tabSwitchApiStatus !== 'unsupported' && isWarningModalOpen}
         count={tabSwitchCount}
+        pendingCount={pendingSyncCount}
         maxSwitches={maxSwitches}
         isTerminated={isTabSwitchTerminated}
         isServerConfirmed={isServerConfirmedTermination}

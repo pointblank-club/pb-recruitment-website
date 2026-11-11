@@ -9,6 +9,7 @@ interface ContestHeaderProps {
   onSubmitContest?: () => void;
   isContestEnded?: boolean;
   tabSwitchCount?: number;
+  pendingTabSwitchCount?: number;
   maxTabSwitches?: number;
 }
 
@@ -20,6 +21,7 @@ export const ContestHeader = ({
   onSubmitContest,
   isContestEnded = false,
   tabSwitchCount,
+  pendingTabSwitchCount = 0,
   maxTabSwitches = 5,
 }: ContestHeaderProps) => {
   const location = useLocation();
@@ -91,17 +93,24 @@ export const ContestHeader = ({
             </div>
           ) : (
             <div className="flex items-center gap-4">
-              {tabSwitchCount !== undefined && tabSwitchCount > 0 && (
+              {tabSwitchCount !== undefined && (tabSwitchCount > 0 || pendingTabSwitchCount > 0) && (
                 <div
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border font-['DM_Sans'] ${
                     tabSwitchCount >= Math.max(1, maxTabSwitches - 1)
                       ? 'bg-red-500/10 text-red-400 border-red-500/40 animate-pulse'
                       : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                   }`}
-                  title={`${tabSwitchCount} of ${maxTabSwitches} allowed tab switches used`}
+                  title={`${tabSwitchCount} of ${maxTabSwitches} confirmed tab switches used${
+                    pendingTabSwitchCount > 0 ? ` (${pendingTabSwitchCount} pending sync)` : ''
+                  }`}
                 >
                   <AlertTriangle size={14} className={tabSwitchCount >= Math.max(1, maxTabSwitches - 1) ? 'text-red-400' : 'text-amber-400'} />
-                  <span>Tab Switches: {tabSwitchCount}/{maxTabSwitches}</span>
+                  <span>
+                    Tab Switches: {tabSwitchCount}/{maxTabSwitches}
+                    {pendingTabSwitchCount > 0 && (
+                      <span className="ml-1 opacity-80">(+{pendingTabSwitchCount} syncing)</span>
+                    )}
+                  </span>
                 </div>
               )}
               <div className="text-right flex flex-col justify-center">

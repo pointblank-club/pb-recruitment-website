@@ -3,7 +3,7 @@ import {
   type LocalTabSwitchState,
   type PendingTabSwitchEvent,
   readLocalTabSwitchState,
-  writeLocalTabSwitchState,
+  writeLocalTabSwitchSnapshot,
 } from '@/lib/contestStorage';
 import { contestApi } from '@/services/api/contestApi';
 
@@ -38,10 +38,12 @@ export const getDisplayedTabSwitchCount = (
   maxSwitches: number = MAX_TAB_SWITCHES
 ): number => {
   const safeMax = Math.max(1, maxSwitches);
-  const sameGenPending = state.pendingEvents.filter(
-    (event) => event.generation === state.resetGeneration
-  ).length;
-  return Math.min(safeMax, Math.max(0, state.serverCount) + sameGenPending);
+  return Math.min(safeMax, Math.max(0, state.serverCount));
+};
+
+export const getPendingTabSwitchCount = (state: LocalTabSwitchState): number => {
+  if (state.isTerminated) return 0;
+  return state.pendingEvents.filter((event) => event.generation === state.resetGeneration).length;
 };
 
 export const isEffectivelyTerminated = (
@@ -53,7 +55,8 @@ export const isEffectivelyTerminated = (
   if (apiStatus === 'unsupported' || apiStatus === 'unauthorized') {
     return false;
   }
-  return state.isTerminated || getDisplayedTabSwitchCount(state, maxSwitches) >= maxSwitches;
+  const safeMax = Math.max(1, maxSwitches);
+  return state.isTerminated || state.serverCount >= safeMax;
 };
 
 export const enqueueLocalTabSwitch = (
@@ -62,7 +65,12 @@ export const enqueueLocalTabSwitch = (
   now: number = Date.now(),
   observationId: string = createTabSwitchObservationId()
 ): LocalTabSwitchState => {
-  if (state.isTerminated || getDisplayedTabSwitchCount(state, maxSwitches) >= maxSwitches) {
+  const safeMax = Math.max(1, maxSwitches);
+  const sameGenPending = state.pendingEvents.filter((event) => event.generation === state.resetGeneration);
+  if (state.isTerminated || state.serverCount >= safeMax || sameGenPending.length >= safeMax) {
+    return state;
+  }
+  if ((state.ackedIds ?? []).includes(observationId)) {
     return state;
   }
   if (state.pendingEvents.some((event) => event.observation_id === observationId)) {
@@ -101,7 +109,7 @@ export const reconcileServerSnapshot = (
 
   const bumpUpdatedAt = Math.max(now, localState.updatedAt + 1);
 
-  // Server advanced generation: discard pre-reset counts, termination, and queued retries.
+  // Server advanced generation: discard pre-reset counts, termination, ack tombstones, and queued retries.
   if (serverGen > localState.resetGeneration) {
     const remainingPending = serverTerminated
       ? []
@@ -114,6 +122,7 @@ export const reconcileServerSnapshot = (
       isTerminated: serverTerminated,
       resetGeneration: serverGen,
       pendingEvents: remainingPending,
+      ackedIds: [],
       hasServerSnapshot: true,
       updatedAt: bumpUpdatedAt,
     };
@@ -122,10 +131,14 @@ export const reconcileServerSnapshot = (
   // Same generation: aggregate count and termination are monotonic/sticky within a generation.
   const nextServerCount = Math.max(localState.serverCount, serverCount);
   const nextTerminated = localState.isTerminated || serverTerminated;
+  const nextAcked = new Set(localState.ackedIds ?? []);
+  if (acknowledgedObservationId) {
+    nextAcked.add(acknowledgedObservationId);
+  }
   const remainingPending = nextTerminated
     ? []
     : localState.pendingEvents.filter(
-        (event) => event.generation === serverGen && event.observation_id !== acknowledgedObservationId
+        (event) => event.generation === serverGen && !nextAcked.has(event.observation_id)
       );
 
   return {
@@ -133,6 +146,7 @@ export const reconcileServerSnapshot = (
     isTerminated: nextTerminated,
     resetGeneration: serverGen,
     pendingEvents: remainingPending,
+    ackedIds: Array.from(nextAcked).slice(-32),
     hasServerSnapshot: true,
     updatedAt: bumpUpdatedAt,
   };
@@ -141,12 +155,22 @@ export const reconcileServerSnapshot = (
 export const dropStalePendingEvents = (
   localState: LocalTabSwitchState,
   rejectedGeneration: number,
+  rejectedObservationId?: string,
   now: number = Date.now()
-): LocalTabSwitchState => ({
-  ...localState,
-  pendingEvents: localState.pendingEvents.filter((event) => event.generation > rejectedGeneration),
-  updatedAt: Math.max(now, localState.updatedAt + 1),
-});
+): LocalTabSwitchState => {
+  const nextAcked = new Set(localState.ackedIds ?? []);
+  if (rejectedObservationId && rejectedGeneration === localState.resetGeneration) {
+    nextAcked.add(rejectedObservationId);
+  }
+  return {
+    ...localState,
+    pendingEvents: localState.pendingEvents.filter(
+      (event) => event.generation > rejectedGeneration && !nextAcked.has(event.observation_id)
+    ),
+    ackedIds: Array.from(nextAcked).slice(-32),
+    updatedAt: Math.max(now, localState.updatedAt + 1),
+  };
+};
 
 export const mergeLocalTabSwitchStates = (
   current: LocalTabSwitchState,
@@ -159,12 +183,33 @@ export const mergeLocalTabSwitchStates = (
     return current;
   }
 
-  const newer = incoming.updatedAt >= current.updatedAt ? incoming : current;
+  const nextTerminated = current.isTerminated || incoming.isTerminated;
+  const ackedSet = new Set([...(current.ackedIds ?? []), ...(incoming.ackedIds ?? [])]);
+  const mergedMap = new Map<string, PendingTabSwitchEvent>();
+
+  if (!nextTerminated) {
+    for (const evt of [...current.pendingEvents, ...incoming.pendingEvents]) {
+      if (evt.generation !== current.resetGeneration) continue;
+      if (ackedSet.has(evt.observation_id)) continue;
+      const existing = mergedMap.get(evt.observation_id);
+      if (!existing || evt.created_at < existing.created_at) {
+        mergedMap.set(evt.observation_id, evt);
+      }
+    }
+  }
+
+  const mergedPending = Array.from(mergedMap.values()).sort((a, b) =>
+    a.created_at !== b.created_at
+      ? a.created_at - b.created_at
+      : a.observation_id.localeCompare(b.observation_id)
+  );
+
   return {
     serverCount: Math.max(current.serverCount, incoming.serverCount),
-    isTerminated: current.isTerminated || incoming.isTerminated,
+    isTerminated: nextTerminated,
     resetGeneration: current.resetGeneration,
-    pendingEvents: newer.pendingEvents,
+    pendingEvents: mergedPending,
+    ackedIds: Array.from(ackedSet).slice(-32),
     hasServerSnapshot: current.hasServerSnapshot || incoming.hasServerSnapshot,
     updatedAt: Math.max(current.updatedAt, incoming.updatedAt),
   };
@@ -224,7 +269,7 @@ export const reconcileContestSessionStatus = async ({
 
   if (result.kind === 'ok') {
     const nextState = reconcileServerSnapshot(baseline, result.status, maxSwitches);
-    writeLocalTabSwitchState(contestId, userId, nextState);
+    writeLocalTabSwitchSnapshot(contestId, userId, nextState);
     const resetDetected = nextState.resetGeneration > initialBaseline.resetGeneration;
     return {
       state: nextState,

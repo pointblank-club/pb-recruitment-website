@@ -3,9 +3,12 @@ import { toast } from 'react-toastify';
 import {
   MAX_TAB_SWITCHES,
   type LocalTabSwitchState,
+  getPendingObservationPrefix,
   getTabSwitchStateKey,
   readLocalTabSwitchState,
-  writeLocalTabSwitchState,
+  removePendingTabSwitchObservation,
+  writeLocalTabSwitchSnapshot,
+  writePendingTabSwitchObservation,
 } from '@/lib/contestStorage';
 import { contestApi } from '@/services/api/contestApi';
 import {
@@ -13,6 +16,7 @@ import {
   dropStalePendingEvents,
   enqueueLocalTabSwitch,
   getDisplayedTabSwitchCount,
+  getPendingTabSwitchCount,
   isEffectivelyTerminated,
   mergeLocalTabSwitchStates,
   reconcileContestSessionStatus,
@@ -54,6 +58,7 @@ interface TrackerScope {
   pendingReconcileFollowUp: boolean;
   initialReconcilePromise: Promise<void>;
   wakeFlush: (() => void) | null;
+  provisionalLock: boolean;
 }
 
 export const useTabSwitchTracker = ({
@@ -81,12 +86,16 @@ export const useTabSwitchTracker = ({
   const publishScopeState = useCallback((scope: TrackerScope) => {
     if (!isScopeActive(scope)) return;
     const displayed = getDisplayedTabSwitchCount(scope.state, scope.maxSwitches);
-    const effectiveTerminated = isEffectivelyTerminated(scope.state, scope.apiStatus, scope.maxSwitches);
+    const pending = getPendingTabSwitchCount(scope.state);
+    const authoritativeTerminated = isEffectivelyTerminated(scope.state, scope.apiStatus, scope.maxSwitches);
+    const effectiveTerminated =
+      authoritativeTerminated ||
+      (scope.provisionalLock && scope.apiStatus !== 'unsupported' && scope.apiStatus !== 'unauthorized');
     setTabSwitchCount(displayed);
     setIsTerminated(effectiveTerminated);
     setIsServerConfirmedTermination(scope.apiStatus !== 'unsupported' && scope.state.isTerminated);
     setApiStatus(scope.apiStatus);
-    setPendingSyncCount(scope.state.pendingEvents.length);
+    setPendingSyncCount(pending);
   }, [isScopeActive]);
 
   const scheduleTimer = useCallback((scope: TrackerScope, ms: number, cb: () => void) => {
@@ -135,7 +144,10 @@ export const useTabSwitchTracker = ({
 
     const promise = (async () => {
       const prevResetGen = scope.state.resetGeneration;
-      const prevTerminated = isEffectivelyTerminated(scope.state, scope.apiStatus, scope.maxSwitches);
+      const prevAuthoritativeTerminated = isEffectivelyTerminated(scope.state, scope.apiStatus, scope.maxSwitches);
+      const prevEffectiveTerminated =
+        prevAuthoritativeTerminated ||
+        (scope.provisionalLock && scope.apiStatus !== 'unsupported' && scope.apiStatus !== 'unauthorized');
 
       const outcome = await reconcileContestSessionStatus({
         contestId: scope.contestId,
@@ -148,6 +160,10 @@ export const useTabSwitchTracker = ({
 
       if (!isScopeActive(scope) || outcome.aborted) return;
 
+      if (outcome.apiStatus !== 'offline') {
+        scope.provisionalLock = false;
+      }
+
       scope.state = outcome.state;
       scope.apiStatus = outcome.apiStatus;
       publishScopeState(scope);
@@ -159,12 +175,12 @@ export const useTabSwitchTracker = ({
         return;
       }
 
-      if (outcome.resetDetected || (prevTerminated && !nowTerminated)) {
+      if (outcome.resetDetected || (prevEffectiveTerminated && !nowTerminated && !scope.provisionalLock)) {
         setIsWarningModalOpen(false);
-        if (prevResetGen < outcome.state.resetGeneration && prevTerminated) {
+        if (prevResetGen < outcome.state.resetGeneration && prevAuthoritativeTerminated) {
           toast.info('Your tab-switch violations were reset by an administrator. You may continue the contest.');
         }
-      } else if (!prevTerminated && nowTerminated) {
+      } else if (!prevAuthoritativeTerminated && nowTerminated) {
         setIsWarningModalOpen(true);
       }
 
@@ -229,7 +245,8 @@ export const useTabSwitchTracker = ({
         const head = scope.state.pendingEvents[0];
         if (head.generation < scope.state.resetGeneration) {
           scope.state = dropStalePendingEvents(scope.state, head.generation);
-          writeLocalTabSwitchState(scope.contestId, scope.userId, scope.state);
+          removePendingTabSwitchObservation(scope.contestId, scope.userId, head.generation, head.observation_id);
+          writeLocalTabSwitchSnapshot(scope.contestId, scope.userId, scope.state);
           publishScopeState(scope);
           continue;
         }
@@ -253,6 +270,7 @@ export const useTabSwitchTracker = ({
         if (result.kind === 'ok') {
           retryAttempt = 0;
           scope.apiStatus = 'supported';
+          scope.provisionalLock = false;
           const latestStorage = readLocalTabSwitchState(scope.contestId, scope.userId);
           const merged = mergeLocalTabSwitchStates(scope.state, latestStorage);
           scope.state = reconcileServerSnapshot(
@@ -265,7 +283,8 @@ export const useTabSwitchTracker = ({
             scope.maxSwitches,
             head.observation_id
           );
-          writeLocalTabSwitchState(scope.contestId, scope.userId, scope.state);
+          removePendingTabSwitchObservation(scope.contestId, scope.userId, head.generation, head.observation_id);
+          writeLocalTabSwitchSnapshot(scope.contestId, scope.userId, scope.state);
           publishScopeState(scope);
 
           const nowTerminated = isEffectivelyTerminated(scope.state, scope.apiStatus, scope.maxSwitches);
@@ -280,6 +299,7 @@ export const useTabSwitchTracker = ({
         if (result.kind === 'stale_generation') {
           retryAttempt = 0;
           scope.apiStatus = 'supported';
+          scope.provisionalLock = false;
           const latestStorage = readLocalTabSwitchState(scope.contestId, scope.userId);
           const merged = mergeLocalTabSwitchStates(scope.state, latestStorage);
           if (result.data && typeof result.data.generation === 'number') {
@@ -293,7 +313,8 @@ export const useTabSwitchTracker = ({
               scope.maxSwitches,
               head.observation_id
             );
-            writeLocalTabSwitchState(scope.contestId, scope.userId, scope.state);
+            removePendingTabSwitchObservation(scope.contestId, scope.userId, head.generation, head.observation_id);
+            writeLocalTabSwitchSnapshot(scope.contestId, scope.userId, scope.state);
             publishScopeState(scope);
 
             const nowTerminated = isEffectivelyTerminated(scope.state, scope.apiStatus, scope.maxSwitches);
@@ -303,8 +324,9 @@ export const useTabSwitchTracker = ({
               setIsWarningModalOpen(false);
             }
           } else {
-            scope.state = dropStalePendingEvents(merged, head.generation);
-            writeLocalTabSwitchState(scope.contestId, scope.userId, scope.state);
+            scope.state = dropStalePendingEvents(merged, head.generation, head.observation_id);
+            removePendingTabSwitchObservation(scope.contestId, scope.userId, head.generation, head.observation_id);
+            writeLocalTabSwitchSnapshot(scope.contestId, scope.userId, scope.state);
             publishScopeState(scope);
             await reconcileScope(scope);
           }
@@ -313,6 +335,7 @@ export const useTabSwitchTracker = ({
 
         if (result.kind === 'unsupported') {
           scope.apiStatus = 'unsupported';
+          scope.provisionalLock = false;
           publishScopeState(scope);
           setIsWarningModalOpen(false);
           break;
@@ -320,6 +343,7 @@ export const useTabSwitchTracker = ({
 
         if (result.kind === 'unauthorized') {
           scope.apiStatus = 'unauthorized';
+          scope.provisionalLock = false;
           publishScopeState(scope);
           break;
         }
@@ -327,12 +351,15 @@ export const useTabSwitchTracker = ({
         if (result.kind === 'invalid') {
           const latestStorage = readLocalTabSwitchState(scope.contestId, scope.userId);
           const merged = mergeLocalTabSwitchStates(scope.state, latestStorage);
+          const nextAcked = Array.from(new Set([...(merged.ackedIds ?? []), head.observation_id])).slice(-32);
           scope.state = {
             ...merged,
             pendingEvents: merged.pendingEvents.filter((event) => event.observation_id !== head.observation_id),
+            ackedIds: nextAcked,
             updatedAt: Math.max(Date.now(), merged.updatedAt + 1),
           };
-          writeLocalTabSwitchState(scope.contestId, scope.userId, scope.state);
+          removePendingTabSwitchObservation(scope.contestId, scope.userId, head.generation, head.observation_id);
+          writeLocalTabSwitchSnapshot(scope.contestId, scope.userId, scope.state);
           publishScopeState(scope);
           await reconcileScope(scope);
           continue;
@@ -392,6 +419,7 @@ export const useTabSwitchTracker = ({
       pendingReconcileFollowUp: false,
       initialReconcilePromise,
       wakeFlush: null,
+      provisionalLock: false,
     };
 
     activeScopeRef.current = scope;
@@ -433,8 +461,11 @@ export const useTabSwitchTracker = ({
 
     const handleStorage = (event: StorageEvent) => {
       if (!isScopeActive(scope)) return;
-      const key = getTabSwitchStateKey(scope.contestId, scope.userId);
-      if (event.key !== null && event.key !== key) return;
+      const stateKey = getTabSwitchStateKey(scope.contestId, scope.userId);
+      const obsPrefix = getPendingObservationPrefix(scope.contestId, scope.userId);
+      if (event.key !== null && event.key !== stateKey && !event.key.startsWith(obsPrefix)) {
+        return;
+      }
 
       const prevTerminated = isEffectivelyTerminated(scope.state, scope.apiStatus, scope.maxSwitches);
       const fromStorage = readLocalTabSwitchState(scope.contestId, scope.userId);
@@ -518,7 +549,10 @@ export const useTabSwitchTracker = ({
       if (next === merged) return;
 
       scope.state = next;
-      writeLocalTabSwitchState(scope.contestId, scope.userId, next);
+      const added = next.pendingEvents[next.pendingEvents.length - 1];
+      if (added) {
+        writePendingTabSwitchObservation(scope.contestId, scope.userId, added);
+      }
       publishScopeState(scope);
       shouldNotifyOnReturn = true;
 
@@ -535,11 +569,16 @@ export const useTabSwitchTracker = ({
       if (scope.apiStatus === 'unsupported') return;
 
       const count = getDisplayedTabSwitchCount(scope.state, scope.maxSwitches);
+      const pending = getPendingTabSwitchCount(scope.state);
       const terminatedNow = isEffectivelyTerminated(scope.state, scope.apiStatus, scope.maxSwitches);
       setIsWarningModalOpen(true);
 
       if (terminatedNow) {
         toast.error(`Session Locked: Maximum ${scope.maxSwitches} tab switches reached.`);
+      } else if (pending > 0) {
+        toast.warn(
+          `Tab switch detected (Confirmed: ${count}/${scope.maxSwitches}, +${pending} syncing).`
+        );
       } else {
         toast.warn(
           `Tab switch detected (${count}/${scope.maxSwitches})! ${Math.max(0, scope.maxSwitches - count)} switches remaining before contest lock.`
@@ -636,19 +675,9 @@ export const useTabSwitchTracker = ({
   const notifyServerTermination = useCallback(() => {
     const scope = activeScopeRef.current;
     if (!scope || !isScopeActive(scope)) return;
-    scope.apiStatus = 'supported';
-    scope.state = reconcileServerSnapshot(
-      scope.state,
-      {
-        tab_switch_count: Math.max(scope.state.serverCount, scope.maxSwitches),
-        is_tab_switch_terminated: true,
-        generation: scope.state.resetGeneration,
-      },
-      scope.maxSwitches
-    );
-    writeLocalTabSwitchState(scope.contestId, scope.userId, scope.state);
+    // Keep only a non-persisted provisional lock until GET /session-status returns an authoritative snapshot.
+    scope.provisionalLock = true;
     publishScopeState(scope);
-    setIsWarningModalOpen(true);
     scope.wakeFlush?.();
     void reconcileScope(scope, true);
   }, [isScopeActive, publishScopeState, reconcileScope]);

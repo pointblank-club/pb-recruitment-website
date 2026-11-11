@@ -4,6 +4,7 @@ import { AlertTriangle, ShieldAlert, X } from 'lucide-react';
 interface TabSwitchWarningModalProps {
   isOpen: boolean;
   count: number;
+  pendingCount?: number;
   maxSwitches?: number;
   isTerminated: boolean;
   isServerConfirmed?: boolean;
@@ -14,6 +15,7 @@ interface TabSwitchWarningModalProps {
 export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
   isOpen,
   count,
+  pendingCount = 0,
   maxSwitches = 5,
   isTerminated,
   isServerConfirmed = true,
@@ -131,7 +133,8 @@ export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
                   Tab Switch Detected
                 </h3>
                 <p className="text-xs text-gray-400">
-                  Warning {count} of {maxSwitches}
+                  {count > 0 ? `Warning ${count} of ${maxSwitches}` : 'Violation Recorded'}
+                  {pendingCount > 0 ? ` (${pendingCount} pending sync)` : ''}
                 </p>
               </div>
             </div>
@@ -139,12 +142,17 @@ export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
             <div className="space-y-3 mb-6 text-sm text-gray-300">
               <div className="bg-amber-950/40 border border-amber-800/50 rounded-lg p-3 text-amber-200 text-xs">
                 You navigated away from the contest tab. You have <strong>{remaining} {remaining === 1 ? 'warning' : 'warnings'} remaining</strong> before your session is locked.
+                {pendingCount > 0 && (
+                  <span className="block mt-1 text-amber-300/90">
+                    {pendingCount} {pendingCount === 1 ? 'tab switch is' : 'tab switches are'} queued for server confirmation.
+                  </span>
+                )}
               </div>
 
               {/* Progress visualizer */}
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs text-gray-400">
-                  <span>Violations</span>
+                  <span>Confirmed Violations</span>
                   <span className="font-mono font-semibold text-amber-400">{count}/{maxSwitches}</span>
                 </div>
                 <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden flex gap-1 p-0.5">

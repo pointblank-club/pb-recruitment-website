@@ -75,6 +75,7 @@ export interface LocalTabSwitchState {
   isTerminated: boolean;
   resetGeneration: number;
   pendingEvents: PendingTabSwitchEvent[];
+  ackedIds?: string[];
   hasServerSnapshot: boolean;
   updatedAt: number;
 }
@@ -84,12 +85,23 @@ export const createEmptyTabSwitchState = (): LocalTabSwitchState => ({
   isTerminated: false,
   resetGeneration: 0,
   pendingEvents: [],
+  ackedIds: [],
   hasServerSnapshot: false,
   updatedAt: 0,
 });
 
 export const getTabSwitchStateKey = (contestId: string, userId: string): string =>
   `contest_tab_state_${contestId}_${userId}`;
+
+export const getPendingObservationPrefix = (contestId: string, userId: string): string =>
+  `contest_tab_obs_${contestId}_${userId}_`;
+
+export const getPendingObservationKey = (
+  contestId: string,
+  userId: string,
+  generation: number,
+  observationId: string
+): string => `${getPendingObservationPrefix(contestId, userId)}${generation}_${observationId}`;
 
 const toNonNegInt = (value: unknown, fallback = 0): number => {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
@@ -109,6 +121,17 @@ export const normalizeTabSwitchState = (raw: unknown): LocalTabSwitchState => {
   const hasServerSnapshot = Boolean(obj.hasServerSnapshot);
   const updatedAt = toNonNegInt(obj.updatedAt, 0);
 
+  const seenAcked = new Set<string>();
+  const ackedIds: string[] = [];
+  if (Array.isArray(obj.ackedIds)) {
+    for (const id of obj.ackedIds) {
+      if (typeof id === 'string' && id.length > 0 && !seenAcked.has(id)) {
+        seenAcked.add(id);
+        ackedIds.push(id);
+      }
+    }
+  }
+
   const seenIds = new Set<string>();
   const pendingEvents: PendingTabSwitchEvent[] = [];
   if (Array.isArray(obj.pendingEvents) && !isTerminated) {
@@ -117,6 +140,7 @@ export const normalizeTabSwitchState = (raw: unknown): LocalTabSwitchState => {
       const evt = item as Record<string, unknown>;
       const rawId = evt.observation_id ?? evt.event_id;
       if (typeof rawId !== 'string' || rawId.length === 0) continue;
+      if (seenAcked.has(rawId)) continue;
       const evtGen = toNonNegInt(evt.generation ?? evt.reset_generation, -1);
       if (evtGen !== resetGeneration) continue;
       if (seenIds.has(rawId)) continue;
@@ -134,6 +158,7 @@ export const normalizeTabSwitchState = (raw: unknown): LocalTabSwitchState => {
     isTerminated,
     resetGeneration,
     pendingEvents,
+    ackedIds: ackedIds.slice(-32),
     hasServerSnapshot,
     updatedAt,
   };
@@ -149,13 +174,155 @@ const clearLegacyTabSwitchKeys = (contestId: string, userId: string): void => {
   }
 };
 
+const listPendingObservationStorageKeys = (contestId: string, userId: string): string[] => {
+  const prefix = getPendingObservationPrefix(contestId, userId);
+  const matched: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(prefix)) {
+      matched.push(key);
+    }
+  }
+  return matched;
+};
+
+const sortPendingEvents = (events: PendingTabSwitchEvent[]): PendingTabSwitchEvent[] =>
+  [...events].sort((a, b) =>
+    a.created_at !== b.created_at
+      ? a.created_at - b.created_at
+      : a.observation_id.localeCompare(b.observation_id)
+  );
+
 export const readLocalTabSwitchState = (contestId: string, userId: string): LocalTabSwitchState => {
   try {
     const raw = localStorage.getItem(getTabSwitchStateKey(contestId, userId));
-    if (!raw) return createEmptyTabSwitchState();
-    return normalizeTabSwitchState(JSON.parse(raw));
+    const base = raw ? normalizeTabSwitchState(JSON.parse(raw)) : createEmptyTabSwitchState();
+    if (base.isTerminated) {
+      return { ...base, pendingEvents: [] };
+    }
+
+    const ackedSet = new Set(base.ackedIds ?? []);
+    const byId = new Map<string, PendingTabSwitchEvent>();
+    for (const evt of base.pendingEvents) {
+      if (evt.generation === base.resetGeneration && !ackedSet.has(evt.observation_id)) {
+        byId.set(evt.observation_id, evt);
+      }
+    }
+
+    for (const key of listPendingObservationStorageKeys(contestId, userId)) {
+      const obsRaw = localStorage.getItem(key);
+      if (!obsRaw) continue;
+      try {
+        const parsed = JSON.parse(obsRaw) as Record<string, unknown>;
+        const rawId = parsed.observation_id ?? parsed.event_id;
+        if (typeof rawId !== 'string' || rawId.length === 0) continue;
+        if (ackedSet.has(rawId)) continue;
+        const obsGen = toNonNegInt(parsed.generation ?? parsed.reset_generation, -1);
+        if (obsGen !== base.resetGeneration) continue;
+        byId.set(rawId, {
+          observation_id: rawId,
+          generation: obsGen,
+          created_at: toNonNegInt(parsed.created_at, 0),
+        });
+      } catch {
+        // Skip malformed individual observation entry
+      }
+    }
+
+    return {
+      ...base,
+      pendingEvents: sortPendingEvents(Array.from(byId.values())),
+    };
   } catch {
     return createEmptyTabSwitchState();
+  }
+};
+
+export const writePendingTabSwitchObservation = (
+  contestId: string,
+  userId: string,
+  event: PendingTabSwitchEvent
+): boolean => {
+  try {
+    const key = getPendingObservationKey(contestId, userId, event.generation, event.observation_id);
+    localStorage.setItem(key, JSON.stringify({
+      observation_id: event.observation_id,
+      generation: event.generation,
+      created_at: toNonNegInt(event.created_at, 0),
+    }));
+    clearLegacyTabSwitchKeys(contestId, userId);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const removePendingTabSwitchObservation = (
+  contestId: string,
+  userId: string,
+  generation: number,
+  observationId: string
+): boolean => {
+  try {
+    localStorage.removeItem(getPendingObservationKey(contestId, userId, generation, observationId));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const clearStaleTabSwitchObservations = (
+  contestId: string,
+  userId: string,
+  minGeneration: number,
+  clearAll: boolean
+): void => {
+  try {
+    for (const key of listPendingObservationStorageKeys(contestId, userId)) {
+      if (clearAll) {
+        localStorage.removeItem(key);
+        continue;
+      }
+      const suffix = key.slice(getPendingObservationPrefix(contestId, userId).length);
+      const sepIdx = suffix.indexOf('_');
+      const keyGen = sepIdx > 0 ? Number(suffix.slice(0, sepIdx)) : NaN;
+      if (!Number.isFinite(keyGen) || keyGen < minGeneration) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Ignore storage failure
+  }
+};
+
+// Persists only snapshot metadata + prunes stale observation keys; never overwrites sibling tabs' active UUID keys.
+export const writeLocalTabSwitchSnapshot = (
+  contestId: string,
+  userId: string,
+  state: LocalTabSwitchState
+): boolean => {
+  try {
+    const normalized = normalizeTabSwitchState(state);
+    const ackedSet = new Set(normalized.ackedIds ?? []);
+    const snapshotOnly = {
+      serverCount: normalized.serverCount,
+      isTerminated: normalized.isTerminated,
+      resetGeneration: normalized.resetGeneration,
+      ackedIds: normalized.ackedIds,
+      hasServerSnapshot: normalized.hasServerSnapshot,
+      updatedAt: normalized.updatedAt,
+    };
+    localStorage.setItem(getTabSwitchStateKey(contestId, userId), JSON.stringify(snapshotOnly));
+    clearStaleTabSwitchObservations(contestId, userId, normalized.resetGeneration, normalized.isTerminated);
+    if (!normalized.isTerminated && ackedSet.size > 0) {
+      for (const id of ackedSet) {
+        localStorage.removeItem(getPendingObservationKey(contestId, userId, normalized.resetGeneration, id));
+      }
+    }
+    clearLegacyTabSwitchKeys(contestId, userId);
+    return true;
+  } catch {
+    return false;
   }
 };
 
@@ -166,9 +333,15 @@ export const writeLocalTabSwitchState = (
 ): boolean => {
   try {
     const normalized = normalizeTabSwitchState(state);
-    localStorage.setItem(getTabSwitchStateKey(contestId, userId), JSON.stringify(normalized));
-    clearLegacyTabSwitchKeys(contestId, userId);
-    return true;
+    for (const key of listPendingObservationStorageKeys(contestId, userId)) {
+      localStorage.removeItem(key);
+    }
+    if (!normalized.isTerminated) {
+      for (const evt of normalized.pendingEvents) {
+        writePendingTabSwitchObservation(contestId, userId, evt);
+      }
+    }
+    return writeLocalTabSwitchSnapshot(contestId, userId, normalized);
   } catch {
     return false;
   }

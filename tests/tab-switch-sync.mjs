@@ -23,6 +23,10 @@ const createStorageStub = () => {
   const store = new Map();
   let throwOnSet = false;
   return {
+    get length() {
+      return store.size;
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
     getItem: (key) => (store.has(key) ? store.get(key) : null),
     setItem: (key, val) => {
       if (throwOnSet) throw new Error('Storage disabled');
@@ -301,6 +305,10 @@ const resetSimBackend = () => {
   simBackend = {
     mode: 'ok', // 'ok' | 'unsupported' | 'offline' | 'dropFirstNReports'
     failReportsRemaining: 0,
+    holdNextTabSwitchResponse: false,
+    releaseHeldPost: null,
+    holdNextSessionStatusResponse: false,
+    releaseHeldSessionStatus: null,
     sessions: new Map(), // key `${contestId}:${userId}` -> { count, terminated, gen, events: Set }
     requests: [],
   };
@@ -340,6 +348,18 @@ const axiosAdapter = async (config) => {
   const s = simBackend.sessions.get(key);
 
   if (endpoint === 'session-status') {
+    if (simBackend.holdNextSessionStatusResponse) {
+      simBackend.holdNextSessionStatusResponse = false;
+      await new Promise((resolve) => {
+        simBackend.releaseHeldSessionStatus = () => {
+          simBackend.releaseHeldSessionStatus = null;
+          resolve();
+        };
+      });
+      if (config.signal?.aborted) {
+        throw new (require('axios').CanceledError)('aborted');
+      }
+    }
     return {
       status: 200,
       data: {
@@ -385,6 +405,18 @@ const axiosAdapter = async (config) => {
     s.count = Math.min(5, s.count + body.count);
     if (s.count >= 5) s.terminated = true;
   }
+  if (simBackend.holdNextTabSwitchResponse) {
+    simBackend.holdNextTabSwitchResponse = false;
+    await new Promise((resolve) => {
+      simBackend.releaseHeldPost = () => {
+        simBackend.releaseHeldPost = null;
+        resolve();
+      };
+    });
+    if (config.signal?.aborted) {
+      throw new (require('axios').CanceledError)('aborted');
+    }
+  }
   return {
     status: 200,
     data: {
@@ -414,7 +446,8 @@ const { storage, sync, api, createHookModule } = loadModules({ authState, axiosA
   let state = storage.createEmptyTabSwitchState();
   state = sync.enqueueLocalTabSwitch(state, 5, 100, 'obs-1');
   state = sync.enqueueLocalTabSwitch(state, 5, 101, 'obs-2');
-  assert.equal(sync.getDisplayedTabSwitchCount(state, 5), 2);
+  assert.equal(sync.getDisplayedTabSwitchCount(state, 5), 0);
+  assert.equal(sync.getPendingTabSwitchCount(state), 2);
 
   // Ack obs-1 even if serverCount reached 3 (from another device)
   state = sync.reconcileServerSnapshot(state, {
@@ -424,7 +457,24 @@ const { storage, sync, api, createHookModule } = loadModules({ authState, axiosA
   }, 5, 'obs-1', 102);
   assert.equal(state.serverCount, 3);
   assert.deepEqual(Array.from(state.pendingEvents, (e) => e.observation_id), ['obs-2']);
-  assert.equal(sync.getDisplayedTabSwitchCount(state, 5), 4);
+  assert.deepEqual(state.ackedIds, ['obs-1']);
+  assert.equal(sync.getDisplayedTabSwitchCount(state, 5), 3);
+  assert.equal(sync.getPendingTabSwitchCount(state), 1);
+  assert.equal(sync.isEffectivelyTerminated(state, 'supported', 5), false);
+
+  // Already-acked obs-1 must not re-enqueue in the same generation
+  const afterDupEnqueue = sync.enqueueLocalTabSwitch(state, 5, 102, 'obs-1');
+  assert.deepEqual(Array.from(afterDupEnqueue.pendingEvents, (e) => e.observation_id), ['obs-2']);
+
+  // Server reaching 4 while obs-2 ACK is still pending must stay below lockout (no 4+1=5 lock!)
+  const inFlightFourthState = sync.reconcileServerSnapshot(state, {
+    tab_switch_count: 4,
+    is_tab_switch_terminated: false,
+    generation: 0,
+  }, 5, undefined, 102);
+  assert.equal(sync.getDisplayedTabSwitchCount(inFlightFourthState, 5), 4);
+  assert.equal(sync.getPendingTabSwitchCount(inFlightFourthState), 1);
+  assert.equal(sync.isEffectivelyTerminated(inFlightFourthState, 'supported', 5), false);
 
   // Delayed zero response at gen=0 cannot wipe serverCount=3
   state = sync.reconcileServerSnapshot(state, {
@@ -667,7 +717,9 @@ const { storage, sync, api, createHookModule } = loadModules({ authState, axiosA
   env.setVisibility('hidden');
   env.setVisibility('visible');
   await flushMicrotasks();
-  assert.equal(mountedNoStorage.current.tabSwitchCount, 2, 'In-memory tracking continues when localStorage throws');
+  assert.equal(mountedNoStorage.current.tabSwitchCount, 0, 'Confirmed count remains 0 offline');
+  assert.equal(mountedNoStorage.current.pendingSyncCount, 2, 'In-memory pending queue continues when localStorage throws');
+  assert.equal(mountedNoStorage.current.isTerminated, false);
 
   // Recover online after offline switches -> converges with server
   simBackend.mode = 'ok';
@@ -675,6 +727,7 @@ const { storage, sync, api, createHookModule } = loadModules({ authState, axiosA
   await delay(60);
   await flushMicrotasks();
   assert.equal(simBackend.sessions.get('c1:u1').count, 2, 'Online event resumes and flushes queued offline events');
+  assert.equal(mountedNoStorage.current.tabSwitchCount, 2);
   assert.equal(mountedNoStorage.current.pendingSyncCount, 0);
 
   env.localStorage._setThrowOnWrite(false);
@@ -826,9 +879,218 @@ const { storage, sync, api, createHookModule } = loadModules({ authState, axiosA
   });
   mounted.current.notifyServerTermination();
   await flushMicrotasks();
+  assert.equal(mounted.current.isTerminated, true, 'Immediate provisional UI lock while confirming');
+  assert.equal(mounted.current.isServerConfirmedTermination, false);
+  await delay(20);
+  await flushMicrotasks();
   assert.equal(mounted.current.isTerminated, true);
   assert.equal(mounted.current.isServerConfirmedTermination, true);
   assert.equal(mounted.current.isWarningModalOpen, true);
+
+  mounted.unmount();
+}
+
+// ─── Test 10: Late 403 Submission Rejection Must Not Poison Reset Generation ──────────
+{
+  resetSimBackend();
+  env.localStorage.clear();
+  authState.currentUser.uid = 'u1';
+  simBackend.sessions.set('c1:u1', { count: 0, terminated: false, gen: 1, events: new Set() });
+
+  const mounted = mountHook(createHookModule, {
+    contestId: 'c1',
+    userId: 'u1',
+    isSessionActive: true,
+    isCountingEnabled: true,
+    maxSwitches: 5,
+  });
+  await delay(20);
+  await flushMicrotasks();
+  assert.equal(mounted.current.tabSwitchCount, 0);
+  assert.equal(mounted.current.isTerminated, false);
+
+  // Stale submission 403 from before reset arrives after client already reconciled gen=1
+  simBackend.holdNextSessionStatusResponse = true;
+  mounted.current.notifyServerTermination();
+  await delay(10);
+  await flushMicrotasks();
+
+  // Provisional UI lock is strictly in-memory & never poisons localStorage
+  assert.equal(mounted.current.isTerminated, true);
+  assert.equal(mounted.current.isServerConfirmedTermination, false);
+  assert.equal(mounted.current.tabSwitchCount, 0);
+  const storedDuringProvisional = storage.readLocalTabSwitchState('c1', 'u1');
+  assert.equal(storedDuringProvisional.serverCount, 0, 'Must never fabricate count 5 into localStorage');
+  assert.equal(storedDuringProvisional.isTerminated, false, 'Must never persist fake termination from submission 403');
+  assert.equal(storedDuringProvisional.resetGeneration, 1);
+
+  // Authoritative GET /session-status arrives (still gen=1, count=0, terminated=false) -> unlocks immediately
+  assert.equal(typeof simBackend.releaseHeldSessionStatus, 'function');
+  simBackend.releaseHeldSessionStatus();
+  await delay(20);
+  await flushMicrotasks();
+
+  assert.equal(mounted.current.isTerminated, false, 'Reconciling gen=1 count=0 must clear provisional lock');
+  assert.equal(mounted.current.isServerConfirmedTermination, false);
+  assert.equal(mounted.current.tabSwitchCount, 0);
+  assert.equal(storage.readLocalTabSwitchState('c1', 'u1').isTerminated, false);
+
+  mounted.unmount();
+}
+
+// ─── Test 11: Delayed 4th-Event ACK Must Not Trigger False 5/5 Lock ─────────────────
+{
+  resetSimBackend();
+  env.localStorage.clear();
+  authState.currentUser.uid = 'u1';
+  simBackend.sessions.set('c1:u1', {
+    count: 3,
+    terminated: false,
+    gen: 0,
+    events: new Set(['0:o1', '0:o2', '0:o3']),
+  });
+
+  const mounted = mountHook(createHookModule, {
+    contestId: 'c1',
+    userId: 'u1',
+    isSessionActive: true,
+    isCountingEnabled: true,
+    maxSwitches: 5,
+  });
+  await delay(20);
+  await flushMicrotasks();
+  assert.equal(mounted.current.tabSwitchCount, 3);
+  assert.equal(mounted.current.isTerminated, false);
+
+  // Hold the HTTP 200 ACK for the 4th tab switch after server commits count=4
+  simBackend.holdNextTabSwitchResponse = true;
+  env.setVisibility('hidden');
+  env.setVisibility('visible');
+  await delay(20);
+  await flushMicrotasks();
+  assert.equal(simBackend.sessions.get('c1:u1').count, 4, '4th event committed on server while ACK held');
+  assert.equal(typeof simBackend.releaseHeldPost, 'function');
+
+  // Reconcile GET /session-status while 4th POST ACK is still in flight
+  env.setFocus(true);
+  await delay(20);
+  await flushMicrotasks();
+
+  assert.equal(mounted.current.tabSwitchCount, 4, 'Confirmed count must be 4, never 4 + 1 = 5');
+  assert.equal(mounted.current.pendingSyncCount, 1, 'Pending unacknowledged count stays separate');
+  assert.equal(mounted.current.isTerminated, false, 'Must NOT lock workspace at 4/5');
+  assert.equal(mounted.current.isServerConfirmedTermination, false);
+
+  // Release 4th POST ACK -> settles to confirmed=4, pending=0, terminated=false
+  simBackend.releaseHeldPost();
+  await delay(20);
+  await flushMicrotasks();
+  assert.equal(mounted.current.tabSwitchCount, 4);
+  assert.equal(mounted.current.pendingSyncCount, 0);
+  assert.equal(mounted.current.isTerminated, false);
+
+  mounted.unmount();
+}
+
+// ─── Test 12: Concurrent Tabs Persist & Merge Queued Violations Without Drops ──────
+{
+  resetSimBackend();
+  env.localStorage.clear();
+  authState.currentUser.uid = 'u1';
+
+  // 1) Pure storage + merge checks with independent per-UUID keys & ackedIds tombstones
+  storage.writePendingTabSwitchObservation('c1', 'u1', {
+    observation_id: 'obs-A',
+    generation: 0,
+    created_at: 100,
+  });
+  storage.writePendingTabSwitchObservation('c1', 'u1', {
+    observation_id: 'obs-B',
+    generation: 0,
+    created_at: 99, // even an older timestamp from sibling tab must survive
+  });
+  const combined = storage.readLocalTabSwitchState('c1', 'u1');
+  assert.deepEqual(
+    Array.from(combined.pendingEvents, (e) => e.observation_id).sort(),
+    ['obs-A', 'obs-B']
+  );
+
+  const tabAState = {
+    serverCount: 0,
+    isTerminated: false,
+    resetGeneration: 0,
+    pendingEvents: [{ observation_id: 'obs-A', generation: 0, created_at: 100 }],
+    ackedIds: [],
+    hasServerSnapshot: true,
+    updatedAt: 100,
+  };
+  const tabBState = {
+    serverCount: 0,
+    isTerminated: false,
+    resetGeneration: 0,
+    pendingEvents: [{ observation_id: 'obs-B', generation: 0, created_at: 150 }],
+    ackedIds: [],
+    hasServerSnapshot: true,
+    updatedAt: 150,
+  };
+  const mergedConcurrent = sync.mergeLocalTabSwitchStates(tabAState, tabBState);
+  assert.deepEqual(
+    Array.from(mergedConcurrent.pendingEvents, (e) => e.observation_id).sort(),
+    ['obs-A', 'obs-B'],
+    'Concurrent tab states must union distinct unacked observations regardless of updatedAt'
+  );
+
+  const tabBAckedA = {
+    ...tabBState,
+    serverCount: 1,
+    ackedIds: ['obs-A'],
+    updatedAt: 160,
+  };
+  const mergedWithAck = sync.mergeLocalTabSwitchStates(tabAState, tabBAckedA);
+  assert.deepEqual(
+    Array.from(mergedWithAck.pendingEvents, (e) => e.observation_id),
+    ['obs-B'],
+    'Merged state must NOT resurrect an observation already acked by sibling tab'
+  );
+
+  // 2) Live mounted hook cross-tab concurrent offline queue -> reconnect flushes both A and B
+  env.localStorage.clear();
+  simBackend.mode = 'offline';
+  const mounted = mountHook(createHookModule, {
+    contestId: 'c1',
+    userId: 'u1',
+    isSessionActive: true,
+    isCountingEnabled: true,
+    maxSwitches: 5,
+  });
+  await delay(20);
+  await flushMicrotasks();
+
+  // Tab 1 queues observation A offline
+  env.setVisibility('hidden');
+  env.setVisibility('visible');
+  await flushMicrotasks();
+  assert.equal(mounted.current.pendingSyncCount, 1);
+
+  // Sibling Tab 2 queues observation B concurrently into its own UUID storage key
+  const obsB = { observation_id: 'tab2-obs-B', generation: 0, created_at: Date.now() };
+  assert.equal(storage.writePendingTabSwitchObservation('c1', 'u1', obsB), true);
+  const obsBKey = storage.getPendingObservationKey('c1', 'u1', obsB.generation, obsB.observation_id);
+  env.dispatchStorage(obsBKey);
+  await flushMicrotasks();
+
+  assert.equal(mounted.current.pendingSyncCount, 2, 'Tab 1 must see both its own and Tab 2 queued observations');
+  assert.equal(mounted.current.tabSwitchCount, 0);
+
+  // Come back online -> both obs-A and tab2-obs-B flush to server!
+  simBackend.mode = 'ok';
+  env.setOnline(true);
+  await delay(60);
+  await flushMicrotasks();
+
+  assert.equal(simBackend.sessions.get('c1:u1').count, 2, 'Both concurrent tab observations must reach the server');
+  assert.equal(mounted.current.tabSwitchCount, 2);
+  assert.equal(mounted.current.pendingSyncCount, 0);
 
   mounted.unmount();
 }
