@@ -4,9 +4,11 @@ import { toast } from 'react-toastify';
 import { ContestHeader } from '../components/ContestHeader';
 import { ContestParticipationGate } from '../components/ContestParticipationGate';
 import { EndContestModal } from '../components/EndContestModal';
+import { TabSwitchWarningModal } from '../components/TabSwitchWarningModal';
 import { useContest } from '../hooks/useContest';
+import { useTabSwitchTracker } from '../hooks/useTabSwitchTracker';
 import { useAuth } from '@/lib/AuthContext';
-import { getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
+import { getContestSubmitted, setContestSubmitted, getContestTerminatedByTabSwitch } from '@/lib/contestStorage';
 
 export interface ContestOutletContext {
   isLive: boolean;
@@ -32,6 +34,32 @@ export const ContestLayout = () => {
 
   const { contest, isLoading: isContestLoading, refetch } = useContest(contestId || '');
   const isLeaderboardPage = location.pathname.endsWith('/leaderboard');
+
+  const isLive = !!contest && Date.now() >= contest.start_time && Date.now() < contest.end_time;
+  const isContestEnded = contest ? (hasElapsedDeadline || Date.now() >= contest.end_time) : false;
+  const isTrackingActive = Boolean(
+    isLive && !isContestEnded && user?.uid && contest?.is_registered && !isLeaderboardPage
+  );
+
+  const {
+    tabSwitchCount,
+    isWarningModalOpen,
+    isTerminated: isTabSwitchTerminated,
+    closeWarningModal,
+    handleExitDueToTabSwitch,
+  } = useTabSwitchTracker({
+    contestId,
+    userId: user?.uid,
+    enabled: isTrackingActive,
+    maxSwitches: 5,
+    onTerminate: () => {
+      hasExitedRef.current = true;
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+      navigate(`/contest/${contestId}`, { replace: true });
+    },
+  });
 
   useEffect(() => {
     const handleBlur = () => setIsWindowFocused(false);
@@ -64,18 +92,25 @@ export const ContestLayout = () => {
       setHasElapsedDeadline(false);
     }
 
-    // Check if the user already ended this contest early on this device
+    // Check if the user already ended this contest early or was terminated due to tab switches
     // Only redirect if the contest is still currently running
     const isSubmittedEarly = Boolean(
       user?.uid && contestId && getContestSubmitted(contestId, user.uid)
     );
+    const isTerminatedByTabSwitch = Boolean(
+      user?.uid && contestId && getContestTerminatedByTabSwitch(contestId, user.uid)
+    );
 
-    if (isSubmittedEarly && !hasExitedRef.current && !isLeaderboardPage && Date.now() < contest.end_time) {
+    if ((isSubmittedEarly || isTerminatedByTabSwitch) && !hasExitedRef.current && !isLeaderboardPage && Date.now() < contest.end_time) {
       hasExitedRef.current = true;
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       }
-      toast.info("You have already ended this contest on this device.");
+      if (isTerminatedByTabSwitch) {
+        toast.error("Your contest session has ended because the tab switch limit was reached.");
+      } else {
+        toast.info("You have already ended this contest on this device.");
+      }
       navigate(`/contest/${contestId}`, { replace: true });
       return;
     }
@@ -223,12 +258,10 @@ export const ContestLayout = () => {
   }
 
   // Guests can browse ended contests; a live contest needs a login (the effect above sends upcoming ones to details).
-  const isLive = !!contest && Date.now() >= contest.start_time && Date.now() < contest.end_time;
   if (!user && isLive && !isLeaderboardPage) {
     return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}${location.hash}` }} />;
   }
 
-  const isContestEnded = contest ? (hasElapsedDeadline || Date.now() >= contest.end_time) : false;
   const isParticipating = !!user && !!contest?.is_registered && isLive && !isLeaderboardPage &&
     !hasExitedRef.current && !getContestSubmitted(contestId, user.uid);
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0;
@@ -242,6 +275,8 @@ export const ContestLayout = () => {
         contestId={contestId}
         onSubmitContest={canEnd ? handleOpenEndModal : undefined}
         isContestEnded={isContestEnded}
+        tabSwitchCount={isTrackingActive ? tabSwitchCount : undefined}
+        maxTabSwitches={5}
       />
       
       <div className="flex-1 min-h-0 overflow-auto flex flex-col">
@@ -277,6 +312,15 @@ export const ContestLayout = () => {
           </p>
         </div>
       )}
+
+      <TabSwitchWarningModal
+        isOpen={isTrackingActive && isWarningModalOpen}
+        count={tabSwitchCount}
+        maxSwitches={5}
+        isTerminated={isTabSwitchTerminated}
+        onAcknowledge={closeWarningModal}
+        onExitContest={handleExitDueToTabSwitch}
+      />
     </div>
   );
 };

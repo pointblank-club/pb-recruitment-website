@@ -2,7 +2,13 @@ import { adminApi } from "@/services/api/adminApi";
 import axios from "axios";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Code2 } from "lucide-react";
+import { Code2, RotateCcw } from "lucide-react";
+import { toast } from "react-toastify";
+import {
+  clearContestTabSwitches,
+  clearContestTerminatedByTabSwitch,
+  clearContestSubmitted,
+} from "@/lib/contestStorage";
 
 export interface Contestant {
   id: string;
@@ -11,6 +17,8 @@ export interface Contestant {
   status: "Active" | "Banned" | "Hidden";
   registrationDate: string;
   score: number;
+  tabSwitchCount?: number;
+  isTerminatedByTabSwitch?: boolean;
 }
 
 interface ContestantManagerProps {
@@ -24,6 +32,7 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [updatingMap, setUpdatingMap] = useState<Record<string, boolean>>({});
+  const [resettingMap, setResettingMap] = useState<Record<string, boolean>>({});
 
   const contestIdRef = React.useRef<string | null>(contestId);
   React.useEffect(() => {
@@ -32,6 +41,53 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
       contestIdRef.current = null;
     };
   }, [contestId]);
+
+  const handleResetTabSwitches = async (id: string) => {
+    const targetContestId = contestId;
+    const current = contestants.find((c) => c.id === id);
+    if (!current) return;
+
+    if (!confirm(`Are you sure you want to reset tab switch violations for ${current.name}? This will allow them to resume their contest session without losing any code drafts or submissions.`)) {
+      return;
+    }
+
+    setResettingMap((prev) => ({ ...prev, [id]: true }));
+
+    try {
+      await adminApi.resetContestantTabSwitches(targetContestId, id);
+      clearContestTabSwitches(targetContestId, id);
+      clearContestTerminatedByTabSwitch(targetContestId, id);
+      clearContestSubmitted(targetContestId, id);
+
+      if (contestIdRef.current === targetContestId) {
+        setContestants((prev) =>
+          prev.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  tabSwitchCount: 0,
+                  isTerminatedByTabSwitch: false,
+                }
+              : c
+          )
+        );
+        toast.success(`Tab violations reset for ${current.name}. Contestant can now resume.`);
+      }
+    } catch (err: unknown) {
+      console.error("Failed to reset tab switches:", err);
+      if (contestIdRef.current === targetContestId) {
+        alert("Failed to reset tab switches. Please try again.");
+      }
+    } finally {
+      if (contestIdRef.current === targetContestId) {
+        setResettingMap((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    }
+  };
 
   const handleStatusChange = async (id: string, newStatus: "Active" | "Banned" | "Hidden") => {
     const targetContestId = contestId;
@@ -151,7 +207,7 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                       {contestant.status}
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                     <div>
                       <span className="text-gray-500">Email:</span>
                       <p className="text-gray-300">{contestant.email}</p>
@@ -167,6 +223,23 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                     <div>
                       <span className="text-gray-500">Registered:</span>
                       <p className="text-gray-300">{contestant.registrationDate}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Tab Switches:</span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span
+                          className={`px-2 py-0.5 rounded text-xs font-semibold border ${
+                            (contestant.tabSwitchCount ?? 0) >= 5 || contestant.isTerminatedByTabSwitch
+                              ? "bg-red-900/60 text-red-300 border-red-700"
+                              : (contestant.tabSwitchCount ?? 0) > 0
+                              ? "bg-amber-900/60 text-amber-300 border-amber-700"
+                              : "bg-gray-900 text-gray-400 border-gray-700"
+                          }`}
+                        >
+                          {contestant.tabSwitchCount ?? 0} / 5
+                          {((contestant.tabSwitchCount ?? 0) >= 5 || contestant.isTerminatedByTabSwitch) && " (Terminated)"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -189,6 +262,20 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                       <option value="Banned">Banned</option>
                     </select>
                   </div>
+                  {((contestant.tabSwitchCount ?? 0) > 0 || contestant.isTerminatedByTabSwitch) && (
+                    <button
+                      type="button"
+                      disabled={Boolean(resettingMap[contestant.id])}
+                      onClick={() => handleResetTabSwitches(contestant.id)}
+                      className={`w-full flex items-center justify-center gap-1.5 bg-amber-700 hover:bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-semibold transition-colors shadow ${
+                        resettingMap[contestant.id] ? "opacity-50 cursor-wait" : ""
+                      }`}
+                      title="Reset tab violations and allow candidate to resume without losing code"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      {resettingMap[contestant.id] ? "Resetting..." : "Reset Tab Switches"}
+                    </button>
+                  )}
                   <button
                     onClick={() => navigate(`/admin/contest/${contestId}/submissions?${new URLSearchParams({ userId: contestant.id })}`)}
                     className="w-full flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-semibold transition-colors shadow"

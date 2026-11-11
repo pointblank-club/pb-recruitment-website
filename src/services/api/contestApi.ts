@@ -315,6 +315,36 @@ class ContestApiService {
       action: 'unregister',
     });
   }
+
+  async recordTabSwitch(
+    contestId: string,
+    count: number
+  ): Promise<{ tab_switch_count: number; is_terminated: boolean }> {
+    const response = await this.axiosInstance.post<{ tab_switch_count: number; is_terminated: boolean }>(
+      `/contests/${contestId}/tab-switch`,
+      { count }
+    );
+    return response.data;
+  }
+
+  async getContestSessionStatus(
+    contestId: string
+  ): Promise<ContestSessionStatus | null> {
+    try {
+      const response = await this.axiosInstance.get<ContestSessionStatus>(
+        `/contests/${contestId}/session-status`
+      );
+      return response.data;
+    } catch {
+      return null;
+    }
+  }
+}
+
+export interface ContestSessionStatus {
+  tab_switch_count: number;
+  is_tab_switch_terminated: boolean;
+  is_submitted?: boolean;
 }
 
 export interface SubmissionResponse {

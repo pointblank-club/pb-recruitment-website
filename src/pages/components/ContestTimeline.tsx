@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import axios from "axios";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, AlertTriangle } from "lucide-react";
 import type { Contest } from "@/models/contest";
 import { contestApi } from "@/services/api/contestApi";
 import { Popup } from "@/components/ui/popup";
@@ -12,6 +12,10 @@ import {
   getContestRegistered,
   setContestRegistered,
   removeContestRegistered,
+  getContestTerminatedByTabSwitch,
+  clearContestTabSwitches,
+  clearContestTerminatedByTabSwitch,
+  clearContestSubmitted,
 } from "@/lib/contestStorage";
 
 interface ContestTimelineProps {
@@ -169,11 +173,41 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
     }
   };
 
-  const canStart = contestStarted && isRegistered;
-  const canRegister = !isRegistered && contest.isRegistrationOpen();
-  const isSubmittedEarly = Boolean(
-    user?.uid && getContestSubmitted(contest.id, user.uid)
+  const [isTerminatedByTabSwitch, setIsTerminatedByTabSwitch] = useState<boolean>(() =>
+    Boolean(user?.uid && getContestTerminatedByTabSwitch(contest.id, user.uid))
   );
+  const [isSubmittedEarly, setIsSubmittedEarly] = useState<boolean>(() =>
+    Boolean(user?.uid && getContestSubmitted(contest.id, user.uid))
+  );
+
+  useEffect(() => {
+    setIsTerminatedByTabSwitch(Boolean(user?.uid && getContestTerminatedByTabSwitch(contest.id, user.uid)));
+    setIsSubmittedEarly(Boolean(user?.uid && getContestSubmitted(contest.id, user.uid)));
+
+    if (!user?.uid) return;
+    let cancelled = false;
+
+    contestApi.getContestSessionStatus(contest.id).then((session) => {
+      if (cancelled || !session) return;
+      if (!session.is_tab_switch_terminated && session.tab_switch_count === 0) {
+        clearContestTabSwitches(contest.id, user.uid);
+        clearContestTerminatedByTabSwitch(contest.id, user.uid);
+        clearContestSubmitted(contest.id, user.uid);
+        setIsTerminatedByTabSwitch(false);
+        setIsSubmittedEarly(false);
+      } else if (session.is_tab_switch_terminated) {
+        setIsTerminatedByTabSwitch(true);
+        setIsSubmittedEarly(true);
+      }
+    }).catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contest.id, user?.uid]);
+
+  const canStart = contestStarted && isRegistered && !isTerminatedByTabSwitch && !isSubmittedEarly;
+  const canRegister = !isRegistered && contest.isRegistrationOpen();
 
   const handleStartContest = () => {
     navigate(`/contests/${contest.id}/problems`);
@@ -249,8 +283,22 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
                 <span className="text-white normal-case font-bold">{eligibleYearsText}</span>
               </span>
             </div>
+            {isTerminatedByTabSwitch && !contestEnded && (
+              <div className="bg-red-950/40 border border-red-700/60 rounded-xl p-4 mb-6 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="text-red-300 font-semibold text-sm">Contest Session Terminated (Tab Switches Exceeded)</h4>
+                  <p className="text-gray-400 text-xs mt-1">
+                    Your session was terminated because 5 tab switches were detected. Your existing submissions and code drafts are preserved.
+                    If an administrator resets your violations, you will be able to resume immediately.
+                  </p>
+                </div>
+              </div>
+            )}
             <p className="text-gray-300 mb-6">
-              {isSubmittedEarly
+              {isTerminatedByTabSwitch
+                ? "Your contest session was ended due to exceeding the maximum allowed tab switches (5/5)."
+                : isSubmittedEarly
                 ? "You have already completed and submitted your test for this contest."
                 : contestEnded
                 ? "This contest has ended. You can view the problems and check out the final leaderboard."
@@ -275,6 +323,25 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
                   View Problems
                   <ChevronRight size={20} />
                 </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => navigate(`/contests/${contest.id}/leaderboard`)}
+                  className="py-3 px-6 rounded-lg font-bold text-lg bg-gray-900 border border-gray-700 text-gray-200 hover:text-white hover:border-gray-500 transition-all flex items-center justify-center gap-2"
+                >
+                  Leaderboard
+                </motion.button>
+              </div>
+            ) : isTerminatedByTabSwitch ? (
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  disabled
+                  className="flex-1 py-3 px-6 rounded-lg font-bold text-lg bg-red-950/60 border border-red-800 text-red-400 cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <AlertTriangle size={20} />
+                  Session Locked (5 Tab Switches)
+                </button>
                 <motion.button
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}

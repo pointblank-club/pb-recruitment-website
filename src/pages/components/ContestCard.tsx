@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Trophy } from "lucide-react";
 import type { Contest } from "@/models/contest";
 import { useAuth } from "@/lib/AuthContext";
-import { getContestRegistered, getContestSubmitted } from "@/lib/contestStorage";
+import { getContestRegistered, getContestSubmitted, getContestTerminatedByTabSwitch } from "@/lib/contestStorage";
 
 interface ContestCardProps {
   contest: Contest;
@@ -23,6 +23,9 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
   const isOngoing = contest.isContestOngoing();
   const isSubmittedEarly = Boolean(
     user?.uid && getContestSubmitted(contest.id, user.uid)
+  );
+  const isTerminatedByTabSwitch = Boolean(
+    user?.uid && getContestTerminatedByTabSwitch(contest.id, user.uid)
   );
 
   const handleEnterContest = (e: React.MouseEvent) => {
@@ -88,7 +91,7 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
             >
               View Problems
             </motion.button>
-          ) : isSubmittedEarly ? (
+          ) : (isSubmittedEarly || isTerminatedByTabSwitch) ? (
             <motion.button
               type="button"
               whileHover={{ scale: 1.02 }}
@@ -99,7 +102,7 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
               }}
               className="flex-1 py-2 px-4 rounded-lg font-semibold transition-all bg-gray-800 text-green-400 border border-green-500/30 hover:bg-gray-750"
             >
-              View Leaderboard
+              {isTerminatedByTabSwitch ? "Session Locked" : "View Leaderboard"}
             </motion.button>
           ) : isRegistered ? (
             isOngoing ? (

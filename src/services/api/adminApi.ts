@@ -16,6 +16,8 @@ export interface ContestRegistration {
   score?: number;
   hidden?: boolean;
   disqualified?: boolean;
+  tab_switch_count?: number;
+  is_tab_switch_terminated?: boolean;
 }
 
 export interface PlagiarismReport {
@@ -400,6 +402,16 @@ class AdminApiService {
       ? `/admin/contests/${contestId}/submissions/${submissionId}`
       : `/admin/submissions/${submissionId}`;
     const response = await this.axiosInstance.get<AdminSubmissionDetails>(url);
+    return response.data;
+  }
+
+  async resetContestantTabSwitches(
+    contestId: string,
+    userId: string
+  ): Promise<{ success: boolean; message: string }> {
+    const response = await this.axiosInstance.post<{ success: boolean; message: string }>(
+      `/admin/contests/${contestId}/contestants/${userId}/reset-tab-switches`
+    );
     return response.data;
   }
 }
