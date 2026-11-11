@@ -56,6 +56,9 @@ const AdminContestContestants: React.FC = () => {
               ? new Date(reg.registered_at * 1000).toLocaleDateString()
               : "N/A",
             score: reg.score ?? 0,
+            tabSwitchCount: reg.tab_switch_count ?? 0,
+            isTerminatedByTabSwitch: Boolean(reg.is_tab_switch_terminated),
+            resetGeneration: reg.reset_generation ?? 0,
           };
         });
 
