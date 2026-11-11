@@ -76,7 +76,9 @@ export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
                   Contest Session Locked
                 </h3>
                 <p className="text-xs text-gray-400">
-                  Maximum tab switches reached ({count}/{maxSwitches})
+                  {isServerConfirmed
+                    ? `Maximum tab switches reached (${count}/${maxSwitches})`
+                    : 'Verifying session lock status with server...'}
                 </p>
               </div>
             </div>
@@ -84,11 +86,17 @@ export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
             <div className="space-y-3 mb-6 text-sm text-gray-300">
               <div className="bg-red-950/40 border border-red-800/50 rounded-lg p-3 text-red-200 text-xs space-y-1">
                 <p>
-                  You have reached <strong>{count} tab switches</strong>. Your contest session is locked and further submissions are disabled.
+                  {isServerConfirmed ? (
+                    <>
+                      You have reached <strong>{count} tab switches</strong>. Your contest session is locked and further submissions are disabled.
+                    </>
+                  ) : (
+                    'Submissions are temporarily paused while confirming your session status with the server.'
+                  )}
                 </p>
                 {!isServerConfirmed && (
                   <p className="text-amber-300">
-                    Waiting for network connectivity to sync this session state with the server.
+                    Waiting for server confirmation before finalizing lock state.
                   </p>
                 )}
               </div>

@@ -305,6 +305,7 @@ const resetSimBackend = () => {
   simBackend = {
     mode: 'ok', // 'ok' | 'unsupported' | 'offline' | 'dropFirstNReports'
     failReportsRemaining: 0,
+    dropCommittedPostResponsesRemaining: 0,
     holdNextTabSwitchResponse: false,
     releaseHeldPost: null,
     holdNextSessionStatusResponse: false,
@@ -404,6 +405,10 @@ const axiosAdapter = async (config) => {
     s.events.add(dedupKey);
     s.count = Math.min(5, s.count + body.count);
     if (s.count >= 5) s.terminated = true;
+  }
+  if (simBackend.dropCommittedPostResponsesRemaining > 0) {
+    simBackend.dropCommittedPostResponsesRemaining--;
+    throw makeAxiosError(config, 503, { error: 'gateway response lost after commit' });
   }
   if (simBackend.holdNextTabSwitchResponse) {
     simBackend.holdNextTabSwitchResponse = false;
@@ -1091,6 +1096,65 @@ const { storage, sync, api, createHookModule } = loadModules({ authState, axiosA
   assert.equal(simBackend.sessions.get('c1:u1').count, 2, 'Both concurrent tab observations must reach the server');
   assert.equal(mounted.current.tabSwitchCount, 2);
   assert.equal(mounted.current.pendingSyncCount, 0);
+
+  mounted.unmount();
+}
+
+// ─── Test 13: Committed-But-Response-Lost 4th Report + Status GET Stays Unlocked ────
+{
+  resetSimBackend();
+  env.localStorage.clear();
+  authState.currentUser.uid = 'u1';
+  simBackend.sessions.set('c1:u1', {
+    count: 3,
+    terminated: false,
+    gen: 0,
+    events: new Set(['0:o1', '0:o2', '0:o3']),
+  });
+
+  const mounted = mountHook(createHookModule, {
+    contestId: 'c1',
+    userId: 'u1',
+    isSessionActive: true,
+    isCountingEnabled: true,
+    maxSwitches: 5,
+  });
+  await delay(20);
+  await flushMicrotasks();
+  assert.equal(mounted.current.tabSwitchCount, 3);
+  assert.equal(mounted.current.isTerminated, false);
+
+  // 4th report commits on server (3 -> 4), then its HTTP response is lost (503)
+  simBackend.dropCommittedPostResponsesRemaining = 1;
+  env.setVisibility('hidden');
+  env.setVisibility('visible');
+  await delay(30);
+  await flushMicrotasks();
+
+  assert.equal(simBackend.sessions.get('c1:u1').count, 4, '4th POST must have committed on server');
+  assert.equal(simBackend.sessions.get('c1:u1').terminated, false);
+  assert.equal(mounted.current.pendingSyncCount, 1, '4th observation remains pending while retry backoff waits');
+
+  // Subsequent GET /session-status returns 4/unlocked while the 4th observation is still pending
+  await mounted.current.reconcileNow();
+  await flushMicrotasks();
+
+  assert.equal(mounted.current.tabSwitchCount, 4, 'Display stays at server-confirmed 4 (never 4 + 1 = 5)');
+  assert.equal(mounted.current.pendingSyncCount, 1, 'Syncing indicator reflects 1 pending observation');
+  assert.equal(mounted.current.isTerminated, false, 'Session must remain UNLOCKED without server-confirmed termination');
+  assert.equal(mounted.current.isServerConfirmedTermination, false);
+
+  // Backoff retry completes with same observation_id -> deduplicates cleanly to count=4, pending=0
+  await delay(1150);
+  await flushMicrotasks();
+
+  const postRequests = simBackend.requests.filter((r) => r.endpoint === 'tab-switch');
+  assert.equal(postRequests.length, 2, '4th report should retry once after lost response');
+  assert.equal(postRequests[0].body.observation_id, postRequests[1].body.observation_id);
+  assert.equal(simBackend.sessions.get('c1:u1').count, 4, 'Retry deduplication keeps server count at 4');
+  assert.equal(mounted.current.tabSwitchCount, 4);
+  assert.equal(mounted.current.pendingSyncCount, 0);
+  assert.equal(mounted.current.isTerminated, false);
 
   mounted.unmount();
 }
