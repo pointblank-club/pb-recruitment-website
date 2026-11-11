@@ -1232,7 +1232,7 @@ const { storage, sync, api, createHookModule } = loadModules({ authState, axiosA
   assert.equal(mountedLoopCheck.current.pendingSyncCount, 0);
   mountedLoopCheck.unmount();
 
-  // C) Warning toast & modal remaining calculation must account for pending (offline/unconfirmed) switches
+  // C) Warning toast & modal remaining calculation must derive from confirmed count without double-counting pending
   resetSimBackend();
   env.localStorage.clear();
   toastCalls.length = 0;
@@ -1256,11 +1256,11 @@ const { storage, sync, api, createHookModule } = loadModules({ authState, axiosA
 
   const warnMessages = toastCalls.filter((t) => t.kind === 'warn').map((t) => t.m);
   assert.equal(warnMessages.length, 2);
-  assert.match(warnMessages[0], /4 switches remaining/, 'First offline switch leaves 4 remaining');
-  assert.match(warnMessages[1], /3 switches remaining/, 'Second offline switch leaves 3 remaining');
+  assert.match(warnMessages[0], /\+1 syncing\)\.\s*5 switches remaining/, 'Confirmed 0/5 with +1 syncing reports 5 remaining');
+  assert.match(warnMessages[1], /\+2 syncing\)\.\s*5 switches remaining/, 'Confirmed 0/5 with +2 syncing reports 5 remaining');
 
   const modalSrc = read('src/features/contests/components/TabSwitchWarningModal.tsx');
-  assert.match(modalSrc, /Math\.max\(0,\s*maxSwitches\s*-\s*\(count\s*\+\s*pendingCount\)\)/);
+  assert.match(modalSrc, /Math\.max\(0,\s*maxSwitches\s*-\s*count\)/);
   mountedOffline.unmount();
 }
 

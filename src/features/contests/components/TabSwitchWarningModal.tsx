@@ -65,7 +65,7 @@ export const TabSwitchWarningModal: React.FC<TabSwitchWarningModalProps> = ({
     return undefined;
   }, [isOpen]);
 
-  const remaining = Math.max(0, maxSwitches - (count + pendingCount));
+  const remaining = Math.max(0, maxSwitches - count);
 
   return (
     <dialog

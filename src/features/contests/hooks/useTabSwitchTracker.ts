@@ -586,7 +586,7 @@ export const useTabSwitchTracker = ({
 
       const count = getDisplayedTabSwitchCount(scope.state, scope.maxSwitches);
       const pending = getPendingTabSwitchCount(scope.state);
-      const remaining = Math.max(0, scope.maxSwitches - (count + pending));
+      const remaining = Math.max(0, scope.maxSwitches - count);
       const terminatedNow = isEffectivelyTerminated(scope.state, scope.apiStatus, scope.maxSwitches);
       setIsWarningModalOpen(true);
 
