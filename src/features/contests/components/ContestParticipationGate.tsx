@@ -34,7 +34,7 @@ export const ContestParticipationGate = ({
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const suspendedRef = useRef(suspended);
   suspendedRef.current = suspended;
-  const [hasEntered, setHasEntered] = useState(false);
+  const [hasEntered, setHasEntered] = useState(() => !!document.fullscreenElement);
   const [isFullscreen, setIsFullscreen] = useState(() => !!document.fullscreenElement);
   const [demoWithoutFullscreen, setDemoWithoutFullscreen] = useState(false);
   const [requestError, setRequestError] = useState('');
