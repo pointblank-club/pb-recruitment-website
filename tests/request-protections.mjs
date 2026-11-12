@@ -245,6 +245,73 @@ await flush();
 assert.equal(requests.length, requestStart, 'expired token lookup must never reach the HTTP adapter');
 assert.equal(requestDeadlines.size, 0);
 auth.currentUser = user('synthetic-user');
+// Token continuations can run before an overdue browser timer callback.
+for (const tokenResult of ['resolve', 'reject']) {
+  const delayed = deferred();
+  auth.currentUser = { uid: 'synthetic-user', getIdToken: () => delayed.promise };
+  requestStart = requests.length;
+  const expired = submit(`expired-before-timer-${tokenResult}`);
+  await flush();
+  requestClock += 30001;
+  if (tokenResult === 'resolve') delayed.resolve('token-synthetic-user');
+  else delayed.reject(new Error('synthetic token lookup failure'));
+  await assert.rejects(expired, failure => failure.code === 'ECONNABORTED');
+  assert.equal(requests.length, requestStart, 'overdue token lookup must not dispatch before its timeout callback');
+}
+auth.currentUser = { uid: 'synthetic-user', async getIdToken() { requestClock += 12000; return 'token-synthetic-user'; } };
+outcome = undefined;
+await submit('token-budget');
+assert.equal(requests.at(-1).timeout, 18000, 'HTTP timeout excludes time already spent fetching a token');
+auth.currentUser = user('synthetic-user');
+outcome = config => { requestClock += 30001; return response(config); };
+await assert.rejects(submit('late-success'), failure => failure.code === 'ECONNABORTED');
+const lateSuccessKey = requests.at(-1).key;
+outcome = undefined;
+await submit('late-success');
+assert.equal(requests.at(-1).key, lateSuccessKey, 'late success must retain the uncertain binding');
+
+const cancelSubmit = (code, controller) => api.submitCodeSolution('contest', 'problem', code, 'cpp', controller.signal);
+const alreadyCancelled = new AbortController();
+alreadyCancelled.abort();
+requestStart = requests.length;
+await assert.rejects(cancelSubmit('already-cancelled', alreadyCancelled), axios.isCancel);
+assert.equal(requests.length, requestStart);
+const cancelledToken = deferred();
+auth.currentUser = { uid: 'synthetic-user', getIdToken: () => cancelledToken.promise };
+const duringToken = new AbortController();
+const cancelledAuth = cancelSubmit('cancel-auth', duringToken);
+await flush();
+duringToken.abort();
+await assert.rejects(cancelledAuth, axios.isCancel);
+cancelledToken.resolve('token-synthetic-user');
+await flush();
+assert.equal(requests.length, requestStart, 'caller cancellation settles hung auth without a late POST');
+auth.currentUser = user('synthetic-user');
+const duringHttp = new AbortController();
+const hungHttp = deferred();
+let httpSignal;
+outcome = config => { httpSignal = config.signal; return hungHttp.promise; };
+const cancelledHttp = cancelSubmit('cancel-http', duringHttp);
+await flush();
+const cancelledKey = requests.at(-1).key;
+duringHttp.abort();
+await assert.rejects(cancelledHttp, axios.isCancel);
+assert.equal(httpSignal.aborted, true, 'caller cancellation reaches the HTTP adapter');
+hungHttp.resolve(response({}));
+await flush();
+outcome = undefined;
+await submit('cancel-http');
+assert.equal(requests.at(-1).key, cancelledKey, 'cancelled or late HTTP success cannot release the retry key');
+const duringWait = new AbortController();
+outcome = error(503, '1');
+duringRetryWait = () => duringWait.abort();
+requestStart = requests.length;
+await assert.rejects(cancelSubmit('cancel-wait', duringWait), axios.isCancel);
+assert.equal(requests.length - requestStart, 1, 'caller cancellation during backoff prevents another attempt');
+duringRetryWait = undefined;
+assert.equal(requestDeadlines.size, 0, 'expired and cancelled calls remove their deadline timers');
+console.log('Deadline checks survive overdue timers; caller cancellation covers auth, HTTP, backoff, and late success.');
+
 console.log('Code retries preserve UUID/payload/identity, respect Retry-After and total deadline, stop at three, and leave other POSTs unchanged.');
 
 // Exercise the actual preview element with React's renderer, using hostile saved text.
@@ -342,6 +409,43 @@ for (const [failure, expectedCalls, minimum] of [[error(403), 1, 0], [error(503)
   if (minimum) assert.ok(delays[1] >= minimum);
 }
 console.log('Actual verdict polling stops on permanent errors, bounds failures/deadline, and honors Retry-After.');
+
+// Exercise hook lifecycle wiring with the real API; mounted browser checks remain separate.
+const hookCleanups = [];
+const hookSignals = [];
+const lifecycleToken = deferred();
+auth.currentUser = { uid: 'synthetic-user', getIdToken: () => lifecycleToken.promise };
+const lifecycleModule = { exports: {}, AbortController, require(name) {
+  if (name === 'react') return {
+    useRef: current => ({ current }), useState: current => [current, () => {}],
+    useCallback: callback => callback, useMemo: callback => callback(),
+    useEffect: effect => hookCleanups.push(effect()),
+  };
+  if (name === 'axios') return { default: axios };
+  if (name.endsWith('/requestPolicy')) return policyModule.exports;
+  if (name.endsWith('/contestApi')) return { contestApi: {
+    submitCodeSolution(...args) { hookSignals.push(args[4]); return api.submitCodeSolution(...args); },
+  } };
+  throw new Error(`Unexpected hook module ${name}`);
+} };
+vm.runInNewContext(compile(read('src/features/contests/hooks/useProblemSubmissions.ts')), lifecycleModule);
+const lifecycleHook = lifecycleModule.exports.useProblemSubmissions('contest', 'problem', { skip: true });
+requestStart = requests.length;
+const superseded = lifecycleHook.submitCode('superseded', 'cpp');
+await flush();
+const unmounted = lifecycleHook.submitCode('unmounted', 'cpp');
+await flush();
+assert.equal(hookSignals[0].aborted, true, 'new submissions cancel the previous operation');
+hookCleanups.forEach(cleanup => cleanup?.());
+await Promise.all([superseded, unmounted]);
+assert.equal(hookSignals[1].aborted, true, 'scope cleanup cancels the active submission');
+lifecycleToken.resolve('token-synthetic-user');
+await flush();
+assert.equal(requests.length, requestStart, 'unmounted and superseded auth lookups cannot dispatch');
+assert.equal(requestDeadlines.size, 0);
+auth.currentUser = user('synthetic-user');
+console.log('Submission hook cleanup and supersession cancel the real API operation.');
+
 
 // Timers use a monotonic clock, cancel real scheduled chunks, and ignore wall-clock correction.
 let timerNow = 0;

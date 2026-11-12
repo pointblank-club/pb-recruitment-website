@@ -22,7 +22,10 @@ const TAB_SWITCH_REQUEST_TIMEOUT_MS = 10_000;
 
 interface IdentityScopedRequestConfig {
   _expectedUserId?: string;
+  _deadline?: number;
 }
+
+const submissionTimeoutError = () => new axios.AxiosError('Submission request timed out.', 'ECONNABORTED');
 
 const isAbortedError = (error: unknown, signal?: AbortSignal): boolean =>
   Boolean(signal?.aborted) || axios.isCancel(error) || (error instanceof Error && error.name === 'AbortError');
@@ -87,8 +90,10 @@ class ContestApiService {
           return Promise.reject(new axios.CanceledError('Request aborted before dispatch.'));
         }
 
-        const expectedUserId = (config as IdentityScopedRequestConfig)._expectedUserId;
+        const { _expectedUserId: expectedUserId, _deadline: deadline } = config as IdentityScopedRequestConfig;
         delete (config as IdentityScopedRequestConfig)._expectedUserId;
+        delete (config as IdentityScopedRequestConfig)._deadline;
+        if (deadline !== undefined && performance.now() >= deadline) throw submissionTimeoutError();
 
         const user = auth.currentUser;
         if (expectedUserId && user?.uid !== expectedUserId) {
@@ -110,6 +115,12 @@ class ContestApiService {
           } catch (error) {
             console.error('Error getting auth token:', error);
           }
+        }
+        if (config.signal?.aborted) throw new axios.CanceledError('Request aborted before dispatch.');
+        if (deadline !== undefined) {
+          const remaining = deadline - performance.now();
+          if (remaining <= 0) throw submissionTimeoutError();
+          config.timeout = remaining;
         }
         return config;
       },
@@ -218,7 +229,8 @@ class ContestApiService {
     contestId: string,
     problemId: string,
     code: string,
-    language: string
+    language: string,
+    signal?: AbortSignal
   ): Promise<SubmissionResponse> {
     const encodedCode = encodeBase64(code);
     const payload = {
@@ -239,16 +251,18 @@ class ContestApiService {
     }
     const deadline = performance.now() + 30_000;
     const controller = new AbortController();
-    let cancelDeadline = () => {};
     let cancelWait = () => {};
-    const timeout = new Promise<never>((_, reject) => {
-      cancelDeadline = requestTimeout(() => {
-        controller.abort();
-        reject(new axios.AxiosError('Submission request timed out.', 'ECONNABORTED'));
-      }, 30_000);
+    const stopped = new Promise<undefined>((resolve) => {
+      controller.signal.addEventListener('abort', () => resolve(undefined), { once: true });
     });
+    const cancelDeadline = requestTimeout(() => controller.abort(submissionTimeoutError()), 30_000);
+    const cancel = () => controller.abort(new axios.CanceledError('Submission cancelled.'));
+    signal?.addEventListener('abort', cancel, { once: true });
+    if (signal?.aborted) cancel();
     try {
       for (let attempt = 0; ; attempt += 1) {
+        if (controller.signal.aborted) throw controller.signal.reason;
+        if (performance.now() >= deadline) throw submissionTimeoutError();
         if (auth.currentUser?.uid !== user.uid) {
           throw new axios.CanceledError('Authenticated account changed before submission retry.');
         }
@@ -260,9 +274,12 @@ class ContestApiService {
               timeout: Math.max(1, deadline - performance.now()),
               headers: { 'Idempotency-Key': pending.key },
               _expectedUserId: user.uid,
+              _deadline: deadline,
               signal: controller.signal,
             } as Record<string, unknown>,
-          ), timeout]);
+          ), stopped]);
+          if (!response || controller.signal.aborted) throw controller.signal.reason;
+          if (performance.now() >= deadline) throw submissionTimeoutError();
           if (this.pendingCodeSubmissions.get(scope) === pending) this.pendingCodeSubmissions.delete(scope);
           this.rememberMockSubmission(response.data.submission_id, {
             contestId,
@@ -272,16 +289,18 @@ class ContestApiService {
           });
           return response.data;
         } catch (error) {
-          if (isAbortedError(error) || !axios.isAxiosError(error) || attempt >= 2) throw error;
+          if (isAbortedError(error, controller.signal) || !axios.isAxiosError(error) || attempt >= 2) throw error;
           const status = error.response?.status;
           if (status !== undefined && ![429, 500, 502, 503, 504].includes(status)) throw error;
           const delay = jitterDelay(Math.max(500 * 2 ** attempt, parseRetryAfterMs(error.response?.headers) ?? 0));
           if (delay >= deadline - performance.now()) throw error;
-          await Promise.race([new Promise<void>((resolve) => { cancelWait = requestTimeout(resolve, delay); }), timeout]);
+          await Promise.race([new Promise<void>((resolve) => { cancelWait = requestTimeout(resolve, delay); }), stopped]);
+          if (controller.signal.aborted) throw controller.signal.reason;
           if (performance.now() >= deadline) throw error;
         }
       }
     } finally {
+      signal?.removeEventListener('abort', cancel);
       cancelWait();
       cancelDeadline();
       controller.abort();

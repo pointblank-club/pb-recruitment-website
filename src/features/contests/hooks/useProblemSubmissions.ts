@@ -78,6 +78,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
   const pollTokenRef = useRef(0);
   const historyRequestRef = useRef(0);
   const scopeTokenRef = useRef(0);
+  const submissionControllerRef = useRef<AbortController | null>(null);
 
   const pollSubmission = useCallback(async (summary: SubmissionDetailsResponse) => {
     const pollToken = ++pollTokenRef.current;
@@ -259,8 +260,9 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
       pollTokenRef.current += 1;
       historyRequestRef.current += 1;
       scopeTokenRef.current += 1;
+      submissionControllerRef.current?.abort();
     };
-  }, [problemId, refreshHistory, skip]);
+  }, [contestId, problemId, refreshHistory, skip]);
 
   const loadMoreHistory = useCallback(async () => {
     if (!problemId || isHistoryLoading || !hasMoreHistory) return;
@@ -285,10 +287,13 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
   }, [hasMoreHistory, historyPage, isHistoryLoading, problemId]);
 
   const submit = useCallback(async (
-    createSubmission: () => Promise<SubmissionResponse>,
+    createSubmission: (signal: AbortSignal) => Promise<SubmissionResponse>,
     metadata: SubmissionMetadata,
   ) => {
     const scopeToken = ++scopeTokenRef.current;
+    submissionControllerRef.current?.abort();
+    const controller = new AbortController();
+    submissionControllerRef.current = controller;
     pollTokenRef.current += 1;
     setActiveSubmission({
       phase: 'submitting',
@@ -297,7 +302,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
     });
 
     try {
-      const response = await createSubmission();
+      const response = await createSubmission(controller.signal);
       if (scopeToken !== scopeTokenRef.current) return;
 
       const summary: SubmissionDetailsResponse = {
@@ -328,12 +333,14 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
         message: `Submission failed: ${getErrorMessage(error, 'Please try again.')}`,
       });
       throw error;
+    } finally {
+      if (submissionControllerRef.current === controller) submissionControllerRef.current = null;
     }
   }, [contestId, pollSubmission, problemId]);
 
   const submitCode = useCallback((code: string, language: string) => (
     submit(
-      () => contestApi.submitCodeSolution(contestId, problemId, code, language),
+      (signal) => contestApi.submitCodeSolution(contestId, problemId, code, language, signal),
       { type: 'code', language },
     )
   ), [contestId, problemId, submit]);
