@@ -15,6 +15,8 @@ const error = (status, retryAfter) => new axios.AxiosError('Synthetic request fa
   status, headers: { 'retry-after': retryAfter }, data: {},
 });
 const policyModule = { exports: {}, require: () => ({ default: axios }) };
+policyModule.Math = Object.create(Math);
+policyModule.Math.random = () => 0.5;
 vm.runInNewContext(compile(read('src/lib/requestPolicy.ts')), policyModule);
 const { retryAfterDelay, isPermanentRequestError, jitterDelay } = policyModule.exports;
 assert.equal(retryAfterDelay(error(429, '17')), 17000);
@@ -38,13 +40,18 @@ for (let n = 0; n < 50; n++) assert.ok(jitterDelay(1000) >= 1000 && jitterDelay(
 
 // Keep real Axios interceptors, headers, cancellation, and async request dispatch.
 let outcome;
+let requestClock = 0;
+let duringRetryWait;
+const retryWaits = [];
+const requestDeadlines = new Map();
+let deadlineId = 0;
 const requests = [];
 const response = config => ({ data: { submission_id: 'synthetic-submission' }, status: 201, statusText: 'Created', headers: {}, config });
 const axiosWithAdapter = {
   ...axios,
   create(config) {
     return axios.create({ ...config, adapter: async config => {
-      requests.push({ payload: JSON.parse(config.data), key: config.headers.get('Idempotency-Key'), authorization: config.headers.get('Authorization') });
+      requests.push({ path: config.url, timeout: config.timeout, payload: JSON.parse(config.data), key: config.headers.get('Idempotency-Key'), authorization: config.headers.get('Authorization') });
       if (typeof outcome === 'function') return outcome(config);
       if (outcome) throw outcome;
       return response(config);
@@ -54,11 +61,11 @@ const axiosWithAdapter = {
 const user = uid => ({ uid, getIdToken: async () => `token-${uid}` });
 const auth = { currentUser: user('synthetic-user') };
 const apiModule = {
-  exports: {}, crypto: { randomUUID }, console,
+  exports: {}, crypto: { randomUUID }, console, AbortController, performance: { now: () => requestClock },
   require(name) {
     if (name === 'axios') return { default: axiosWithAdapter };
     if (name.endsWith('/firebase')) return { auth };
-    if (name.endsWith('/requestPolicy')) return policyModule.exports;
+    if (name.endsWith('/requestPolicy')) return { ...policyModule.exports, requestTimeout(callback, delay) { if (delay === 30000) { const id = ++deadlineId; requestDeadlines.set(id, callback); return () => requestDeadlines.delete(id); } retryWaits.push(delay); requestClock += delay; duringRetryWait?.(); queueMicrotask(callback); return () => {}; } };
     if (name.endsWith('/base64')) return { encodeBase64: value => Buffer.from(value).toString('base64') };
     return {};
   },
@@ -151,6 +158,161 @@ outcome = new Error('still offline');
 await assert.rejects(submit('concurrent'));
 assert.equal(requests.at(-1).key, newerKey, 'old success cannot clear the newer uncertain binding');
 console.log('Real Axios request IDs survive lost responses, edits, language/account changes, cancellation, concurrent calls, and stale success.');
+
+// Automatic retries are deliberately limited to idempotent code submissions.
+auth.currentUser = user('synthetic-user');
+let attempt = 0;
+let requestStart = requests.length;
+let waitStart = retryWaits.length;
+outcome = config => {
+  attempt += 1;
+  if (attempt === 1) throw error(503, '1');
+  if (attempt === 2) throw error(429, '2');
+  return response(config);
+};
+await submit('automatic-recovery');
+const recovered = requests.slice(requestStart);
+assert.equal(recovered.length, 3);
+assert.equal(new Set(recovered.map(request => request.key)).size, 1);
+assert.equal(new Set(recovered.map(request => JSON.stringify(request.payload))).size, 1);
+assert.ok(recovered.every(request => request.authorization === 'Bearer token-synthetic-user'));
+assert.equal(recovered[0].timeout, 30000);
+assert.equal(recovered[1].timeout, 28900);
+assert.equal(recovered[2].timeout, 26700);
+assert.deepEqual(retryWaits.slice(waitStart), [1100, 2200], 'server-dominated waits retain positive jitter and are never shortened');
+for (const failure of [error(429), error(500), error(502), error(503), error(504), new axios.AxiosError('offline', 'ERR_NETWORK')]) {
+  outcome = failure;
+  requestStart = requests.length;
+  await assert.rejects(submit(`bounded-${requestStart}`));
+  assert.equal(requests.length - requestStart, 3, 'transient failures stop after three attempts');
+  assert.equal(new Set(requests.slice(requestStart).map(request => request.key)).size, 1);
+}
+for (const failure of [error(400), error(401), error(403), error(408), error(409), error(422), new axios.CanceledError('cancelled')]) {
+  outcome = failure;
+  requestStart = requests.length;
+  await assert.rejects(submit(`permanent-${requestStart}`));
+  assert.equal(requests.length - requestStart, 1, 'permanent errors and cancellations are never retried');
+}
+for (const hint of ['29', '31']) {
+  outcome = error(429, hint);
+  requestStart = requests.length;
+  waitStart = retryWaits.length;
+  await assert.rejects(submit(`retry-after-beyond-budget-${hint}`));
+  assert.equal(requests.length - requestStart, 1);
+  assert.equal(retryWaits.length, waitStart, 'entire jittered Retry-After must fit into total request budget');
+}
+outcome = error(503, '1');
+requestStart = requests.length;
+duringRetryWait = () => { requestClock += 30000; };
+await assert.rejects(submit('suspended-during-retry'));
+assert.equal(requests.length - requestStart, 1, 'late timer cannot dispatch outside the total budget');
+for (const nextAccount of [null, user('another-user')]) {
+  auth.currentUser = user('synthetic-user');
+  duringRetryWait = () => { auth.currentUser = nextAccount; };
+  requestStart = requests.length;
+  await assert.rejects(submit(`identity-during-retry-${requestStart}`), axios.isCancel);
+  assert.equal(requests.length - requestStart, 1, 'signout/account switch suppresses the next attempt');
+}
+duringRetryWait = undefined;
+auth.currentUser = user('synthetic-user');
+for (const action of [() => api.runCodeSolution('code', 'cpp', ''), () => api.submitMCQAnswer('contest', 'problem', 0), () => api.registerForContest('contest')]) {
+  requestStart = requests.length;
+  await assert.rejects(action());
+  assert.equal(requests.length - requestStart, 1, 'other POST classes never gain automatic retries');
+}
+const signupModule = { exports: {}, require(name) {
+  if (name === 'axios') return { default: axiosWithAdapter };
+  return { getDepartmentFromBranch: value => value };
+} };
+vm.runInNewContext(compile(read('src/services/api/authApi.ts')), signupModule);
+requestStart = requests.length;
+await assert.rejects(signupModule.exports.authApi.signup({ name: 'Synthetic', id: 'synthetic', email: 'synthetic@example.invalid', mobile: '1234567890', joiningYear: 1, branch: 'CS', password: 'synthetic-password' }));
+assert.equal(requests.length - requestStart, 1, 'signup is not idempotent and must never retry automatically');
+
+// A hung token lookup is part of the same deadline, and cannot send a late POST.
+assert.equal(requestDeadlines.size, 0, 'completed calls remove their deadline timers');
+const lateToken = deferred();
+auth.currentUser = { uid: 'synthetic-user', getIdToken: () => lateToken.promise };
+requestStart = requests.length;
+const tokenDeadline = submit('token-beyond-deadline');
+await flush();
+assert.equal(requestDeadlines.size, 1);
+requestClock += 30000;
+[...requestDeadlines.values()][0]();
+await assert.rejects(tokenDeadline);
+lateToken.resolve('token-synthetic-user');
+await flush();
+assert.equal(requests.length, requestStart, 'expired token lookup must never reach the HTTP adapter');
+assert.equal(requestDeadlines.size, 0);
+auth.currentUser = user('synthetic-user');
+// Token continuations can run before an overdue browser timer callback.
+for (const tokenResult of ['resolve', 'reject']) {
+  const delayed = deferred();
+  auth.currentUser = { uid: 'synthetic-user', getIdToken: () => delayed.promise };
+  requestStart = requests.length;
+  const expired = submit(`expired-before-timer-${tokenResult}`);
+  await flush();
+  requestClock += 30001;
+  if (tokenResult === 'resolve') delayed.resolve('token-synthetic-user');
+  else delayed.reject(new Error('synthetic token lookup failure'));
+  await assert.rejects(expired, failure => failure.code === 'ECONNABORTED');
+  assert.equal(requests.length, requestStart, 'overdue token lookup must not dispatch before its timeout callback');
+}
+auth.currentUser = { uid: 'synthetic-user', async getIdToken() { requestClock += 12000; return 'token-synthetic-user'; } };
+outcome = undefined;
+await submit('token-budget');
+assert.equal(requests.at(-1).timeout, 18000, 'HTTP timeout excludes time already spent fetching a token');
+auth.currentUser = user('synthetic-user');
+outcome = config => { requestClock += 30001; return response(config); };
+await assert.rejects(submit('late-success'), failure => failure.code === 'ECONNABORTED');
+const lateSuccessKey = requests.at(-1).key;
+outcome = undefined;
+await submit('late-success');
+assert.equal(requests.at(-1).key, lateSuccessKey, 'late success must retain the uncertain binding');
+
+const cancelSubmit = (code, controller) => api.submitCodeSolution('contest', 'problem', code, 'cpp', controller.signal);
+const alreadyCancelled = new AbortController();
+alreadyCancelled.abort();
+requestStart = requests.length;
+await assert.rejects(cancelSubmit('already-cancelled', alreadyCancelled), axios.isCancel);
+assert.equal(requests.length, requestStart);
+const cancelledToken = deferred();
+auth.currentUser = { uid: 'synthetic-user', getIdToken: () => cancelledToken.promise };
+const duringToken = new AbortController();
+const cancelledAuth = cancelSubmit('cancel-auth', duringToken);
+await flush();
+duringToken.abort();
+await assert.rejects(cancelledAuth, axios.isCancel);
+cancelledToken.resolve('token-synthetic-user');
+await flush();
+assert.equal(requests.length, requestStart, 'caller cancellation settles hung auth without a late POST');
+auth.currentUser = user('synthetic-user');
+const duringHttp = new AbortController();
+const hungHttp = deferred();
+let httpSignal;
+outcome = config => { httpSignal = config.signal; return hungHttp.promise; };
+const cancelledHttp = cancelSubmit('cancel-http', duringHttp);
+await flush();
+const cancelledKey = requests.at(-1).key;
+duringHttp.abort();
+await assert.rejects(cancelledHttp, axios.isCancel);
+assert.equal(httpSignal.aborted, true, 'caller cancellation reaches the HTTP adapter');
+hungHttp.resolve(response({}));
+await flush();
+outcome = undefined;
+await submit('cancel-http');
+assert.equal(requests.at(-1).key, cancelledKey, 'cancelled or late HTTP success cannot release the retry key');
+const duringWait = new AbortController();
+outcome = error(503, '1');
+duringRetryWait = () => duringWait.abort();
+requestStart = requests.length;
+await assert.rejects(cancelSubmit('cancel-wait', duringWait), axios.isCancel);
+assert.equal(requests.length - requestStart, 1, 'caller cancellation during backoff prevents another attempt');
+duringRetryWait = undefined;
+assert.equal(requestDeadlines.size, 0, 'expired and cancelled calls remove their deadline timers');
+console.log('Deadline checks survive overdue timers; caller cancellation covers auth, HTTP, backoff, and late success.');
+
+console.log('Code retries preserve UUID/payload/identity, respect Retry-After and total deadline, stop at three, and leave other POSTs unchanged.');
 
 // Exercise the actual preview element with React's renderer, using hostile saved text.
 const previewSource = ts.createSourceFile('AddContest.tsx', read('src/pages/AddContest.tsx'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -247,6 +409,43 @@ for (const [failure, expectedCalls, minimum] of [[error(403), 1, 0], [error(503)
   if (minimum) assert.ok(delays[1] >= minimum);
 }
 console.log('Actual verdict polling stops on permanent errors, bounds failures/deadline, and honors Retry-After.');
+
+// Exercise hook lifecycle wiring with the real API; mounted browser checks remain separate.
+const hookCleanups = [];
+const hookSignals = [];
+const lifecycleToken = deferred();
+auth.currentUser = { uid: 'synthetic-user', getIdToken: () => lifecycleToken.promise };
+const lifecycleModule = { exports: {}, AbortController, require(name) {
+  if (name === 'react') return {
+    useRef: current => ({ current }), useState: current => [current, () => {}],
+    useCallback: callback => callback, useMemo: callback => callback(),
+    useEffect: effect => hookCleanups.push(effect()),
+  };
+  if (name === 'axios') return { default: axios };
+  if (name.endsWith('/requestPolicy')) return policyModule.exports;
+  if (name.endsWith('/contestApi')) return { contestApi: {
+    submitCodeSolution(...args) { hookSignals.push(args[4]); return api.submitCodeSolution(...args); },
+  } };
+  throw new Error(`Unexpected hook module ${name}`);
+} };
+vm.runInNewContext(compile(read('src/features/contests/hooks/useProblemSubmissions.ts')), lifecycleModule);
+const lifecycleHook = lifecycleModule.exports.useProblemSubmissions('contest', 'problem', { skip: true });
+requestStart = requests.length;
+const superseded = lifecycleHook.submitCode('superseded', 'cpp');
+await flush();
+const unmounted = lifecycleHook.submitCode('unmounted', 'cpp');
+await flush();
+assert.equal(hookSignals[0].aborted, true, 'new submissions cancel the previous operation');
+hookCleanups.forEach(cleanup => cleanup?.());
+await Promise.all([superseded, unmounted]);
+assert.equal(hookSignals[1].aborted, true, 'scope cleanup cancels the active submission');
+lifecycleToken.resolve('token-synthetic-user');
+await flush();
+assert.equal(requests.length, requestStart, 'unmounted and superseded auth lookups cannot dispatch');
+assert.equal(requestDeadlines.size, 0);
+auth.currentUser = user('synthetic-user');
+console.log('Submission hook cleanup and supersession cancel the real API operation.');
+
 
 // Timers use a monotonic clock, cancel real scheduled chunks, and ignore wall-clock correction.
 let timerNow = 0;
