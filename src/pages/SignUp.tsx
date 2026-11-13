@@ -79,6 +79,7 @@ export const Signup: React.FC = () => {
   };
 
   const handleBranchSelect = (branch: string) => {
+    if (loading) return;
     setFormData({ ...formData, branch });
     setShowBranchDropdown(false);
     setErrors(prev => ({ ...prev, branch: undefined }));
@@ -235,6 +236,7 @@ export const Signup: React.FC = () => {
           mobile_number: 'mobile',
           email: 'email',
           password: 'password',
+          department: 'branch',
         };
         const newErr: typeof errors = {};
         for (const item of resData.errors) {
@@ -248,7 +250,8 @@ export const Signup: React.FC = () => {
           setErrors(prev => ({ ...prev, ...newErr }));
         }
       } else if (resData?.field && typeof resData?.error === "string") {
-        const field = resData.field as keyof typeof errors;
+        const fieldKey = resData.field === 'department' ? 'branch' : resData.field;
+        const field = fieldKey as keyof typeof errors;
         setErrors(prev => ({ ...prev, [field]: resData.error }));
         message = resData.error;
       } else if (typeof resData?.error === "string") {
