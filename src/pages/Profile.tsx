@@ -1,24 +1,18 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../lib/AuthContext";
-import { updateUserProfile, updateUserPassword, type UserProfile } from "../lib/profileService";
+import { updateUserPassword } from "../lib/profileService";
 import { motion } from "framer-motion";
 import { Popup } from "../components/ui/popup";
 import { useNavigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Footer from "./components/footer";
 
-import { BRANCHES } from "@/constants";
-
 export const Profile: React.FC = () => {
-  const { user, userProfile, refreshProfile } = useAuth();
+  const { user, userProfile } = useAuth();
   const navigate = useNavigate();
-  const [formData, setFormData] = useState<Partial<UserProfile>>({});
   const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
-  const [profileLoading, setProfileLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showBranchDropdown, setShowBranchDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const [popup, setPopup] = useState<{
     isOpen: boolean;
     type: "success" | "error";
@@ -30,28 +24,10 @@ export const Profile: React.FC = () => {
   });
 
   useEffect(() => {
-    if (userProfile) {
-      setFormData(userProfile);
-    }
-  }, [userProfile]);
-
-  useEffect(() => {
     if (!user) {
       navigate("/login");
     }
   }, [user, navigate]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowBranchDropdown(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const handlePasswordChange = async () => {
     if (!passwordData.new || passwordData.new.length < 6) {
@@ -80,34 +56,6 @@ export const Profile: React.FC = () => {
       });
     } finally {
       setPasswordLoading(false);
-    }
-  };
-
-  const handleBranchSelect = async (branch: string) => {
-    setFormData(prev => ({ ...prev, branch }));
-    setShowBranchDropdown(false);
-    if (user) {
-      setProfileLoading(true);
-      try {
-        // The backend requires name and mobile alongside department.
-        await updateUserProfile(user.uid, { ...userProfile, branch });
-        await refreshProfile();
-        setPopup({
-          isOpen: true,
-          type: "success",
-          message: "Branch updated successfully!",
-        });
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Failed to update branch";
-        setFormData(prev => ({ ...prev, branch: userProfile?.branch }));
-        setPopup({
-          isOpen: true,
-          type: "error",
-          message: errorMessage,
-        });
-      } finally {
-        setProfileLoading(false);
-      }
     }
   };
 
@@ -151,7 +99,7 @@ export const Profile: React.FC = () => {
                   <input
                     id="name"
                     type="text"
-                    value={formData.name || ""}
+                    value={userProfile.name || ""}
                     readOnly
                     className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
                   />
@@ -159,10 +107,11 @@ export const Profile: React.FC = () => {
 
                 {/* Year of Study */}
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-300">Year of Study:</label>
+                  <label htmlFor="joiningYear" className="block text-sm font-medium text-gray-300">Year of Study:</label>
                   <input
+                    id="joiningYear"
                     type="text"
-                    value={formData.joiningYear || ""}
+                    value={userProfile.joiningYear || ""}
                     readOnly
                     className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
                   />
@@ -171,10 +120,11 @@ export const Profile: React.FC = () => {
 
               {/* USN */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-300">USN:</label>
+                <label htmlFor="id" className="block text-sm font-medium text-gray-300">USN:</label>
                 <input
+                  id="id"
                   type="text"
-                  value={formData.id || ""}
+                  value={userProfile.id || ""}
                   readOnly
                   className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
                 />
@@ -182,56 +132,26 @@ export const Profile: React.FC = () => {
 
               {/* Email */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-300">Email:</label>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-300">Email:</label>
                 <input
+                  id="email"
                   type="email"
-                  value={formData.email || ""}
+                  value={userProfile.email || ""}
                   readOnly
                   className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
                 />
               </div>
 
-              {/* Branch Dropdown */}
-              <div className="space-y-2" ref={dropdownRef}>
-                <label className="block text-sm font-medium text-gray-300">Branch:</label>
-                <div className="relative">
-                  <div
-                    className={`w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white flex items-center justify-between transition-colors ${
-                      profileLoading ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-gray-750"
-                    }`}
-                    onClick={() => !profileLoading && setShowBranchDropdown(!showBranchDropdown)}
-                  >
-                    <span>{profileLoading ? "Updating branch..." : (formData.branch || "Select Branch")}</span>
-                    <svg
-                      className={`w-5 h-5 transition-transform ${
-                        showBranchDropdown ? "rotate-180" : ""
-                      }`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
-                  </div>
-                  {showBranchDropdown && (
-                    <div className="absolute z-10 w-full mt-2 bg-gray-800 border border-white rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {BRANCHES.map((branch) => (
-                        <div
-                          key={branch}
-                          className="px-4 py-3 text-white hover:bg-gray-700 cursor-pointer transition-colors"
-                          onClick={() => handleBranchSelect(branch)}
-                        >
-                          {branch}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+              {/* Branch */}
+              <div className="space-y-2">
+                <label htmlFor="branch" className="block text-sm font-medium text-gray-300">Branch:</label>
+                <input
+                  id="branch"
+                  type="text"
+                  value={userProfile.branch || ""}
+                  readOnly
+                  className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
+                />
               </div>
 
               {/* Change Password */}
