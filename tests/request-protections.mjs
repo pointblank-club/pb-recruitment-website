@@ -602,6 +602,27 @@ assert.ok(multilineInlineMath.includes('class="katex"'), multilineInlineMath);
 const multilineDisplayMath = renderMathText(`:::markdown\n${String.raw`\[` }\nx + 1\n${String.raw`\]`}`);
 assert.ok(multilineDisplayMath.includes('katex-display'), multilineDisplayMath);
 
+const quotedDisplayMath = renderMathText(`:::markdown\n> ${String.raw`\[` }\n> x+1\n> ${String.raw`\]`}`);
+assert.match(quotedDisplayMath, /<blockquote>[\s\S]*katex-display[\s\S]*<\/blockquote>/, quotedDisplayMath);
+assert.ok(!quotedDisplayMath.includes('&gt;'), quotedDisplayMath);
+
+const listDisplayMath = renderMathText(`:::markdown\n- ${String.raw`\[x+1\]`}`);
+assert.match(listDisplayMath, /<li>[\s\S]*katex-display[\s\S]*<\/li>/, listDisplayMath);
+
+const linkedMathUrl = renderMathText(String.raw`:::markdown
+[example](https://example.invalid/\(x\))
+
+<https://example.invalid/\(x\)>
+
+https://example.invalid/\(x\)`);
+assert.ok(!linkedMathUrl.includes('class="katex"'), linkedMathUrl);
+assert.ok(linkedMathUrl.includes('https://example.invalid/'), linkedMathUrl);
+
+const linkedLabelMath = renderMathText(String.raw`:::markdown
+[Size \(x\)](https://example.invalid/\(target\))`);
+assert.ok(linkedLabelMath.includes('class="katex"'), linkedLabelMath);
+assert.ok(linkedLabelMath.includes('href="https://example.invalid/(target)"'), linkedLabelMath);
+
 const ordinaryText = renderMathText('Costs $5 and $10, with _x_ and four spaces below.\n    code sample');
 assert.ok(!ordinaryText.includes('class="katex"') && !ordinaryText.includes('<em>x</em>'), ordinaryText);
 console.log('Actual Markdown renderer preserves nested code, multiline math, plain text, and security defaults.');
