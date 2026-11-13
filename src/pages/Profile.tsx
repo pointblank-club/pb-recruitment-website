@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../lib/AuthContext";
-import { updateUserPassword, type UserProfile } from "../lib/profileService";
+import { updateUserPassword } from "../lib/profileService";
 import { motion } from "framer-motion";
 import { Popup } from "../components/ui/popup";
 import { useNavigate } from "react-router-dom";
@@ -10,7 +10,6 @@ import Footer from "./components/footer";
 export const Profile: React.FC = () => {
   const { user, userProfile } = useAuth();
   const navigate = useNavigate();
-  const [formData, setFormData] = useState<Partial<UserProfile>>({});
   const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [error, setError] = useState("");
@@ -23,12 +22,6 @@ export const Profile: React.FC = () => {
     type: "error",
     message: "",
   });
-
-  useEffect(() => {
-    if (userProfile) {
-      setFormData(userProfile);
-    }
-  }, [userProfile]);
 
   useEffect(() => {
     if (!user) {
@@ -106,7 +99,7 @@ export const Profile: React.FC = () => {
                   <input
                     id="name"
                     type="text"
-                    value={formData.name || ""}
+                    value={userProfile.name || ""}
                     readOnly
                     className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
                   />
@@ -114,10 +107,11 @@ export const Profile: React.FC = () => {
 
                 {/* Year of Study */}
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-300">Year of Study:</label>
+                  <label htmlFor="joiningYear" className="block text-sm font-medium text-gray-300">Year of Study:</label>
                   <input
+                    id="joiningYear"
                     type="text"
-                    value={formData.joiningYear || ""}
+                    value={userProfile.joiningYear || ""}
                     readOnly
                     className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
                   />
@@ -126,10 +120,11 @@ export const Profile: React.FC = () => {
 
               {/* USN */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-300">USN:</label>
+                <label htmlFor="id" className="block text-sm font-medium text-gray-300">USN:</label>
                 <input
+                  id="id"
                   type="text"
-                  value={formData.id || ""}
+                  value={userProfile.id || ""}
                   readOnly
                   className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
                 />
@@ -137,10 +132,11 @@ export const Profile: React.FC = () => {
 
               {/* Email */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-300">Email:</label>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-300">Email:</label>
                 <input
+                  id="email"
                   type="email"
-                  value={formData.email || ""}
+                  value={userProfile.email || ""}
                   readOnly
                   className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
                 />
@@ -148,10 +144,11 @@ export const Profile: React.FC = () => {
 
               {/* Branch */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-300">Branch:</label>
+                <label htmlFor="branch" className="block text-sm font-medium text-gray-300">Branch:</label>
                 <input
+                  id="branch"
                   type="text"
-                  value={formData.branch || ""}
+                  value={userProfile.branch || ""}
                   readOnly
                   className="w-full px-4 py-3 bg-gray-800 border border-white rounded-lg text-white cursor-not-allowed"
                 />

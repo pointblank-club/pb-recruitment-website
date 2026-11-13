@@ -37,16 +37,6 @@ class UserApiService {
     const response = await this.axiosInstance.get('/users/profile');
     return response.data;
   }
-
-  async updateUserProfile(data: Partial<{
-    name: string;
-    usn: string;
-    mobile_number: string;
-    current_year: number;
-    department: string;
-  }>): Promise<void> {
-    await this.axiosInstance.post('/users/profile', data);
-  }
 }
 
 export const userApi = new UserApiService();

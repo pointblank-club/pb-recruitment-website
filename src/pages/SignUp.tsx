@@ -25,6 +25,7 @@ export const Signup: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const idValidationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const [popup, setPopup] = useState<{
     isOpen: boolean;
@@ -158,21 +159,29 @@ export const Signup: React.FC = () => {
   }, [formData.password, formData.confirmPassword]);
 
   useEffect(() => {
+    if (idValidationTimeoutRef.current) clearTimeout(idValidationTimeoutRef.current);
+
     if (!formData.id) {
       setErrors(prev => ({ ...prev, id: undefined }));
       return;
     }
 
-    const timeoutId = setTimeout(() => {
+    idValidationTimeoutRef.current = setTimeout(() => {
       const err = validateIdentifier(formData.id, isFirstYear, formData.branch);
       setErrors(prev => ({ ...prev, id: err }));
     }, 500);
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      if (idValidationTimeoutRef.current) clearTimeout(idValidationTimeoutRef.current);
+    };
   }, [formData.id, formData.branch, isFirstYear]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (idValidationTimeoutRef.current) {
+      clearTimeout(idValidationTimeoutRef.current);
+      idValidationTimeoutRef.current = null;
+    }
 
     const newErrors: typeof errors = {};
 
