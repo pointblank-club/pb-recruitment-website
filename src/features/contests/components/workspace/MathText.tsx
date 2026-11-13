@@ -9,14 +9,19 @@ interface MathTextProps {
   className?: string;
 }
 
+const toMarkdownMath = (text: string) => {
+  const content = text.startsWith(':::markdown\n') ? text.slice(':::markdown\n'.length) : text;
+  return content
+    .replace(/\\\(/g, '$')
+    .replace(/\\\)/g, '$')
+    .replace(/\\\[/g, () => '$$')
+    .replace(/\\\]/g, () => '$$');
+};
+
 export const MathText: React.FC<MathTextProps> = ({ children, className }) => (
-  children.startsWith(':::markdown\n') ? (
-    <div className={`question-markdown ${className ?? ''}`}>
-      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-        {children.slice(':::markdown\n'.length)}
-      </ReactMarkdown>
-    </div>
-  ) : (
-    <div className={className}>{children}</div>
-  )
+  <div className={`question-markdown ${className ?? ''}`}>
+    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+      {toMarkdownMath(children)}
+    </ReactMarkdown>
+  </div>
 );

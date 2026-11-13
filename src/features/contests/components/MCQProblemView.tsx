@@ -7,6 +7,7 @@ import { Save, ListChecks, CheckCircle2, ChevronLeft, ChevronRight, AlertCircle 
 import type { Problem } from '../problem.types';
 import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
 import { useRequestCooldown } from '../hooks/useRequestCooldown';
+import { MathText } from './workspace/MathText';
 
 interface MCQProblemViewProps {
   problem: Problem;
@@ -152,9 +153,9 @@ export const MCQProblemView = ({
                 <ListChecks className="w-5 h-5" />
                 Question
               </h2>
-              <p className="text-gray-300 leading-relaxed whitespace-pre-line font-['DM_Sans'] text-lg">
+              <MathText className="whitespace-pre-line text-gray-300 leading-relaxed font-['DM_Sans'] text-lg">
                 {problem.description}
-              </p>
+              </MathText>
             </div>
           )}
 
