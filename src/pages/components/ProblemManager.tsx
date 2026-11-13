@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { Clock, Cpu } from "lucide-react";
-import { MathText } from "@/features/contests/components/workspace/MathText";
 import {
   adminApi,
   type AdminProblem,
@@ -95,13 +94,9 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [formData, setFormData] = useState<ProblemFormData>(initialFormData);
-  const [descriptionMode, setDescriptionMode] = useState<"raw" | "preview">("raw");
-  const [descriptionUsesMarkdown, setDescriptionUsesMarkdown] = useState(false);
 
   const resetForm = () => {
     setFormData(initialFormData());
-    setDescriptionMode("raw");
-    setDescriptionUsesMarkdown(false);
     setEditingProblemId(null);
     setFormError("");
     setIsModalOpen(false);
@@ -109,8 +104,6 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
 
   const openCreateModal = () => {
     setFormData(initialFormData());
-    setDescriptionMode("raw");
-    setDescriptionUsesMarkdown(false);
     setEditingProblemId(null);
     setFormError("");
     setIsModalOpen(true);
@@ -179,8 +172,6 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
     try {
       const details = await adminApi.getProblemById(contestId, problem.id);
       setFormData(formDataFromProblem(details));
-      setDescriptionMode("raw");
-      setDescriptionUsesMarkdown(details.description.startsWith(":::markdown\n"));
       setEditingProblemId(problem.id);
       setFormError("");
       setIsModalOpen(true);
@@ -217,9 +208,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
 
     const basePayload = {
       name: formData.title.trim(),
-      description: descriptionUsesMarkdown
-        ? `:::markdown\n${formData.description.replace(/^:::markdown\n/, "")}`
-        : formData.description,
+      description: formData.description.replace(/^:::markdown\n/, ""),
       score: formData.points,
     };
     const payload: UpsertProblemPayload = formData.type === "code"
@@ -394,47 +383,16 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
               </div>
 
               <div>
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <label className="text-gray-400" htmlFor="problem-description">Description</label>
-                  <div className="inline-flex rounded-md border border-gray-700 bg-gray-800 p-1" role="tablist" aria-label="Description editor mode">
-                    {(["raw", "preview"] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        role="tab"
-                        aria-selected={descriptionMode === mode}
-                        onClick={() => {
-                          setDescriptionMode(mode);
-                          if (mode === "preview") setDescriptionUsesMarkdown(true);
-                        }}
-                        className={`rounded px-3 py-1 text-sm capitalize transition-colors ${descriptionMode === mode ? "bg-gray-600 text-white" : "text-gray-400 hover:text-white"}`}
-                      >
-                        {mode === "raw" ? "Raw" : "Preview"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {descriptionMode === "raw" ? (
-                  <textarea
-                    id="problem-description"
-                    name="description"
-                    value={formData.description.replace(/^:::markdown\n/, "")}
-                    onChange={handleInputChange}
-                    rows={8}
-                    className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 font-mono text-sm text-gray-300 focus:border-green-500 focus:outline-none"
-                    required
-                  />
-                ) : (
-                  <div className="min-h-48 rounded border border-gray-700 bg-gray-800 px-4 py-3 text-gray-300">
-                    {formData.description.trim() ? (
-                      <MathText className="leading-relaxed">
-                        {formData.description.replace(/^:::markdown\n/, "")}
-                      </MathText>
-                    ) : (
-                      <p className="text-sm text-gray-500">Nothing to preview yet.</p>
-                    )}
-                  </div>
-                )}
+                <label className="mb-2 block text-gray-400" htmlFor="problem-description">Description</label>
+                <textarea
+                  id="problem-description"
+                  name="description"
+                  value={formData.description.replace(/^:::markdown\n/, "")}
+                  onChange={handleInputChange}
+                  rows={8}
+                  className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 font-mono text-sm text-gray-300 focus:border-green-500 focus:outline-none"
+                  required
+                />
               </div>
 
               {formData.type === "mcq" && (

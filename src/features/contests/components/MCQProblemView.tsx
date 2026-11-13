@@ -7,7 +7,7 @@ import { Save, ListChecks, CheckCircle2, ChevronLeft, ChevronRight, AlertCircle 
 import type { Problem } from '../problem.types';
 import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
 import { useRequestCooldown } from '../hooks/useRequestCooldown';
-import { MathText } from './workspace/MathText';
+import { QuestionDescription } from './workspace/QuestionDescription';
 
 interface MCQProblemViewProps {
   problem: Problem;
@@ -24,6 +24,7 @@ interface MCQProblemViewProps {
   mcqIndex?: number;
   totalMcqs?: number;
   onNavigate?: (targetProblemId: string) => void;
+  isAdmin?: boolean;
 }
 
 export const MCQProblemView = ({
@@ -40,6 +41,7 @@ export const MCQProblemView = ({
   mcqIndex,
   totalMcqs,
   onNavigate,
+  isAdmin = false,
 }: MCQProblemViewProps) => {
   const [userSelectedAnswer, setUserSelectedAnswer] = useState<string>('');
   const [justSubmitted, setJustSubmitted] = useState<string | null>(null);
@@ -153,9 +155,9 @@ export const MCQProblemView = ({
                 <ListChecks className="w-5 h-5" />
                 Question
               </h2>
-              <MathText className="whitespace-pre-line text-gray-300 leading-relaxed font-['DM_Sans'] text-lg">
+              <QuestionDescription isAdmin={isAdmin} className="whitespace-pre-line text-gray-300 leading-relaxed font-['DM_Sans'] text-lg">
                 {problem.description}
-              </MathText>
+              </QuestionDescription>
             </div>
           )}
 

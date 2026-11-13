@@ -14,6 +14,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '@/lib/AuthContext';
 import { formatVerdict } from '../submissionUtils';
 import { useClipboardBlocker } from '../hooks/useClipboardBlocker';
+import { adminApi } from '@/services/api/adminApi';
 
 export const ContestProblemPage = () => {
   const { user } = useAuth();
@@ -25,6 +26,7 @@ const ContestProblemContent = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
   const {
     isLive = false,
     isContestEnded = false,
@@ -36,6 +38,18 @@ const ContestProblemContent = () => {
 
   const workspaceRef = useRef<HTMLDivElement>(null);
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsAdmin(false);
+    if (!user) return;
+
+    adminApi.checkAdminAccess()
+      .then(() => { if (!cancelled) setIsAdmin(true); })
+      .catch(() => { if (!cancelled) setIsAdmin(false); });
+
+    return () => { cancelled = true; };
+  }, [user?.uid]);
 
   // Enable restrictions only for authenticated, registered participants with a successfully loaded problem in a live contest.
   const isRestrictionsActive =
@@ -352,6 +366,7 @@ const ContestProblemContent = () => {
                 <CodeProblemView
                   key={`${user?.uid || 'guest'}_${contestId}_${problem.id}`}
                   problem={problem}
+                  isAdmin={isAdmin}
                   contestId={contestId}
                   isContestEnded={true}
                   hideIDE={true}
@@ -380,6 +395,7 @@ const ContestProblemContent = () => {
             <CodeProblemView
               key={`${user?.uid || 'guest'}_${contestId}_${problem.id}`}
               problem={problem}
+              isAdmin={isAdmin}
               contestId={contestId}
               onSubmit={isAuthenticated && !isLocked ? handleSubmitCode : undefined}
               onRun={isAuthenticated && !isLocked ? runCode : undefined}
@@ -407,6 +423,7 @@ const ContestProblemContent = () => {
           <MCQProblemView
             key={problem.id}
             problem={problem}
+            isAdmin={isAdmin}
             onSubmit={canSubmitMCQ ? handleSubmitMCQ : undefined}
             submissionError={mcqSubmissionError}
             onRetryPolling={retryPolling}

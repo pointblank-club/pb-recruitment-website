@@ -57,6 +57,7 @@ interface CodeProblemViewProps {
   codeIndex?: number;
   totalCodes?: number;
   onNavigate?: (targetProblemId: string) => void;
+  isAdmin?: boolean;
 }
 
 const SUPPORTED_LANGUAGES = [
@@ -138,6 +139,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
   codeIndex,
   totalCodes,
   onNavigate,
+  isAdmin = false,
 }) => {
   const { user } = useAuth();
   const {
@@ -495,6 +497,7 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
             {leftTab === 'statement' && (
               <ProblemStatementTab
                 problem={problem}
+                isAdmin={isAdmin}
                 hideIDE={hideIDE}
                 isRestrictionsActive={isRestrictionsActive}
                 copiedId={copiedId}
