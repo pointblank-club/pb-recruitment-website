@@ -1,0 +1,67 @@
+name: Build and deploy the website
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-south-1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      # Build-time configuration lives in repository variables (all public
+      # values: the API hostname and the Firebase web config).
+      - name: Build
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_MOCK_SUBMISSION_JUDGING: "false"
+          SENTRY_RELEASE: ${{ github.sha }}
+        run: npm run build
+
+      - name: Configure AWS credentials (OIDC, no stored keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Amplify keeps every deployment, so a rollback is picking the previous
+      # one in the Amplify console.
+      - name: Deploy to Amplify
+        env:
+          APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+        run: |
+          (cd dist && zip -qr ../site.zip .)
+          D=$(aws amplify create-deployment --app-id "$APP_ID" --branch-name main --output json)
+          JOB=$(echo "$D" | jq -r .jobId); URL=$(echo "$D" | jq -r .zipUploadUrl)
+          curl -sf -o /dev/null -X PUT -H 'Content-Type: application/zip' --upload-file site.zip "$URL"
+          aws amplify start-deployment --app-id "$APP_ID" --branch-name main --job-id "$JOB" --query 'jobSummary.status' --output text
+          for i in $(seq 1 60); do
+            S=$(aws amplify get-job --app-id "$APP_ID" --branch-name main --job-id "$JOB" --query 'job.summary.status' --output text)
+            case "$S" in SUCCEED) echo "deployed"; exit 0;; FAILED|CANCELLED) echo "deployment $S"; exit 1;; esac
+            sleep 5
+          done
+          echo "timed out waiting for the deployment"; exit 1
