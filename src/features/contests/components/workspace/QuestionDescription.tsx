@@ -7,12 +7,8 @@ interface QuestionDescriptionProps {
   className?: string;
 }
 
-const getRawDescription = (text: string) =>
-  text.startsWith(':::markdown\n') ? text.slice(':::markdown\n'.length) : text;
-
 export const QuestionDescription = ({ children, isAdmin = false, className }: QuestionDescriptionProps) => {
   const [mode, setMode] = useState<'rendered' | 'raw'>('rendered');
-  const rawDescription = getRawDescription(children);
 
   return (
     <div className="space-y-2">
@@ -39,7 +35,7 @@ export const QuestionDescription = ({ children, isAdmin = false, className }: Qu
         </div>
       )}
       {mode === 'raw' && isAdmin ? (
-        <div className={`whitespace-pre-wrap break-words ${className ?? ''}`}>{rawDescription}</div>
+        <div className={`whitespace-pre-wrap break-words ${className ?? ''}`}>{children}</div>
       ) : (
         <MathText className={className}>{children}</MathText>
       )}

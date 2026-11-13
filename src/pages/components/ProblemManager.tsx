@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { Clock, Cpu } from "lucide-react";
+import { getQuestionTextBody } from "@/features/contests/components/workspace/MathText";
 import {
   adminApi,
   type AdminProblem,
@@ -186,7 +187,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
     event.preventDefault();
     setFormError("");
 
-    if (!formData.description.trim()) {
+    if (!getQuestionTextBody(formData.description).trim()) {
       setFormError("Description is required.");
       return;
     }
@@ -208,7 +209,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
 
     const basePayload = {
       name: formData.title.trim(),
-      description: formData.description.replace(/^:::markdown\n/, ""),
+      description: formData.description,
       score: formData.points,
     };
     const payload: UpsertProblemPayload = formData.type === "code"
@@ -387,12 +388,15 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                 <textarea
                   id="problem-description"
                   name="description"
-                  value={formData.description.replace(/^:::markdown\n/, "")}
+                  value={formData.description}
                   onChange={handleInputChange}
                   rows={8}
                   className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 font-mono text-sm text-gray-300 focus:border-green-500 focus:outline-none"
                   required
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  Plain text by default. Start with <code>:::markdown</code> on its own line to render Markdown.
+                </p>
               </div>
 
               {formData.type === "mcq" && (
