@@ -26,6 +26,7 @@ const ContestProblemContent = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const userId = user?.uid;
   const [isAdmin, setIsAdmin] = useState(false);
   const {
     isLive = false,
@@ -42,14 +43,14 @@ const ContestProblemContent = () => {
   useEffect(() => {
     let cancelled = false;
     setIsAdmin(false);
-    if (!user) return;
+    if (!userId) return;
 
     adminApi.checkAdminAccess()
       .then(() => { if (!cancelled) setIsAdmin(true); })
       .catch(() => { if (!cancelled) setIsAdmin(false); });
 
     return () => { cancelled = true; };
-  }, [user?.uid]);
+  }, [userId]);
 
   // Enable restrictions only for authenticated, registered participants with a successfully loaded problem in a live contest.
   const isRestrictionsActive =

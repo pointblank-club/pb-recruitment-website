@@ -558,6 +558,13 @@ const mathDependencies = {
   'remark-math': await import('remark-math'),
   'rehype-katex': await import('rehype-katex'),
 };
+const markdownTextDependencies = {
+  unified: await import('unified'),
+  'remark-parse': await import('remark-parse'),
+};
+const markdownTextModule = { exports: {}, require: name => markdownTextDependencies[name] };
+vm.runInNewContext(compile(read('src/features/contests/markdownText.ts')), markdownTextModule);
+mathDependencies['../../markdownText'] = markdownTextModule.exports;
 const mathModule = { exports: {}, require: name => mathDependencies[name] };
 vm.runInNewContext(compile(read('src/features/contests/components/workspace/MathText.tsx')
   .replace("import 'katex/dist/katex.min.css';", '')), mathModule);
@@ -565,4 +572,36 @@ for (const input of ['<img src=x onerror=alert(1)>', '[link](javascript:alert%28
   const rendered = renderToStaticMarkup(React.createElement(mathModule.exports.MathText, { children: `:::markdown\n${input}` }));
   assert.ok(!rendered.includes('<img') && !rendered.includes('href="javascript:'), rendered);
 }
-console.log('Actual Markdown/LaTeX renderer rejects executable HTML and JavaScript links.');
+const renderMathText = children => renderToStaticMarkup(React.createElement(mathModule.exports.MathText, { children }));
+const nestedCodeMarkdown = [
+  ':::markdown',
+  '- List example:',
+  '  ```text',
+  String.raw`  \(literal\)`,
+  '  ```',
+  '> Quoted example:',
+  '> ```text',
+  String.raw`> \(also literal\)`,
+  '> ```',
+  '',
+  String.raw`Inline code: ` + '`' + String.raw`\(literal\)` + '`',
+  'Multiline code: `' + String.raw`\(line one` + '\n' + String.raw`line two\)` + '`',
+  '',
+  '```text',
+  String.raw`\(fenced literal\)`,
+  '```',
+].join('\n');
+const nestedCodeHtml = renderMathText(nestedCodeMarkdown);
+assert.ok(!nestedCodeHtml.includes('class="katex"'), nestedCodeHtml);
+assert.ok(nestedCodeHtml.includes('\\(literal\\)'), nestedCodeHtml);
+assert.ok(nestedCodeHtml.includes('\\(also literal\\)'), nestedCodeHtml);
+
+const multilineInlineMath = renderMathText(`:::markdown\n${String.raw`\(x`}\n${String.raw`+1\)`}`);
+assert.ok(multilineInlineMath.includes('class="katex"'), multilineInlineMath);
+
+const multilineDisplayMath = renderMathText(`:::markdown\n${String.raw`\[` }\nx + 1\n${String.raw`\]`}`);
+assert.ok(multilineDisplayMath.includes('katex-display'), multilineDisplayMath);
+
+const ordinaryText = renderMathText('Costs $5 and $10, with _x_ and four spaces below.\n    code sample');
+assert.ok(!ordinaryText.includes('class="katex"') && !ordinaryText.includes('<em>x</em>'), ordinaryText);
+console.log('Actual Markdown renderer preserves nested code, multiline math, plain text, and security defaults.');

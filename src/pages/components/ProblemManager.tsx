@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { Clock, Cpu } from "lucide-react";
-import { getQuestionTextBody } from "@/features/contests/components/workspace/MathText";
+import { getQuestionTextBody } from "@/features/contests/markdownText";
 import {
   adminApi,
   type AdminProblem,
