@@ -1,7 +1,7 @@
 import { auth } from "./firebase";
 import { updatePassword, updateEmail, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { userApi } from "@/services/api/userApi";
-import { getDepartmentFromBranch, getBranchFromDepartment } from "@/constants";
+import { getBranchFromDepartment } from "@/constants";
 
 export interface UserProfile {
   name: string;
@@ -31,22 +31,6 @@ export const fetchUserProfile = async (_userId: string): Promise<UserProfile | n
     return mapApiToProfile(apiData);
   } catch (error) {
     console.error("Error fetching user profile:", error);
-    throw error;
-  }
-};
-
-export const updateUserProfile = async (_userId: string, data: Partial<UserProfile>): Promise<void> => {
-  try {
-    const updateData: any = {};
-    if (data.name) updateData.name = data.name;
-    if (data.id) updateData.usn = data.id;
-    if (data.mobile) updateData.mobile_number = data.mobile;
-    if (data.joiningYear) updateData.current_year = data.joiningYear;
-    if (data.branch) updateData.department = getDepartmentFromBranch(data.branch);
-
-    await userApi.updateUserProfile(updateData);
-  } catch (error) {
-    console.error("Error updating user profile:", error);
     throw error;
   }
 };

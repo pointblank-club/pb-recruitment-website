@@ -8,7 +8,7 @@ import { Popup } from "../components/ui/popup";
 import { fetchSignInMethodsForEmail } from "firebase/auth";
 import { auth } from "../lib/firebase";
 
-import { BRANCHES } from "@/constants";
+import { BRANCHES, getDepartmentFromBranch } from "@/constants";
 
 export const Signup: React.FC = () => {
   const [formData, setFormData] = useState<Omit<SignUpData, 'joiningYear'> & { confirmPassword: string; joiningYear: number | "" }>({
@@ -25,6 +25,7 @@ export const Signup: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const idValidationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const [popup, setPopup] = useState<{
     isOpen: boolean;
@@ -42,6 +43,7 @@ export const Signup: React.FC = () => {
     confirmPassword?: string;
     id?: string;
     mobile?: string;
+    branch?: string;
   }>({});
 
   const navigate = useNavigate();
@@ -77,8 +79,10 @@ export const Signup: React.FC = () => {
   };
 
   const handleBranchSelect = (branch: string) => {
+    if (loading) return;
     setFormData({ ...formData, branch });
     setShowBranchDropdown(false);
+    setErrors(prev => ({ ...prev, branch: undefined }));
   };
 
   const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -89,7 +93,7 @@ export const Signup: React.FC = () => {
 
   const isFirstYear = formData.joiningYear === 1;
 
-  const validateIdentifier = (id: string, firstYear: boolean): string | undefined => {
+  const validateIdentifier = (id: string, firstYear: boolean, branch?: string): string | undefined => {
     const trimmed = id.trim();
     if (!trimmed) return undefined;
     if (firstYear) {
@@ -99,6 +103,13 @@ export const Signup: React.FC = () => {
     } else {
       if (!validateUSN(trimmed)) {
         return "Provide a valid USN (e.g., 1DS24IC015)";
+      }
+      if (branch) {
+        const expectedDept = getDepartmentFromBranch(branch);
+        const usnDept = trimmed.substring(5, 7).toUpperCase();
+        if (expectedDept && usnDept !== expectedDept) {
+          return `USN does not match the selected branch (${expectedDept})`;
+        }
       }
     }
     return undefined;
@@ -149,29 +160,36 @@ export const Signup: React.FC = () => {
   }, [formData.password, formData.confirmPassword]);
 
   useEffect(() => {
+    if (idValidationTimeoutRef.current) clearTimeout(idValidationTimeoutRef.current);
+
     if (!formData.id) {
       setErrors(prev => ({ ...prev, id: undefined }));
       return;
     }
 
-    const timeoutId = setTimeout(() => {
-      const err = validateIdentifier(formData.id, isFirstYear);
-      if (err) {
-        setErrors(prev => ({ ...prev, id: err }));
-      }
+    idValidationTimeoutRef.current = setTimeout(() => {
+      const err = validateIdentifier(formData.id, isFirstYear, formData.branch);
+      setErrors(prev => ({ ...prev, id: err }));
     }, 500);
 
-    return () => clearTimeout(timeoutId);
-  }, [formData.id, isFirstYear]);
+    return () => {
+      if (idValidationTimeoutRef.current) clearTimeout(idValidationTimeoutRef.current);
+    };
+  }, [formData.id, formData.branch, isFirstYear]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (idValidationTimeoutRef.current) {
+      clearTimeout(idValidationTimeoutRef.current);
+      idValidationTimeoutRef.current = null;
+    }
 
     const newErrors: typeof errors = {};
 
     if (!validateEmail(formData.email)) newErrors.email = "Enter a valid email (example: xxx@xxx.com)";
     if (!validateMobile(formData.mobile)) newErrors.mobile = "Mobile number must be 10 digits";
-    const idError = validateIdentifier(formData.id, isFirstYear);
+    if (!formData.branch) newErrors.branch = "Please select your branch";
+    const idError = validateIdentifier(formData.id, isFirstYear, formData.branch);
     if (!formData.id.trim()) {
       newErrors.id = isFirstYear
         ? "First-year students must provide a valid Application Number (e.g., 26UGDS1234)"
@@ -218,6 +236,7 @@ export const Signup: React.FC = () => {
           mobile_number: 'mobile',
           email: 'email',
           password: 'password',
+          department: 'branch',
         };
         const newErr: typeof errors = {};
         for (const item of resData.errors) {
@@ -231,7 +250,8 @@ export const Signup: React.FC = () => {
           setErrors(prev => ({ ...prev, ...newErr }));
         }
       } else if (resData?.field && typeof resData?.error === "string") {
-        const field = resData.field as keyof typeof errors;
+        const fieldKey = resData.field === 'department' ? 'branch' : resData.field;
+        const field = fieldKey as keyof typeof errors;
         setErrors(prev => ({ ...prev, [field]: resData.error }));
         message = resData.error;
       } else if (typeof resData?.error === "string") {
@@ -360,6 +380,7 @@ export const Signup: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  {errors.branch && <p className="text-red-500 text-sm font-dm-sans">{errors.branch}</p>}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
