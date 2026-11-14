@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { auth } from '@/lib/firebase';
 
 interface CodeDraft {
   selectedLanguage: string;
@@ -38,6 +39,7 @@ export const useCodeDraft = ({
 
   // Helper to load draft safely from localStorage and validate runtime shape
   const loadSavedDraft = useCallback((): CodeDraft | null => {
+    if (auth.currentUser?.uid !== userId) return null;
     try {
       const raw = localStorage.getItem(storageKey);
       if (!raw) return null;
@@ -65,7 +67,7 @@ export const useCodeDraft = ({
     } catch {
       return null;
     }
-  }, [storageKey, defaultTemplates]);
+  }, [storageKey, userId, defaultTemplates]);
 
   // 1. Initialize states using saved draft if available, otherwise defaults
   const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
@@ -140,7 +142,8 @@ export const useCodeDraft = ({
 
   // Synchronous flush helper - only persists entries that differ from defaults
   const flushDraftToStorage = useCallback(() => {
-    if (!enabled) return;
+    // Logout/account changes must also block pending timers and unmount flushes.
+    if (!enabled || auth.currentUser?.uid !== userId) return;
     try {
       const { selectedLanguage, codeByLanguage, customInput } = latestDraftRef.current;
       const changedCode = Object.fromEntries(
@@ -167,7 +170,7 @@ export const useCodeDraft = ({
     } catch {
       // Gracefully handle storage quota or privacy mode errors
     }
-  }, [storageKey, enabled, defaultTemplates, defaultInput, defaultLanguage]);
+  }, [storageKey, userId, enabled, defaultTemplates, defaultInput, defaultLanguage]);
 
   // Debounced auto-save during active typing (400ms delay)
   useEffect(() => {

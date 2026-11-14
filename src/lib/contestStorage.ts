@@ -1,3 +1,15 @@
+export const clearCodeDrafts = (): boolean => {
+  try {
+    for (let index = localStorage.length - 1; index >= 0; index--) {
+      const key = localStorage.key(index);
+      if (key?.startsWith('contest_code_draft_')) localStorage.removeItem(key);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const getContestSubmitted = (contestId: string, userId: string): boolean => {
   try {
     return localStorage.getItem(`contest_submitted_${contestId}_${userId}`) === 'true';

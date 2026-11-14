@@ -58,8 +58,6 @@ export interface AdminProblemSummary {
   name: string;
   score: number;
   type: AdminProblemType;
-  time_limit?: number;
-  memory_limit?: number;
 }
 
 export interface AdminTestCaseResult {
@@ -111,8 +109,6 @@ export interface AdminProblem extends AdminProblemSummary {
   answer: number[];
   options: string[];
   testcases: ProblemTestCase[];
-  time_limit?: number;
-  memory_limit?: number;
 }
 
 interface AdminProblemResponse {
@@ -127,8 +123,6 @@ interface AdminProblemResponse {
   options?: string[];
   testcases?: ProblemTestCaseResponse[];
   test_cases?: ProblemTestCaseResponse[];
-  time_limit?: number;
-  memory_limit?: number;
 }
 
 interface ProblemPayloadBase {
@@ -141,8 +135,6 @@ export type UpsertProblemPayload =
   | (ProblemPayloadBase & {
       type: 'code';
       testcases: ProblemTestCase[];
-      time_limit?: number;
-      memory_limit?: number;
     })
   | (ProblemPayloadBase & {
       type: 'mcq';
@@ -158,8 +150,6 @@ const normalizeProblemSummary = (
   name: problem.name,
   score: problem.score,
   type: problem.type,
-  time_limit: problem.time_limit,
-  memory_limit: problem.memory_limit,
 });
 
 export interface ResetTabSwitchesResponse {
@@ -256,8 +246,6 @@ class AdminApiService {
         answer: [],
         options: [],
         testcases,
-        time_limit: problem.time_limit,
-        memory_limit: problem.memory_limit,
       };
     }
 

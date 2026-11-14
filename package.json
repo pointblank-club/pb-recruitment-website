@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:drafts": "node tests/code-draft-logout.mjs",
+    "test:proctoring": "node tests/contest-event-guards.mjs",
     "test": "npm run test:mcq && npm run test:security && npm run test:leaderboard",
     "test:mcq": "node tests/mcq-attempted-status.mjs",
     "test:security": "node tests/request-protections.mjs",

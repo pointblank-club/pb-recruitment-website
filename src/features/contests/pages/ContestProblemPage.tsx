@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'react-toastify';
 import { useAuth } from '@/lib/AuthContext';
 import { formatVerdict } from '../submissionUtils';
-import { useClipboardBlocker } from '../hooks/useClipboardBlocker';
 
 export const ContestProblemPage = () => {
   const { user } = useAuth();
@@ -34,7 +33,6 @@ const ContestProblemContent = () => {
     onTabSwitchTerminated,
   } = useOutletContext<ContestOutletContext>() || {};
 
-  const workspaceRef = useRef<HTMLDivElement>(null);
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
 
   // Enable restrictions only for authenticated, registered participants with a successfully loaded problem in a live contest.
@@ -46,12 +44,6 @@ const ContestProblemContent = () => {
     !isLoading &&
     !error &&
     Boolean(problem);
-
-  // Disable clipboard operations (copy, paste, cut, contextmenu) during active contest scoped to the workspace
-  useClipboardBlocker({
-    enabled: isRestrictionsActive,
-    containerRef: workspaceRef,
-  });
 
   // For ended contests: only registered + authenticated users see code/submissions.
   // Guests and unregistered users see ONLY the problem statement (hideIDE = true).
@@ -266,7 +258,7 @@ const ContestProblemContent = () => {
       : null;
 
   return (
-    <div ref={workspaceRef} className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
+    <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
       {problemsError && <div role="status">Problem updates stopped: {problemsError} <button type="button" onClick={refreshProblems}>Retry</button></div>}
       {/* Informational banners when contest has ended */}
       {isContestEnded && !isAuthenticated && (
