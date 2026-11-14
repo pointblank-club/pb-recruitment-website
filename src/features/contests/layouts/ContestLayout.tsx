@@ -1,5 +1,5 @@
 import { Navigate, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import { ShieldAlert, LogOut } from 'lucide-react';
 import { ContestHeader } from '../components/ContestHeader';
@@ -10,7 +10,13 @@ import { useContest } from '../hooks/useContest';
 import { useTabSwitchTracker } from '../hooks/useTabSwitchTracker';
 import { useContestEventBlocker } from '../hooks/useContestEventBlocker';
 import { useAuth } from '@/lib/AuthContext';
-import { MAX_TAB_SWITCHES, getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
+import {
+  MAX_TAB_SWITCHES,
+  getContestSubmitted,
+  setContestSubmitted,
+  getContestEntered,
+  setContestEntered,
+} from '@/lib/contestStorage';
 import { contestApi } from '@/services/api/contestApi';
 
 export interface ContestOutletContext {
@@ -21,6 +27,8 @@ export interface ContestOutletContext {
   isTabSwitchTerminated?: boolean;
   onTabSwitchTerminated?: () => void;
   openEndContestModal?: () => void;
+  isSubmitting?: boolean;
+  setIsSubmitting?: (isSubmitting: boolean) => void;
 }
 
 export const ContestLayout = () => {
@@ -32,7 +40,12 @@ export const ContestLayout = () => {
   const [progress, setProgress] = useState(0);
   const [hasElapsedDeadline, setHasElapsedDeadline] = useState(false);
   const [isEndModalOpen, setIsEndModalOpen] = useState(false);
-  const [hasEnteredContest, setHasEnteredContest] = useState(false);
+  const [isEndingContest, setIsEndingContest] = useState(false);
+  const [endContestError, setEndContestError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasEnteredContest, setHasEnteredContest] = useState(() =>
+    Boolean(user?.uid && contestId && getContestEntered(contestId, user.uid))
+  );
   const [isWindowFocused, setIsWindowFocused] = useState(() => document.visibilityState === 'visible' && document.hasFocus());
   const hasExitedRef = useRef(false);
   const wasLiveRef = useRef(false);
@@ -43,13 +56,10 @@ export const ContestLayout = () => {
 
   const isLive = !!contest && Date.now() >= contest.start_time && Date.now() < contest.end_time;
   const isContestEnded = contest ? (hasElapsedDeadline || Date.now() >= contest.end_time) : false;
-  const isSubmittedManually = Boolean(
+
+  const isSubmittedLocally = Boolean(
     user?.uid && contestId && getContestSubmitted(contestId, user.uid)
   );
-  const isTrackingActive = Boolean(
-    isLive && !isContestEnded && user?.uid && contest?.is_registered && !isSubmittedManually
-  );
-  const isCountingEnabled = isTrackingActive && hasEnteredContest;
 
   const {
     tabSwitchCount,
@@ -62,20 +72,62 @@ export const ContestLayout = () => {
     closeWarningModal,
     openWarningModal,
     notifyServerTermination,
+    isSessionEnded,
   } = useTabSwitchTracker({
     contestId,
     userId: user?.uid,
-    isSessionActive: isTrackingActive,
-    isCountingEnabled,
+    isSessionActive: Boolean(isLive && !isContestEnded && user?.uid && contest?.is_registered && !isSubmittedLocally),
+    isCountingEnabled: Boolean(isLive && !isContestEnded && user?.uid && contest?.is_registered && !isSubmittedLocally && hasEnteredContest),
     maxSwitches: MAX_TAB_SWITCHES,
   });
 
+  const isSubmittedManually = Boolean(isSubmittedLocally || isSessionEnded);
+  const isTrackingActive = Boolean(
+    isLive && !isContestEnded && user?.uid && contest?.is_registered && !isSubmittedManually
+  );
   const isEventRestrictionsActive = isTrackingActive && !isTabSwitchTerminated;
   useContestEventBlocker({ enabled: isEventRestrictionsActive });
 
   useEffect(() => {
-    setHasEnteredContest(false);
+    setHasEnteredContest(Boolean(user?.uid && contestId && getContestEntered(contestId, user.uid)));
   }, [contestId, user?.uid]);
+
+  const handleEnteredChange = useCallback((entered: boolean) => {
+    setHasEnteredContest(entered);
+    if (entered && contestId && user?.uid) {
+      setContestEntered(contestId, user.uid);
+    }
+  }, [contestId, user?.uid]);
+
+  useEffect(() => {
+    if (!contestId || !user?.uid) return;
+    const key = `contest_submitted_${contestId}_${user.uid}`;
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === key) {
+        if (getContestSubmitted(contestId, user.uid) && !hasExitedRef.current && !isLeaderboardPage) {
+          hasExitedRef.current = true;
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {});
+          }
+          toast.info("This contest session has ended.");
+          navigate(`/contest/${contestId}`, { replace: true });
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [contestId, user?.uid, isLeaderboardPage, navigate]);
+
+  useEffect(() => {
+    if (isSessionEnded && !hasExitedRef.current && !isLeaderboardPage && contest && Date.now() < contest.end_time) {
+      hasExitedRef.current = true;
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+      toast.info("This contest session has ended.");
+      navigate(`/contest/${contestId}`, { replace: true });
+    }
+  }, [isSessionEnded, isLeaderboardPage, contest, contestId, navigate]);
 
   useEffect(() => {
     if (isTabSwitchTerminated && document.fullscreenElement) {
@@ -125,7 +177,7 @@ export const ContestLayout = () => {
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       }
-      toast.info("You have already ended this contest on this device.");
+      toast.info("This contest session has ended.");
       navigate(`/contest/${contestId}`, { replace: true });
       return;
     }
@@ -221,35 +273,59 @@ export const ContestLayout = () => {
   }, [contest, contestId, isLeaderboardPage, navigate, refetch, user?.uid]);
 
   const handleOpenEndModal = () => {
+    setEndContestError(null);
     setIsEndModalOpen(true);
   };
 
   const handleLeaveContest = () => {
     hasExitedRef.current = true;
-    if (user?.uid && contestId && contest && Date.now() < contest.end_time) {
-      if (hasEnteredContest) {
-        const alreadySubmitted = getContestSubmitted(contestId, user.uid);
-        setContestSubmitted(contestId, user.uid);
-        contestApi.endContestSession(contestId).catch(() => {});
-        if (!alreadySubmitted) {
-          toast.info("You have left the contest. Re-entry is disabled until the contest ends.");
-        }
-      }
-    }
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
     navigate(`/contest/${contestId}`, { replace: true });
   };
 
-  const handleConfirmEndContest = () => {
-    setIsEndModalOpen(false);
-    if (user?.uid && contestId) {
-      setContestSubmitted(contestId, user.uid);
-      contestApi.endContestSession(contestId).catch(() => {});
+  const handleConfirmEndContest = async () => {
+    if (isEndingContest) return;
+    if (isSubmitting) {
+      toast.warning("A submission is currently being processed. Please wait for it to complete.");
+      return;
     }
-    toast.info("Contest ended on this device. Only your submitted solutions will be scored.");
-    handleLeaveContest();
+    if (!contestId || !user?.uid) {
+      handleLeaveContest();
+      return;
+    }
+
+    setIsEndingContest(true);
+    setEndContestError(null);
+
+    try {
+      await contestApi.endContestSession(contestId);
+      setContestSubmitted(contestId, user.uid);
+      setIsEndModalOpen(false);
+      toast.info("Contest ended. Only your submitted solutions will be scored.");
+      handleLeaveContest();
+    } catch (err: any) {
+      try {
+        const result = await contestApi.getContestSessionStatus(contestId);
+        if (result.kind === 'ok' && result.status.is_session_ended) {
+          setContestSubmitted(contestId, user.uid);
+          setIsEndModalOpen(false);
+          toast.info("Contest ended. Only your submitted solutions will be scored.");
+          handleLeaveContest();
+          return;
+        }
+      } catch {
+        // Status check failed or ambiguous
+      }
+
+      const message =
+        err?.response?.data?.message || err?.message || "Failed to end contest session. Please try again.";
+      setEndContestError(message);
+      toast.error(message);
+    } finally {
+      setIsEndingContest(false);
+    }
   };
 
   if (!contestId) {
@@ -356,14 +432,24 @@ export const ContestLayout = () => {
           isTabSwitchTerminated,
           onTabSwitchTerminated: notifyServerTermination,
           openEndContestModal: canEnd ? handleOpenEndModal : undefined,
+          isSubmitting,
+          setIsSubmitting,
         } satisfies ContestOutletContext} />
       </div>
 
       <EndContestModal
         isOpen={isEndModalOpen}
-        onClose={() => setIsEndModalOpen(false)}
+        onClose={() => {
+          if (!isEndingContest) {
+            setIsEndModalOpen(false);
+            setEndContestError(null);
+          }
+        }}
         onConfirm={handleConfirmEndContest}
         contestName={contest?.name}
+        isEnding={isEndingContest}
+        isSubmitting={isSubmitting}
+        error={endContestError}
       />
 
       {isParticipating && (
@@ -373,7 +459,9 @@ export const ContestLayout = () => {
           endTime={contest!.end_time}
           onLeave={handleLeaveContest}
           suspended={isWarningModalOpen || isEndModalOpen}
-          onEnteredChange={setHasEnteredContest}
+          hasEntered={hasEnteredContest}
+          onEnteredChange={handleEnteredChange}
+          onPromptEndContest={handleOpenEndModal}
         />
       )}
 

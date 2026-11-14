@@ -210,6 +210,9 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
         setIsTerminatedByTabSwitch(
           isEffectivelyTerminated(outcome.state, outcome.apiStatus, MAX_TAB_SWITCHES)
         );
+        if (outcome.isSessionEnded) {
+          setIsSubmittedEarly(true);
+        }
       }).catch(() => {});
     };
 

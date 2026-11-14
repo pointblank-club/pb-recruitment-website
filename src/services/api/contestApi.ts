@@ -222,8 +222,11 @@ class ContestApiService {
     };
   }
 
-  async endContestSession(contestId: string): Promise<void> {
-    await this.axiosInstance.post(`/contests/${contestId}/end`);
+  async endContestSession(contestId: string, options?: { signal?: AbortSignal; timeoutMs?: number }): Promise<void> {
+    await this.axiosInstance.post(`/contests/${contestId}/end`, undefined, {
+      signal: options?.signal,
+      timeout: options?.timeoutMs ?? 10_000,
+    });
   }
 
   async getContestById(contestId: string): Promise<Contest | null> {
@@ -603,6 +606,8 @@ class ContestApiService {
           tab_switch_count: Number(raw?.tab_switch_count ?? 0),
           is_tab_switch_terminated: Boolean(raw?.is_tab_switch_terminated),
           generation: Number(raw?.generation ?? 0),
+          is_session_ended: Boolean(raw?.is_session_ended),
+          ended_at: typeof raw?.ended_at === 'number' ? raw.ended_at : undefined,
         },
       };
     } catch (error) {
@@ -650,6 +655,8 @@ export interface ContestSessionStatus {
   tab_switch_count: number;
   is_tab_switch_terminated: boolean;
   generation: number;
+  is_session_ended?: boolean;
+  ended_at?: number;
 }
 
 export type SessionStatusFetchResult =

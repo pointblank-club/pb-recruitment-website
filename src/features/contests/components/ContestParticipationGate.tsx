@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ContestParticipationGateProps {
@@ -8,6 +7,8 @@ interface ContestParticipationGateProps {
   onLeave: () => void;
   suspended?: boolean;
   onEnteredChange?: (entered: boolean) => void;
+  hasEntered?: boolean;
+  onPromptEndContest?: () => void;
 }
 
 const canRestoreFocusTarget = (
@@ -30,21 +31,28 @@ export const ContestParticipationGate = ({
   onLeave,
   suspended = false,
   onEnteredChange,
+  hasEntered: propHasEntered,
+  onPromptEndContest,
 }: ContestParticipationGateProps) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const suspendedRef = useRef(suspended);
   suspendedRef.current = suspended;
-  const [hasEntered, setHasEntered] = useState(() => !!document.fullscreenElement);
+  const [hasEntered, setHasEntered] = useState(() => Boolean(propHasEntered || document.fullscreenElement));
   const [isFullscreen, setIsFullscreen] = useState(() => !!document.fullscreenElement);
   const [demoWithoutFullscreen, setDemoWithoutFullscreen] = useState(false);
   const [requestError, setRequestError] = useState('');
   const [isRequesting, setIsRequesting] = useState(false);
-  const [confirmingLeave, setConfirmingLeave] = useState(false);
   const fullscreenSupported = document.fullscreenEnabled &&
     typeof document.documentElement.requestFullscreen === 'function';
   const needsFullscreen = !isFullscreen && !demoWithoutFullscreen;
   const showGate = !suspended && (!hasEntered || needsFullscreen);
+
+  useEffect(() => {
+    if (propHasEntered && !hasEntered) {
+      setHasEntered(true);
+    }
+  }, [propHasEntered, hasEntered]);
 
   useEffect(() => {
     onEnteredChange?.(hasEntered);
@@ -64,7 +72,6 @@ export const ContestParticipationGate = ({
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!showGate) {
-      setConfirmingLeave(false);
       if (dialog?.open) dialog.close();
       return undefined;
     }
@@ -136,88 +143,51 @@ export const ContestParticipationGate = ({
       onCancel={(event) => event.preventDefault()}
       className="bg-black border border-gray-700 rounded-2xl p-6 max-w-md w-full shadow-2xl text-white backdrop:bg-black/75 backdrop:backdrop-blur-sm m-auto"
     >
-      {confirmingLeave ? (
+      <h2 id="contest-participation-title" className="text-xl font-bold mb-3">
+        {!hasEntered ? 'Before you enter the contest' : 'Return to fullscreen'}
+      </h2>
+      <p id="contest-participation-notice" className="text-gray-300 mb-4">
+        Stay in fullscreen while participating.
+      </p>
+      {!fullscreenSupported && needsFullscreen ? (
         <>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center flex-shrink-0">
-              <AlertTriangle className="w-5 h-5 text-red-400" />
-            </div>
-            <div>
-              <h2 id="contest-participation-title" className="text-xl font-bold text-white">
-                Leave contest?
-              </h2>
-              <p className="text-xs text-red-400">Re-entry will be disabled</p>
-            </div>
-          </div>
-          <p id="contest-participation-notice" className="text-gray-300 text-sm mb-4 leading-relaxed">
-            Are you sure you want to leave the contest? You will not be allowed to re-enter until the contest ends. Only your submitted solutions will be evaluated.
+          <p className="text-gray-300 mb-4">
+            Fullscreen is unavailable in this browser or browsing context. You can continue this demo without fullscreen.
           </p>
-          <div className="flex flex-col gap-2">
-            <Button
-              type="button"
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-medium"
-              onClick={() => {
-                setConfirmingLeave(false);
-                continueContest();
-              }}
-            >
-              Stay in contest
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full border-red-600/60 bg-red-950/40 text-red-300 hover:bg-red-900/60 hover:text-white"
-              onClick={onLeave}
-            >
-              Leave contest
-            </Button>
-          </div>
+          <Button type="button" className="w-full bg-green-600 hover:bg-green-700 text-white" onClick={() => {
+            setDemoWithoutFullscreen(true);
+            setHasEntered(true);
+          }}>
+            Continue demo without fullscreen
+          </Button>
         </>
       ) : (
         <>
-          <h2 id="contest-participation-title" className="text-xl font-bold mb-3">
-            {!hasEntered ? 'Before you enter the contest' : 'Return to fullscreen'}
-          </h2>
-          <p id="contest-participation-notice" className="text-gray-300 mb-4">
-            Stay in fullscreen while participating.
-          </p>
-          {!fullscreenSupported && needsFullscreen ? (
-            <>
-              <p className="text-gray-300 mb-4">
-                Fullscreen is unavailable in this browser or browsing context. You can continue this demo without fullscreen.
-              </p>
-              <Button type="button" className="w-full bg-green-600 hover:bg-green-700 text-white" onClick={() => {
-                setDemoWithoutFullscreen(true);
-                setHasEntered(true);
-              }}>
-                Continue demo without fullscreen
-              </Button>
-            </>
-          ) : (
-            <>
-              {requestError && <p role="alert" className="text-red-300 mb-4">{requestError}</p>}
-              <Button type="button" disabled={isRequesting} onClick={continueContest} className="w-full bg-green-600 hover:bg-green-700 text-white">
-                {isRequesting ? 'Requesting fullscreen…' : requestError ? 'Retry' : needsFullscreen ?
-                  (hasEntered ? 'Return to fullscreen' : 'Enter fullscreen') : 'Continue contest'}
-              </Button>
-            </>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-3 w-full border-gray-600 bg-gray-800 text-white hover:bg-gray-700 hover:text-white"
-            onClick={() => {
-              if (hasEntered) {
-                setConfirmingLeave(true);
-              } else {
-                onLeave();
-              }
-            }}
-          >
-            Leave contest
+          {requestError && <p role="alert" className="text-red-300 mb-4">{requestError}</p>}
+          <Button type="button" disabled={isRequesting} onClick={continueContest} className="w-full bg-green-600 hover:bg-green-700 text-white">
+            {isRequesting ? 'Requesting fullscreen…' : requestError ? 'Retry' : needsFullscreen ?
+              (hasEntered ? 'Return to fullscreen' : 'Enter fullscreen') : 'Continue contest'}
           </Button>
         </>
       )}
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-3 w-full border-gray-600 bg-gray-800 text-white hover:bg-gray-700 hover:text-white"
+        onClick={() => {
+          if (hasEntered) {
+            if (onPromptEndContest) {
+              onPromptEndContest();
+            } else {
+              onLeave();
+            }
+          } else {
+            onLeave();
+          }
+        }}
+      >
+        Leave contest
+      </Button>
     </dialog>
   );
 };

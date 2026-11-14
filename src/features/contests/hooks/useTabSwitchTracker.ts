@@ -43,6 +43,7 @@ export interface UseTabSwitchTrackerResult {
   openWarningModal: () => void;
   reconcileNow: () => Promise<void>;
   notifyServerTermination: () => void;
+  isSessionEnded?: boolean;
 }
 
 interface TrackerScope {
@@ -74,6 +75,7 @@ export const useTabSwitchTracker = ({
   const [isWarningModalOpen, setIsWarningModalOpen] = useState<boolean>(false);
   const [apiStatus, setApiStatus] = useState<TabSwitchApiStatus>('idle');
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
+  const [isSessionEnded, setIsSessionEnded] = useState<boolean>(false);
 
   const activeScopeRef = useRef<TrackerScope | null>(null);
   const isCountingEnabledRef = useRef<boolean>(isCountingEnabled);
@@ -159,6 +161,10 @@ export const useTabSwitchTracker = ({
       });
 
       if (!isScopeActive(scope) || outcome.aborted) return;
+
+      if (outcome.isSessionEnded) {
+        setIsSessionEnded(true);
+      }
 
       if (outcome.apiStatus !== 'offline') {
         scope.provisionalLock = false;
@@ -711,5 +717,6 @@ export const useTabSwitchTracker = ({
     openWarningModal,
     reconcileNow,
     notifyServerTermination,
+    isSessionEnded,
   };
 };
