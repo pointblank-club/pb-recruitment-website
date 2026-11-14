@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft, ArrowUpRight, Copy, Check } from 'lucide-react';
 import type { Problem } from '../../problem.types';
 import { MathText } from './MathText';
+import { QuestionDescription } from './QuestionDescription';
 
 interface ProblemStatementTabProps {
   problem: Problem;
@@ -11,6 +12,7 @@ interface ProblemStatementTabProps {
   copiedId: string | null;
   onCopy: (text: string, id: string) => void;
   onLoadSample: (input: string) => void;
+  isAdmin?: boolean;
 }
 
 export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
@@ -20,6 +22,7 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
   copiedId,
   onCopy,
   onLoadSample,
+  isAdmin = false,
 }) => {
   const { contestId } = useParams<{ contestId: string }>();
 
@@ -52,7 +55,9 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
         {/* Problem Description */}
         {problem.description && (
           <div className="space-y-2">
-            <MathText className="whitespace-pre-line leading-relaxed text-slate-200">{problem.description}</MathText>
+            <QuestionDescription isAdmin={isAdmin} className="whitespace-pre-line leading-relaxed text-slate-200">
+              {problem.description}
+            </QuestionDescription>
           </div>
         )}
 

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { getQuestionTextBody } from "@/features/contests/markdownText";
 import {
   adminApi,
   type AdminProblem,
@@ -179,6 +180,11 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
     event.preventDefault();
     setFormError("");
 
+    if (!getQuestionTextBody(formData.description).trim()) {
+      setFormError("Description is required.");
+      return;
+    }
+
     if (formData.type === "code" && formData.testcases.length === 0) {
       setFormError("Add at least one testcase for a coding problem.");
       return;
@@ -345,20 +351,19 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
               </div>
 
               <div>
-                <label className="mb-2 block text-gray-400">Description</label>
+                <label className="mb-2 block text-gray-400" htmlFor="problem-description">Description</label>
                 <textarea
+                  id="problem-description"
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
-                  rows={6}
-                  className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none"
+                  rows={8}
+                  className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 font-mono text-sm text-gray-300 focus:border-green-500 focus:outline-none"
                   required
                 />
-                {formData.type === "code" && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    Plain text by default. Start with <code>:::markdown</code> on its own line to enable Markdown and LaTeX.
-                  </p>
-                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Plain text by default. Start with <code>:::markdown</code> on its own line to render Markdown.
+                </p>
               </div>
 
               {formData.type === "mcq" && (

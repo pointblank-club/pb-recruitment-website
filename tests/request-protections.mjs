@@ -558,6 +558,13 @@ const mathDependencies = {
   'remark-math': await import('remark-math'),
   'rehype-katex': await import('rehype-katex'),
 };
+const markdownTextDependencies = {
+  unified: await import('unified'),
+  'remark-parse': await import('remark-parse'),
+};
+const markdownTextModule = { exports: {}, require: name => markdownTextDependencies[name] };
+vm.runInNewContext(compile(read('src/features/contests/markdownText.ts')), markdownTextModule);
+mathDependencies['../../markdownText'] = markdownTextModule.exports;
 const mathModule = { exports: {}, require: name => mathDependencies[name] };
 vm.runInNewContext(compile(read('src/features/contests/components/workspace/MathText.tsx')
   .replace("import 'katex/dist/katex.min.css';", '')), mathModule);
@@ -565,4 +572,80 @@ for (const input of ['<img src=x onerror=alert(1)>', '[link](javascript:alert%28
   const rendered = renderToStaticMarkup(React.createElement(mathModule.exports.MathText, { children: `:::markdown\n${input}` }));
   assert.ok(!rendered.includes('<img') && !rendered.includes('href="javascript:'), rendered);
 }
-console.log('Actual Markdown/LaTeX renderer rejects executable HTML and JavaScript links.');
+const renderMathText = children => renderToStaticMarkup(React.createElement(mathModule.exports.MathText, { children }));
+const nestedCodeMarkdown = [
+  ':::markdown',
+  '- List example:',
+  '  ```text',
+  String.raw`  \(literal\)`,
+  '  ```',
+  '> Quoted example:',
+  '> ```text',
+  String.raw`> \(also literal\)`,
+  '> ```',
+  '',
+  String.raw`Inline code: ` + '`' + String.raw`\(literal\)` + '`',
+  'Multiline code: `' + String.raw`\(line one` + '\n' + String.raw`line two\)` + '`',
+  '',
+  '```text',
+  String.raw`\(fenced literal\)`,
+  '```',
+].join('\n');
+const nestedCodeHtml = renderMathText(nestedCodeMarkdown);
+assert.ok(!nestedCodeHtml.includes('class="katex"'), nestedCodeHtml);
+assert.ok(nestedCodeHtml.includes('\\(literal\\)'), nestedCodeHtml);
+assert.ok(nestedCodeHtml.includes('\\(also literal\\)'), nestedCodeHtml);
+
+const multilineInlineMath = renderMathText(`:::markdown\n${String.raw`\(x`}\n${String.raw`+1\)`}`);
+assert.ok(multilineInlineMath.includes('class="katex"'), multilineInlineMath);
+
+const multilineDisplayMath = renderMathText(`:::markdown\n${String.raw`\[` }\nx + 1\n${String.raw`\]`}`);
+assert.ok(multilineDisplayMath.includes('katex-display'), multilineDisplayMath);
+
+const proseDisplayMath = renderMathText(`:::markdown\nCompute ${String.raw`\[x+1\]`} then continue.`);
+assert.ok(proseDisplayMath.includes('Compute') && proseDisplayMath.includes('then continue.'), proseDisplayMath);
+assert.ok(proseDisplayMath.includes('katex-display') && !proseDisplayMath.includes('katex-error'), proseDisplayMath);
+
+const quotedProseDisplayMath = renderMathText(`:::markdown\n> Given ${String.raw`\[x+1\]`} then continue.`);
+assert.match(quotedProseDisplayMath, /<blockquote>[\s\S]*Given[\s\S]*katex-display[\s\S]*then continue\.[\s\S]*<\/blockquote>/, quotedProseDisplayMath);
+
+const adjacentDisplayMath = renderMathText(`:::markdown\n${String.raw`\[x\] \[y\]`}`);
+assert.equal((adjacentDisplayMath.match(/katex-display/g) ?? []).length, 2, adjacentDisplayMath);
+assert.ok(!adjacentDisplayMath.includes('katex-error'), adjacentDisplayMath);
+
+const emphasizedInlineMath = renderMathText(`:::markdown\n${String.raw`\(x^{*} + y^{*}\)`}`);
+assert.ok(emphasizedInlineMath.includes('class="katex"') && !emphasizedInlineMath.includes('katex-error'), emphasizedInlineMath);
+
+const quotedDisplayMath = renderMathText(`:::markdown\n> ${String.raw`\[` }\n> x+1\n> ${String.raw`\]`}`);
+assert.match(quotedDisplayMath, /<blockquote>[\s\S]*katex-display[\s\S]*<\/blockquote>/, quotedDisplayMath);
+assert.ok(!quotedDisplayMath.includes('&gt;'), quotedDisplayMath);
+
+const listDisplayMath = renderMathText(`:::markdown\n- ${String.raw`\[x+1\]`}`);
+assert.match(listDisplayMath, /<li>[\s\S]*katex-display[\s\S]*<\/li>/, listDisplayMath);
+
+const linkedMathUrl = renderMathText(String.raw`:::markdown
+[example](https://example.invalid/\(x\))
+
+<https://example.invalid/\(x\)>
+
+https://example.invalid/\(x\)`);
+assert.ok(!linkedMathUrl.includes('class="katex"'), linkedMathUrl);
+assert.ok(linkedMathUrl.includes('https://example.invalid/'), linkedMathUrl);
+
+const linkedLabelMath = renderMathText(String.raw`:::markdown
+[Size \(x\)](https://example.invalid/\(target\))`);
+assert.ok(linkedLabelMath.includes('class="katex"'), linkedLabelMath);
+assert.ok(linkedLabelMath.includes('href="https://example.invalid/(target)"'), linkedLabelMath);
+
+const relativeLinkedMathUrl = renderMathText(String.raw`:::markdown
+[details](../chapter/\(intro\))`);
+assert.ok(!relativeLinkedMathUrl.includes('class="katex"'), relativeLinkedMathUrl);
+assert.ok(relativeLinkedMathUrl.includes('href="../chapter/(intro)"'), relativeLinkedMathUrl);
+
+const codeDelimiterBeforeMath = renderMathText(`:::markdown\nUse \`${String.raw`\(`}\` before the formula ${String.raw`\(x+1\)`}.`);
+assert.ok(codeDelimiterBeforeMath.includes('class="katex"') && !codeDelimiterBeforeMath.includes('katex-error'), codeDelimiterBeforeMath);
+assert.ok(codeDelimiterBeforeMath.includes('\\('), codeDelimiterBeforeMath);
+
+const ordinaryText = renderMathText('Costs $5 and $10, with _x_ and four spaces below.\n    code sample');
+assert.ok(!ordinaryText.includes('class="katex"') && !ordinaryText.includes('<em>x</em>'), ordinaryText);
+console.log('Actual Markdown renderer preserves nested code, multiline math, plain text, and security defaults.');
