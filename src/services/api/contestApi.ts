@@ -60,6 +60,54 @@ export const isTabSwitchTerminationSubmissionError = (error: unknown): boolean =
   const message = extractServerErrorMessage(error.response?.data) || error.message || '';
   return /tab[\s_-]*switch/i.test(message) && /terminat/i.test(message);
 };
+
+const isValidLeaderboardEntry = (entry: unknown): entry is LeaderboardEntry => {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return false;
+  const e = entry as Record<string, unknown>;
+  return (
+    typeof e.user_id === 'string' &&
+    typeof e.username === 'string' &&
+    typeof e.rank === 'number' &&
+    Number.isSafeInteger(e.rank) &&
+    e.rank >= 0 &&
+    typeof e.total_score === 'number' &&
+    Number.isFinite(e.total_score) &&
+    typeof e.problems_solved === 'number' &&
+    Number.isSafeInteger(e.problems_solved)
+  );
+};
+
+const getHeaderValue = (headers: unknown, name: string): unknown => {
+  if (typeof headers !== 'object' || headers === null) return undefined;
+  const h = headers as Record<string, unknown> & { get?: (key: string) => unknown };
+  if (typeof h.get === 'function') {
+    const val = h.get(name);
+    if (val !== undefined && val !== null) return val;
+  }
+  const direct = h[name];
+  if (direct !== undefined && direct !== null) return direct;
+  const lower = name.toLowerCase();
+  for (const key of Object.keys(h)) {
+    if (key.toLowerCase() === lower) return h[key];
+  }
+  return undefined;
+};
+
+const parsePaginationHeader = (value: unknown, min: number): number => {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new Error('Missing or invalid leaderboard pagination headers. Please try again.');
+  }
+  const text = String(value).trim();
+  if (!/^\d+$/.test(text)) {
+    throw new Error('Missing or invalid leaderboard pagination headers. Please try again.');
+  }
+  const num = Number(text);
+  if (!Number.isSafeInteger(num) || num < min || String(num) !== text.replace(/^0+(?=\d)/, '')) {
+    throw new Error('Missing or invalid leaderboard pagination headers. Please try again.');
+  }
+  return num;
+};
+
 // TODO(PBR-2): Delete mockJudgingSetting, MOCK_SUBMISSION_JUDGING, MockSubmission,
 // mockSubmissions, rememberMockSubmission, and all mock branches when the judge ships.
 const MOCK_SUBMISSION_JUDGING =
@@ -159,42 +207,16 @@ class ContestApiService {
       { timeout: 15_000 }
     );
 
-    const getHeader = (name: string): string | undefined => {
-      if (typeof response.headers?.get === 'function') {
-        const val = response.headers.get(name);
-        if (val !== undefined && val !== null) return String(val).trim();
-      }
-      const raw = response.headers?.[name] ?? response.headers?.[name.toLowerCase()];
-      return raw !== undefined && raw !== null ? String(raw).trim() : undefined;
-    };
-
-    const headerCount = getHeader('x-total-count');
-    const headerPages = getHeader('x-total-pages');
-
     const rawData = response.data as unknown;
-    const entries: LeaderboardEntry[] = Array.isArray(rawData)
-      ? (rawData as LeaderboardEntry[])
-      : Array.isArray((rawData as { entries?: unknown })?.entries)
-        ? ((rawData as { entries: LeaderboardEntry[] }).entries)
-        : [];
+    if (!Array.isArray(rawData) || !rawData.every(isValidLeaderboardEntry)) {
+      throw new Error('Invalid leaderboard response format.');
+    }
 
-    const totalCount =
-      headerCount !== undefined && /^\d+$/.test(headerCount)
-        ? Number(headerCount)
-        : typeof (rawData as { totalCount?: unknown })?.totalCount === 'number'
-          ? (rawData as { totalCount: number }).totalCount
-          : entries.length;
-
-    const totalPages =
-      headerPages !== undefined && /^\d+$/.test(headerPages) && Number(headerPages) > 0
-        ? Number(headerPages)
-        : typeof (rawData as { totalPages?: unknown })?.totalPages === 'number' &&
-          (rawData as { totalPages: number }).totalPages > 0
-          ? (rawData as { totalPages: number }).totalPages
-          : 1;
+    const totalCount = parsePaginationHeader(getHeaderValue(response.headers, 'x-total-count'), 0);
+    const totalPages = parsePaginationHeader(getHeaderValue(response.headers, 'x-total-pages'), 1);
 
     return {
-      entries,
+      entries: rawData,
       totalCount,
       totalPages,
     };
