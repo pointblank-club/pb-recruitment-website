@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import axios from 'axios';
 import { toast } from 'react-toastify';
 import { ShieldAlert, LogOut } from 'lucide-react';
 import { ContestHeader } from '../components/ContestHeader';
@@ -50,6 +51,7 @@ export const ContestLayout = () => {
   const hasExitedRef = useRef(false);
   const wasLiveRef = useRef(false);
   const isRefetchingRef = useRef(false);
+  const endAbortRef = useRef<AbortController | null>(null);
 
   const { contest, isLoading: isContestLoading, refetch } = useContest(contestId || '');
   const isLeaderboardPage = location.pathname.endsWith('/leaderboard');
@@ -89,8 +91,19 @@ export const ContestLayout = () => {
   useContestEventBlocker({ enabled: isEventRestrictionsActive });
 
   useEffect(() => {
+    endAbortRef.current?.abort();
+    endAbortRef.current = null;
+    setIsEndModalOpen(false);
+    setIsEndingContest(false);
+    setEndContestError(null);
     setHasEnteredContest(Boolean(user?.uid && contestId && getContestEntered(contestId, user.uid)));
   }, [contestId, user?.uid]);
+
+  useEffect(() => {
+    return () => {
+      endAbortRef.current?.abort();
+    };
+  }, []);
 
   const handleEnteredChange = useCallback((entered: boolean) => {
     setHasEnteredContest(entered);
@@ -291,25 +304,40 @@ export const ContestLayout = () => {
       toast.warning("A submission is currently being processed. Please wait for it to complete.");
       return;
     }
-    if (!contestId || !user?.uid) {
+    const targetContestId = contestId;
+    const targetUserId = user?.uid;
+    if (!targetContestId || !targetUserId) {
       handleLeaveContest();
       return;
     }
 
+    endAbortRef.current?.abort();
+    const controller = new AbortController();
+    endAbortRef.current = controller;
+
     setIsEndingContest(true);
     setEndContestError(null);
 
+    const isCurrent = () =>
+      !controller.signal.aborted &&
+      contestId === targetContestId &&
+      user?.uid === targetUserId;
+
     try {
-      await contestApi.endContestSession(contestId);
-      setContestSubmitted(contestId, user.uid);
+      await contestApi.endContestSession(targetContestId, { signal: controller.signal });
+      if (!isCurrent()) return;
+      setContestSubmitted(targetContestId, targetUserId);
       setIsEndModalOpen(false);
       toast.info("Contest ended. Only your submitted solutions will be scored.");
       handleLeaveContest();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      if (controller.signal.aborted || !isCurrent()) return;
+
       try {
-        const result = await contestApi.getContestSessionStatus(contestId);
+        const result = await contestApi.getContestSessionStatus(targetContestId, { signal: controller.signal });
+        if (!isCurrent()) return;
         if (result.kind === 'ok' && result.status.is_session_ended) {
-          setContestSubmitted(contestId, user.uid);
+          setContestSubmitted(targetContestId, targetUserId);
           setIsEndModalOpen(false);
           toast.info("Contest ended. Only your submitted solutions will be scored.");
           handleLeaveContest();
@@ -319,12 +347,23 @@ export const ContestLayout = () => {
         // Status check failed or ambiguous
       }
 
-      const message =
-        err?.response?.data?.message || err?.message || "Failed to end contest session. Please try again.";
+      if (!isCurrent()) return;
+      let message = "Failed to end contest session. Please try again.";
+      if (axios.isAxiosError(err)) {
+        const data = err.response?.data as { message?: string; error?: string } | undefined;
+        message = data?.message || data?.error || err.message || message;
+      } else if (err instanceof Error) {
+        message = err.message || message;
+      }
       setEndContestError(message);
       toast.error(message);
     } finally {
-      setIsEndingContest(false);
+      if (endAbortRef.current === controller) {
+        endAbortRef.current = null;
+        if (isCurrent()) {
+          setIsEndingContest(false);
+        }
+      }
     }
   };
 
