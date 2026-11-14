@@ -44,6 +44,26 @@ const getProtectedRanges = (markdown: string): SourceRange[] => {
         if (start !== undefined && end !== undefined) ranges.push({ start, end });
         return;
       }
+
+      // Protect the destination and any title while still allowing math in the label.
+      if (start !== undefined && end !== undefined) {
+        let depth = 0;
+        let labelEnd = -1;
+        for (let index = 0; index < source.length; index += 1) {
+          if (source[index] === '\\') {
+            index += 1;
+            continue;
+          }
+          if (source[index] === '[') depth += 1;
+          if (source[index] === ']' && --depth === 0) {
+            labelEnd = index;
+            break;
+          }
+        }
+        if (labelEnd !== -1 && source[labelEnd + 1] === '(') {
+          ranges.push({ start: start + labelEnd + 1, end });
+        }
+      }
     }
     node.children?.forEach(visit);
   };
@@ -59,9 +79,10 @@ const getProtectedRanges = (markdown: string): SourceRange[] => {
 const getContainerPrefixes = (source: string, offset: number) => {
   const lineStart = source.lastIndexOf('\n', offset - 1) + 1;
   const linePrefix = source.slice(lineStart, offset);
-  const containerPrefix = linePrefix.match(/^(?: {0,3}> ?)*(?: {0,3}(?:[-+*]|\d+[.)]) +)?$/)?.[0] ?? '';
+  const exactPrefix = linePrefix.match(/^(?: {0,3}> ?)*(?: {0,3}(?:[-+*]|\d+[.)]) +)?$/)?.[0];
+  const containerPrefix = exactPrefix ?? linePrefix.match(/^(?:(?: {0,3}> ?)+| {0,3}(?:[-+*]|\d+[.)]) +)+/)?.[0] ?? '';
   const continuationPrefix = containerPrefix.replace(/([-+*]|\d+[.)]) +$/, (marker) => ' '.repeat(marker.length));
-  return { lineStart, containerPrefix, continuationPrefix };
+  return { lineStart, linePrefix, containerPrefix, continuationPrefix };
 };
 
 const isEscaped = (source: string, offset: number) => offset > 0 && source[offset - 1] === '\\';
@@ -71,35 +92,45 @@ const convertVisibleMath = (markdown: string) => {
   let converted = false;
   const delimiters = /\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)/g;
   const protectedRanges = getProtectedRanges(markdown);
+  let rangeIndex = 0;
+  const searchable = markdown.split('').map((character, index) => {
+    while (rangeIndex < protectedRanges.length && protectedRanges[rangeIndex].end <= index) rangeIndex += 1;
+    const isProtected = rangeIndex < protectedRanges.length
+      && index >= protectedRanges[rangeIndex].start
+      && index < protectedRanges[rangeIndex].end;
+    return isProtected && character !== '\n' && character !== '\r' ? ' ' : character;
+  }).join('');
 
   let match: RegExpExecArray | null;
-  while ((match = delimiters.exec(markdown)) !== null) {
+  while ((match = delimiters.exec(searchable)) !== null) {
       const absoluteStart = match.index;
       const absoluteEnd = absoluteStart + match[0].length;
-      if (protectedRanges.some((range) => absoluteStart < range.end && absoluteEnd > range.start)) continue;
+      const original = markdown.slice(absoluteStart, absoluteEnd);
+      const inlineContent = original.slice(2, -2);
       const open = match[0].startsWith('\\[') ? '[' : '(';
-      const closeStart = absoluteStart + match[0].lastIndexOf(open === '[' ? '\\]' : '\\)');
+      const closeStart = absoluteStart + original.lastIndexOf(open === '[' ? '\\]' : '\\)');
       if (isEscaped(markdown, absoluteStart) || isEscaped(markdown, closeStart)) continue;
 
       if (open === '(') {
         edits.push({
           start: absoluteStart,
           end: absoluteEnd,
-          replacement: `$${match[2]}$`,
+          replacement: `$${inlineContent}$`,
         });
       } else {
-        const { lineStart, containerPrefix, continuationPrefix } = getContainerPrefixes(markdown, absoluteStart);
-        const content = (match[1] ?? '').split(/\r?\n/).map((line) => (
+        const { lineStart, linePrefix, containerPrefix, continuationPrefix } = getContainerPrefixes(markdown, absoluteStart);
+        const content = inlineContent.split(/\r?\n/).map((line) => (
           continuationPrefix && line.startsWith(continuationPrefix)
             ? line.slice(continuationPrefix.length)
             : line
         )).join('\n').replace(/^\n|\n$/g, '');
         const hasContainerPrefix = containerPrefix.length > 0;
+        const hasSurroundingProse = linePrefix !== containerPrefix;
         edits.push({
-          start: hasContainerPrefix ? lineStart : absoluteStart,
+          start: hasContainerPrefix && linePrefix === containerPrefix ? lineStart : absoluteStart,
           end: absoluteEnd,
           replacement: hasContainerPrefix
-            ? `${containerPrefix}$$\n${continuationPrefix}${content.split('\n').join(`\n${continuationPrefix}`)}\n${continuationPrefix}$$\n`
+            ? `${hasSurroundingProse ? '\n\n' : ''}${containerPrefix}$$\n${continuationPrefix}${content.split('\n').join(`\n${continuationPrefix}`)}\n${continuationPrefix}$$${hasSurroundingProse ? '\n\n' : '\n'}${hasSurroundingProse ? continuationPrefix : ''}`
             : `\n$$\n${content}\n$$\n`,
         });
       }

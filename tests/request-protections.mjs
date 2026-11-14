@@ -606,6 +606,9 @@ const proseDisplayMath = renderMathText(`:::markdown\nCompute ${String.raw`\[x+1
 assert.ok(proseDisplayMath.includes('Compute') && proseDisplayMath.includes('then continue.'), proseDisplayMath);
 assert.ok(proseDisplayMath.includes('katex-display') && !proseDisplayMath.includes('katex-error'), proseDisplayMath);
 
+const quotedProseDisplayMath = renderMathText(`:::markdown\n> Given ${String.raw`\[x+1\]`} then continue.`);
+assert.match(quotedProseDisplayMath, /<blockquote>[\s\S]*Given[\s\S]*katex-display[\s\S]*then continue\.[\s\S]*<\/blockquote>/, quotedProseDisplayMath);
+
 const adjacentDisplayMath = renderMathText(`:::markdown\n${String.raw`\[x\] \[y\]`}`);
 assert.equal((adjacentDisplayMath.match(/katex-display/g) ?? []).length, 2, adjacentDisplayMath);
 assert.ok(!adjacentDisplayMath.includes('katex-error'), adjacentDisplayMath);
@@ -633,6 +636,15 @@ const linkedLabelMath = renderMathText(String.raw`:::markdown
 [Size \(x\)](https://example.invalid/\(target\))`);
 assert.ok(linkedLabelMath.includes('class="katex"'), linkedLabelMath);
 assert.ok(linkedLabelMath.includes('href="https://example.invalid/(target)"'), linkedLabelMath);
+
+const relativeLinkedMathUrl = renderMathText(String.raw`:::markdown
+[details](../chapter/\(intro\))`);
+assert.ok(!relativeLinkedMathUrl.includes('class="katex"'), relativeLinkedMathUrl);
+assert.ok(relativeLinkedMathUrl.includes('href="../chapter/(intro)"'), relativeLinkedMathUrl);
+
+const codeDelimiterBeforeMath = renderMathText(`:::markdown\nUse \`${String.raw`\(`}\` before the formula ${String.raw`\(x+1\)`}.`);
+assert.ok(codeDelimiterBeforeMath.includes('class="katex"') && !codeDelimiterBeforeMath.includes('katex-error'), codeDelimiterBeforeMath);
+assert.ok(codeDelimiterBeforeMath.includes('\\('), codeDelimiterBeforeMath);
 
 const ordinaryText = renderMathText('Costs $5 and $10, with _x_ and four spaces below.\n    code sample');
 assert.ok(!ordinaryText.includes('class="katex"') && !ordinaryText.includes('<em>x</em>'), ordinaryText);
