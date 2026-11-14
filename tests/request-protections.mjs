@@ -602,6 +602,17 @@ assert.ok(multilineInlineMath.includes('class="katex"'), multilineInlineMath);
 const multilineDisplayMath = renderMathText(`:::markdown\n${String.raw`\[` }\nx + 1\n${String.raw`\]`}`);
 assert.ok(multilineDisplayMath.includes('katex-display'), multilineDisplayMath);
 
+const proseDisplayMath = renderMathText(`:::markdown\nCompute ${String.raw`\[x+1\]`} then continue.`);
+assert.ok(proseDisplayMath.includes('Compute') && proseDisplayMath.includes('then continue.'), proseDisplayMath);
+assert.ok(proseDisplayMath.includes('katex-display') && !proseDisplayMath.includes('katex-error'), proseDisplayMath);
+
+const adjacentDisplayMath = renderMathText(`:::markdown\n${String.raw`\[x\] \[y\]`}`);
+assert.equal((adjacentDisplayMath.match(/katex-display/g) ?? []).length, 2, adjacentDisplayMath);
+assert.ok(!adjacentDisplayMath.includes('katex-error'), adjacentDisplayMath);
+
+const emphasizedInlineMath = renderMathText(`:::markdown\n${String.raw`\(x^{*} + y^{*}\)`}`);
+assert.ok(emphasizedInlineMath.includes('class="katex"') && !emphasizedInlineMath.includes('katex-error'), emphasizedInlineMath);
+
 const quotedDisplayMath = renderMathText(`:::markdown\n> ${String.raw`\[` }\n> x+1\n> ${String.raw`\]`}`);
 assert.match(quotedDisplayMath, /<blockquote>[\s\S]*katex-display[\s\S]*<\/blockquote>/, quotedDisplayMath);
 assert.ok(!quotedDisplayMath.includes('&gt;'), quotedDisplayMath);

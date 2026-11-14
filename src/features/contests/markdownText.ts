@@ -26,30 +26,33 @@ interface SourceEdit extends SourceRange {
 
 const markdownParser = unified().use(remarkParse);
 
-const getVisibleTextRanges = (markdown: string): SourceRange[] => {
+const getProtectedRanges = (markdown: string): SourceRange[] => {
   const ranges: SourceRange[] = [];
   const visit = (node: PositionedNode) => {
     const start = node.position?.start?.offset;
     const end = node.position?.end?.offset;
 
-    if (node.type === 'code' || node.type === 'inlineCode' || node.type === 'image' || node.type === 'imageReference' || node.type === 'definition') {
+    if (node.type === 'code' || node.type === 'inlineCode' || node.type === 'image' || node.type === 'imageReference' || node.type === 'definition' || node.type === 'html') {
+      if (start !== undefined && end !== undefined) ranges.push({ start, end });
       return;
     }
 
     if (node.type === 'link') {
       const source = start !== undefined && end !== undefined ? markdown.slice(start, end) : '';
-      // Explicit links expose their label as text; autolinks expose a URL and must stay untouched.
-      if (!source.startsWith('[')) return;
-    }
-
-    if (node.type === 'text' && start !== undefined && end !== undefined) {
-      ranges.push({ start, end });
-      return;
+      // Explicit link labels may contain math, but autolinks are URLs and stay untouched.
+      if (!source.startsWith('[')) {
+        if (start !== undefined && end !== undefined) ranges.push({ start, end });
+        return;
+      }
     }
     node.children?.forEach(visit);
   };
 
   visit(markdownParser.parse(markdown) as unknown as PositionedNode);
+  for (const match of markdown.matchAll(/\bhttps?:\/\/[^\s<>()]+/gi)) {
+    const start = match.index ?? 0;
+    ranges.push({ start, end: start + match[0].length });
+  }
   return ranges.sort((left, right) => left.start - right.start);
 };
 
@@ -67,19 +70,13 @@ const convertVisibleMath = (markdown: string) => {
   const edits: SourceEdit[] = [];
   let converted = false;
   const delimiters = /\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)/g;
+  const protectedRanges = getProtectedRanges(markdown);
 
-  for (const range of getVisibleTextRanges(markdown)) {
-    const sourceText = markdown.slice(range.start, range.end);
-    const urlRanges = [...sourceText.matchAll(/\bhttps?:\/\/[^\s]+/gi)].map((match) => ({
-      start: match.index ?? 0,
-      end: (match.index ?? 0) + match[0].length,
-    }));
-    delimiters.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = delimiters.exec(sourceText)) !== null) {
-      const matchIndex = match.index;
-      if (urlRanges.some((url) => matchIndex >= url.start && matchIndex < url.end)) continue;
-      const absoluteStart = range.start + matchIndex;
+  let match: RegExpExecArray | null;
+  while ((match = delimiters.exec(markdown)) !== null) {
+      const absoluteStart = match.index;
+      const absoluteEnd = absoluteStart + match[0].length;
+      if (protectedRanges.some((range) => absoluteStart < range.end && absoluteEnd > range.start)) continue;
       const open = match[0].startsWith('\\[') ? '[' : '(';
       const closeStart = absoluteStart + match[0].lastIndexOf(open === '[' ? '\\]' : '\\)');
       if (isEscaped(markdown, absoluteStart) || isEscaped(markdown, closeStart)) continue;
@@ -87,7 +84,7 @@ const convertVisibleMath = (markdown: string) => {
       if (open === '(') {
         edits.push({
           start: absoluteStart,
-          end: range.start + matchIndex + match[0].length,
+          end: absoluteEnd,
           replacement: `$${match[2]}$`,
         });
       } else {
@@ -100,14 +97,13 @@ const convertVisibleMath = (markdown: string) => {
         const hasContainerPrefix = containerPrefix.length > 0;
         edits.push({
           start: hasContainerPrefix ? lineStart : absoluteStart,
-          end: range.start + matchIndex + match[0].length,
+          end: absoluteEnd,
           replacement: hasContainerPrefix
-            ? `${containerPrefix}$$\n${continuationPrefix}${content.split('\n').join(`\n${continuationPrefix}`)}\n${continuationPrefix}$$`
-            : `$$\n${content}\n$$`,
+            ? `${containerPrefix}$$\n${continuationPrefix}${content.split('\n').join(`\n${continuationPrefix}`)}\n${continuationPrefix}$$\n`
+            : `\n$$\n${content}\n$$\n`,
         });
       }
       converted = true;
-    }
   }
 
   edits.sort((left, right) => right.start - left.start);
