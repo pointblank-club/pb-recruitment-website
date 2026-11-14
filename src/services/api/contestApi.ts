@@ -158,16 +158,43 @@ class ContestApiService {
       `/contests/${contestId}/leaderboard?page=${page}`,
       { timeout: 15_000 }
     );
-    const [totalCount, totalPages] = ['x-total-count', 'x-total-pages'].map((header) => {
-      const value = response.headers[header];
-      if (typeof value !== 'string' || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
-        throw new Error('Missing or invalid leaderboard pagination headers. Please try again.');
+
+    const getHeader = (name: string): string | undefined => {
+      if (typeof response.headers?.get === 'function') {
+        const val = response.headers.get(name);
+        if (val !== undefined && val !== null) return String(val).trim();
       }
-      return Number(value);
-    });
+      const raw = response.headers?.[name] ?? response.headers?.[name.toLowerCase()];
+      return raw !== undefined && raw !== null ? String(raw).trim() : undefined;
+    };
+
+    const headerCount = getHeader('x-total-count');
+    const headerPages = getHeader('x-total-pages');
+
+    const rawData = response.data as unknown;
+    const entries: LeaderboardEntry[] = Array.isArray(rawData)
+      ? (rawData as LeaderboardEntry[])
+      : Array.isArray((rawData as { entries?: unknown })?.entries)
+        ? ((rawData as { entries: LeaderboardEntry[] }).entries)
+        : [];
+
+    const totalCount =
+      headerCount !== undefined && /^\d+$/.test(headerCount)
+        ? Number(headerCount)
+        : typeof (rawData as { totalCount?: unknown })?.totalCount === 'number'
+          ? (rawData as { totalCount: number }).totalCount
+          : entries.length;
+
+    const totalPages =
+      headerPages !== undefined && /^\d+$/.test(headerPages) && Number(headerPages) > 0
+        ? Number(headerPages)
+        : typeof (rawData as { totalPages?: unknown })?.totalPages === 'number' &&
+          (rawData as { totalPages: number }).totalPages > 0
+          ? (rawData as { totalPages: number }).totalPages
+          : 1;
 
     return {
-      entries: response.data || [],
+      entries,
       totalCount,
       totalPages,
     };
