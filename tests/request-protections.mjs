@@ -608,6 +608,13 @@ assert.ok(proseDisplayMath.includes('katex-display') && !proseDisplayMath.includ
 
 const quotedProseDisplayMath = renderMathText(`:::markdown\n> Given ${String.raw`\[x+1\]`} then continue.`);
 assert.match(quotedProseDisplayMath, /<blockquote>[\s\S]*Given[\s\S]*katex-display[\s\S]*then continue\.[\s\S]*<\/blockquote>/, quotedProseDisplayMath);
+assert.equal((quotedProseDisplayMath.match(/<blockquote>/g) ?? []).length, 1, quotedProseDisplayMath);
+
+for (const prefix of ['- ', '1. ', '> - ']) {
+  const listProseMath = renderMathText(`:::markdown\n${prefix}Given ${String.raw`\[x+1\]`} then continue.\n${prefix}Return x.`);
+  assert.equal((listProseMath.match(/<li>/g) ?? []).length, 2, listProseMath);
+  assert.match(listProseMath, /<li>[\s\S]*Given[\s\S]*katex-display[\s\S]*then continue\.[\s\S]*<\/li>/, listProseMath);
+}
 
 const adjacentDisplayMath = renderMathText(`:::markdown\n${String.raw`\[x\] \[y\]`}`);
 assert.equal((adjacentDisplayMath.match(/katex-display/g) ?? []).length, 2, adjacentDisplayMath);
@@ -641,6 +648,12 @@ const relativeLinkedMathUrl = renderMathText(String.raw`:::markdown
 [details](../chapter/\(intro\))`);
 assert.ok(!relativeLinkedMathUrl.includes('class="katex"'), relativeLinkedMathUrl);
 assert.ok(relativeLinkedMathUrl.includes('href="../chapter/(intro)"'), relativeLinkedMathUrl);
+
+for (const label of ['open `[`', 'close `]`']) {
+  const codeLabelLink = renderMathText(`:::markdown\n[${label}](${String.raw`../chapter/\(intro\)`})`);
+  assert.ok(codeLabelLink.includes('href="../chapter/(intro)"'), codeLabelLink);
+  assert.ok(!codeLabelLink.includes('class="katex"'), codeLabelLink);
+}
 
 const codeDelimiterBeforeMath = renderMathText(`:::markdown\nUse \`${String.raw`\(`}\` before the formula ${String.raw`\(x+1\)`}.`);
 assert.ok(codeDelimiterBeforeMath.includes('class="katex"') && !codeDelimiterBeforeMath.includes('katex-error'), codeDelimiterBeforeMath);
