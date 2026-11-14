@@ -7,6 +7,8 @@ interface ContestParticipationGateProps {
   onLeave: () => void;
   suspended?: boolean;
   onEnteredChange?: (entered: boolean) => void;
+  hasEntered?: boolean;
+  onPromptEndContest?: () => void;
 }
 
 const canRestoreFocusTarget = (
@@ -29,12 +31,14 @@ export const ContestParticipationGate = ({
   onLeave,
   suspended = false,
   onEnteredChange,
+  hasEntered: propHasEntered,
+  onPromptEndContest,
 }: ContestParticipationGateProps) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const suspendedRef = useRef(suspended);
   suspendedRef.current = suspended;
-  const [hasEntered, setHasEntered] = useState(() => !!document.fullscreenElement);
+  const [hasEntered, setHasEntered] = useState(() => Boolean(propHasEntered || document.fullscreenElement));
   const [isFullscreen, setIsFullscreen] = useState(() => !!document.fullscreenElement);
   const [demoWithoutFullscreen, setDemoWithoutFullscreen] = useState(false);
   const [requestError, setRequestError] = useState('');
@@ -43,6 +47,12 @@ export const ContestParticipationGate = ({
     typeof document.documentElement.requestFullscreen === 'function';
   const needsFullscreen = !isFullscreen && !demoWithoutFullscreen;
   const showGate = !suspended && (!hasEntered || needsFullscreen);
+
+  useEffect(() => {
+    if (propHasEntered && !hasEntered) {
+      setHasEntered(true);
+    }
+  }, [propHasEntered, hasEntered]);
 
   useEffect(() => {
     onEnteredChange?.(hasEntered);
@@ -160,7 +170,22 @@ export const ContestParticipationGate = ({
           </Button>
         </>
       )}
-      <Button type="button" variant="outline" className="mt-3 w-full border-gray-600 bg-gray-800 text-white hover:bg-gray-700 hover:text-white" onClick={onLeave}>
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-3 w-full border-gray-600 bg-gray-800 text-white hover:bg-gray-700 hover:text-white"
+        onClick={() => {
+          if (hasEntered) {
+            if (onPromptEndContest) {
+              onPromptEndContest();
+            } else {
+              onLeave();
+            }
+          } else {
+            onLeave();
+          }
+        }}
+      >
         Leave contest
       </Button>
     </dialog>

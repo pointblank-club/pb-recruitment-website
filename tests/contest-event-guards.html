@@ -5,9 +5,9 @@
 <script type="module">
   import React from 'react';
   import { createRoot } from 'react-dom/client';
-  import { MemoryRouter, Routes, Route } from 'react-router-dom';
+  import { MemoryRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
   import { ContestLayout } from '/src/features/contests/layouts/ContestLayout.tsx';
   import '/src/App.css';
 
-  window.contestGuardFixture = { React, createRoot, MemoryRouter, Routes, Route, ContestLayout };
+  window.contestGuardFixture = { React, createRoot, MemoryRouter, Routes, Route, useNavigate, useLocation, ContestLayout };
 </script>

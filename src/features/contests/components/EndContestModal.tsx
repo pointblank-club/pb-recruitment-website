@@ -6,6 +6,9 @@ interface EndContestModalProps {
   onClose: () => void;
   onConfirm: () => void;
   contestName?: string;
+  isEnding?: boolean;
+  isSubmitting?: boolean;
+  error?: string | null;
 }
 
 export const EndContestModal: React.FC<EndContestModalProps> = ({
@@ -13,20 +16,47 @@ export const EndContestModal: React.FC<EndContestModalProps> = ({
   onClose,
   onConfirm,
   contestName = 'the contest',
+  isEnding = false,
+  isSubmitting = false,
+  error = null,
 }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const continueButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
 
     if (isOpen) {
+      const active = document.activeElement;
+      if (
+        !previousFocusRef.current &&
+        active instanceof HTMLElement &&
+        active !== document.body &&
+        !active.closest('dialog')
+      ) {
+        previousFocusRef.current = active;
+      }
       if (!dialog.open) {
         dialog.showModal();
       }
+      requestAnimationFrame(() => {
+        continueButtonRef.current?.focus();
+      });
     } else {
       if (dialog.open) {
         dialog.close();
+      }
+      const target = previousFocusRef.current;
+      previousFocusRef.current = null;
+      if (
+        target &&
+        target.isConnected &&
+        !target.hasAttribute('disabled') &&
+        !document.querySelector('dialog[open]')
+      ) {
+        target.focus({ preventScroll: true });
       }
     }
   }, [isOpen]);
@@ -77,30 +107,43 @@ export const EndContestModal: React.FC<EndContestModalProps> = ({
         {/* Description */}
         <div className="space-y-2 mb-6 text-sm text-gray-300 font-['DM_Sans']">
           <p>
-            Are you sure you want to leave and end your contest session on this device?
+            Are you sure you want to end your contest session? You will not be allowed to re-enter or submit any further solutions.
           </p>
           <p className="text-gray-400 text-xs">
             • Only answers and code solutions you have already submitted will be evaluated.
             <br />
-            • Any unsubmitted code or unsaved changes in the editor will be lost.
+            • Preserved editor drafts cannot be submitted after ending.
           </p>
+          {isSubmitting && (
+            <p className="text-amber-400 text-xs font-medium">
+              A submission is currently being processed. Please wait for it to complete.
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="text-red-400 text-xs font-medium">
+              {error}
+            </p>
+          )}
         </div>
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3 font-['DM_Sans']">
           <button
+            ref={continueButtonRef}
             type="button"
+            disabled={isEnding}
             onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800 transition-colors text-sm font-medium"
+            className="px-4 py-2 rounded-lg border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800 disabled:opacity-50 transition-colors text-sm font-medium"
           >
             Continue Contest
           </button>
           <button
             type="button"
+            disabled={isEnding || isSubmitting}
             onClick={onConfirm}
-            className="px-5 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors text-sm font-semibold shadow-lg shadow-red-600/20"
+            className="px-5 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors text-sm font-semibold shadow-lg shadow-red-600/20"
           >
-            Yes, End Contest
+            {isEnding ? 'Ending Contest…' : 'Yes, End Contest'}
           </button>
         </div>
       </div>

@@ -43,6 +43,7 @@ export interface UseTabSwitchTrackerResult {
   openWarningModal: () => void;
   reconcileNow: () => Promise<void>;
   notifyServerTermination: () => void;
+  isSessionEnded?: boolean;
 }
 
 interface TrackerScope {
@@ -74,6 +75,10 @@ export const useTabSwitchTracker = ({
   const [isWarningModalOpen, setIsWarningModalOpen] = useState<boolean>(false);
   const [apiStatus, setApiStatus] = useState<TabSwitchApiStatus>('idle');
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
+  const [endedScope, setEndedScope] = useState<{ contestId: string; userId: string } | null>(null);
+  const isSessionEnded = Boolean(
+    contestId && userId && endedScope?.contestId === contestId && endedScope?.userId === userId
+  );
 
   const activeScopeRef = useRef<TrackerScope | null>(null);
   const isCountingEnabledRef = useRef<boolean>(isCountingEnabled);
@@ -159,6 +164,10 @@ export const useTabSwitchTracker = ({
       });
 
       if (!isScopeActive(scope) || outcome.aborted) return;
+
+      if (outcome.isSessionEnded && isScopeActive(scope)) {
+        setEndedScope({ contestId: scope.contestId, userId: scope.userId });
+      }
 
       if (outcome.apiStatus !== 'offline') {
         scope.provisionalLock = false;
@@ -411,6 +420,7 @@ export const useTabSwitchTracker = ({
       setIsWarningModalOpen(false);
       setApiStatus('idle');
       setPendingSyncCount(0);
+      setEndedScope(null);
       return;
     }
 
@@ -711,5 +721,6 @@ export const useTabSwitchTracker = ({
     openWarningModal,
     reconcileNow,
     notifyServerTermination,
+    isSessionEnded,
   };
 };

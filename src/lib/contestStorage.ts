@@ -34,6 +34,22 @@ export const clearContestSubmitted = (contestId: string, userId: string): void =
   }
 };
 
+export const getContestEntered = (contestId: string, userId: string): boolean => {
+  try {
+    return localStorage.getItem(`contest_entered_${contestId}_${userId}`) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+export const setContestEntered = (contestId: string, userId: string): void => {
+  try {
+    localStorage.setItem(`contest_entered_${contestId}_${userId}`, 'true');
+  } catch {
+    // Ignore storage failure
+  }
+};
+
 export const getProblemAttempted = (contestId: string, userId: string, problemId: string): boolean => {
   try {
     return localStorage.getItem(`contest_run_${contestId}_${userId}_${problemId}`) === 'true';

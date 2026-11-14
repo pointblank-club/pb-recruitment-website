@@ -4,6 +4,7 @@ import {
   type PendingTabSwitchEvent,
   readLocalTabSwitchState,
   writeLocalTabSwitchSnapshot,
+  setContestSubmitted,
 } from '@/lib/contestStorage';
 import { contestApi } from '@/services/api/contestApi';
 
@@ -224,6 +225,7 @@ export interface ReconcileSessionOutcome {
   apiStatus: TabSwitchApiStatus;
   resetDetected: boolean;
   wasTerminatedBefore: boolean;
+  isSessionEnded?: boolean;
   aborted?: boolean;
 }
 
@@ -272,6 +274,9 @@ export const reconcileContestSessionStatus = async ({
   const baseline = mergeLocalTabSwitchStates(initialBaseline, latestBaseline);
 
   if (result.kind === 'ok') {
+    if (result.status.is_session_ended) {
+      setContestSubmitted(contestId, userId);
+    }
     const acceptLowerGeneration = baseline.resetGeneration === initialBaseline.resetGeneration;
     const nextState = reconcileServerSnapshot(
       baseline,
@@ -288,6 +293,7 @@ export const reconcileContestSessionStatus = async ({
       apiStatus: 'supported',
       resetDetected,
       wasTerminatedBefore: initialBaseline.isTerminated,
+      isSessionEnded: Boolean(result.status.is_session_ended),
     };
   }
 

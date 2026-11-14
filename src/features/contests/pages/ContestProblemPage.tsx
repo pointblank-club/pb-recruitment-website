@@ -31,6 +31,7 @@ const ContestProblemContent = () => {
     isRegistered = false,
     isTabSwitchTerminated = false,
     onTabSwitchTerminated,
+    setIsSubmitting,
   } = useOutletContext<ContestOutletContext>() || {};
 
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
@@ -106,6 +107,14 @@ const ContestProblemContent = () => {
       throw submitError;
     }
   };
+
+  const isSubmissionInFlight = activeSubmission.phase === 'submitting';
+  useEffect(() => {
+    setIsSubmitting?.(isSubmissionInFlight);
+    return () => {
+      setIsSubmitting?.(false);
+    };
+  }, [isSubmissionInFlight, setIsSubmitting]);
 
   const notifiedSubmissionRef = useRef<string | null>(null);
   useEffect(() => {

@@ -31,8 +31,8 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
       ? contest.is_registered
       : Boolean(user?.uid && getContestRegistered(contest.id, user.uid));
   const isOngoing = contest.isContestOngoing();
-  const isSubmittedEarly = Boolean(
-    user?.uid && getContestSubmitted(contest.id, user.uid)
+  const [isSubmittedEarly, setIsSubmittedEarly] = useState<boolean>(() =>
+    Boolean(user?.uid && getContestSubmitted(contest.id, user.uid))
   );
   const [isTerminatedByTabSwitch, setIsTerminatedByTabSwitch] = useState<boolean>(() => {
     if (!user?.uid) return false;
@@ -44,9 +44,11 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
     const uid = user?.uid;
     if (!uid) {
       setIsTerminatedByTabSwitch(false);
+      setIsSubmittedEarly(false);
       return;
     }
 
+    setIsSubmittedEarly(Boolean(getContestSubmitted(contest.id, uid)));
     const local = readLocalTabSwitchState(contest.id, uid);
     const localTerminated = isEffectivelyTerminated(
       local,
@@ -56,15 +58,22 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
     setIsTerminatedByTabSwitch(localTerminated);
 
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== null && event.key !== getTabSwitchStateKey(contest.id, uid)) return;
+      if (
+        event.key !== null &&
+        event.key !== getTabSwitchStateKey(contest.id, uid) &&
+        event.key !== `contest_submitted_${contest.id}_${uid}`
+      ) {
+        return;
+      }
       const latest = readLocalTabSwitchState(contest.id, uid);
       setIsTerminatedByTabSwitch(
         isEffectivelyTerminated(latest, latest.hasServerSnapshot ? 'supported' : 'idle', MAX_TAB_SWITCHES)
       );
+      setIsSubmittedEarly(Boolean(getContestSubmitted(contest.id, uid)));
     };
     window.addEventListener('storage', handleStorage);
 
-    if (!isRegistered || !isOngoing || !localTerminated) {
+    if (!isRegistered || !isOngoing) {
       return () => window.removeEventListener('storage', handleStorage);
     }
 
@@ -76,6 +85,9 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
       signal: controller.signal,
     }).then((outcome) => {
       if (controller.signal.aborted || outcome.aborted) return;
+      if (outcome.isSessionEnded) {
+        setIsSubmittedEarly(true);
+      }
       setIsTerminatedByTabSwitch(
         isEffectivelyTerminated(outcome.state, outcome.apiStatus, MAX_TAB_SWITCHES)
       );
