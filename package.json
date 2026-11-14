@@ -6,6 +6,7 @@
   "scripts": {
     "test:drafts": "node tests/code-draft-logout.mjs",
     "test:proctoring": "node tests/contest-event-guards.mjs",
+    "test:session": "node --test tests/contest-session.browser.cjs",
     "test": "npm run test:mcq && npm run test:security && npm run test:leaderboard",
     "test:mcq": "node tests/mcq-attempted-status.mjs",
     "test:security": "node tests/request-protections.mjs",

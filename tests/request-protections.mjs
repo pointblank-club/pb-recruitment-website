@@ -566,37 +566,3 @@ for (const input of ['<img src=x onerror=alert(1)>', '[link](javascript:alert%28
   assert.ok(!rendered.includes('<img') && !rendered.includes('href="javascript:'), rendered);
 }
 console.log('Actual Markdown/LaTeX renderer rejects executable HTML and JavaScript links.');
-
-// Scope isolation and transition regression checks
-{
-  // 1. Completion leaks between contests and accounts
-  let endedScope = null;
-  const isSessionEndedFor = (cId, uId) => Boolean(cId && uId && endedScope?.contestId === cId && endedScope?.userId === uId);
-
-  endedScope = { contestId: 'contest-A', userId: 'user-1' };
-  assert.equal(isSessionEndedFor('contest-A', 'user-1'), true, 'ended scope matches');
-  assert.equal(isSessionEndedFor('contest-B', 'user-1'), false, 'switching contest immediately clears isSessionEnded on first render');
-  assert.equal(isSessionEndedFor('contest-A', 'user-2'), false, 'switching user immediately clears isSessionEnded on first render');
-
-  // 2. Late End response interrupts a newer contest
-  let activeEndAbort = new AbortController();
-  let navigatedTo = null;
-  let targetContestId = 'contest-A';
-  let targetUserId = 'user-1';
-
-  const endContestPromise = (async () => {
-    const controller = activeEndAbort;
-    const isCurrent = () => !controller.signal.aborted && targetContestId === 'contest-A' && targetUserId === 'user-1';
-    await new Promise(resolve => setTimeout(resolve, 20));
-    if (!isCurrent()) return;
-    navigatedTo = '/contest/contest-A';
-  })();
-
-  // User navigates from contest A to contest B before A settles
-  activeEndAbort.abort();
-  targetContestId = 'contest-B';
-
-  await endContestPromise;
-  assert.equal(navigatedTo, null, 'late End response from contest A must not navigate from contest B');
-  console.log('Contest completion and End response correctly isolate scope across transitions.');
-}

@@ -68,6 +68,11 @@ With Vite running on `localhost:5173` and Playwright available, run
 `node tests/contest-event-guards.browser.cjs` for mounted Chromium/Firefox checks.
 `PLAYWRIGHT_MODULE` may point to an existing Playwright package installation.
 
+With the same Vite and Playwright setup, run `npm run test:session` for mounted
+Chromium checks of completion scope and delayed End/status responses across
+contest and account changes. Firebase identity and HTTP are mocked; no real
+services or participant data are used.
+
 ## Crash reporting and production source maps
 
 Set `VITE_SENTRY_DSN` to enable crash reporting and UID-only identity. Replay,
