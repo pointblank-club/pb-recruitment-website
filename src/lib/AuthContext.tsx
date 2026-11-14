@@ -7,6 +7,16 @@ import type { User } from "firebase/auth";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { fetchUserProfile, type UserProfile } from "./profileService";
 import * as Sentry from "@sentry/react";
+import { toast } from "react-toastify";
+import { clearCodeDrafts } from "./contestStorage";
+
+const clearLocalCodeDrafts = () => {
+  if (!clearCodeDrafts()) {
+    toast.error("Local code drafts could not be cleared. Clear this site's browser data before leaving this computer.", {
+      toastId: "code-draft-cleanup-failed",
+    });
+  }
+};
 
 interface AuthContextType {
   user: User | null;
@@ -44,7 +54,12 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   };
 
   useEffect(() => {
+    let previousUserId = auth.currentUser?.uid;
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser || (previousUserId && previousUserId !== firebaseUser.uid)) {
+        clearLocalCodeDrafts();
+      }
+      previousUserId = firebaseUser?.uid;
       setUser(firebaseUser);
       if (firebaseUser) {
         Sentry.setUser({
@@ -63,6 +78,7 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     await signOut(auth);
+    clearLocalCodeDrafts();
     Sentry.setUser(null);
     setUser(null);
     setUserProfile(null);

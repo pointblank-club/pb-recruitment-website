@@ -8,6 +8,7 @@ import { EndContestModal } from '../components/EndContestModal';
 import { TabSwitchWarningModal } from '../components/TabSwitchWarningModal';
 import { useContest } from '../hooks/useContest';
 import { useTabSwitchTracker } from '../hooks/useTabSwitchTracker';
+import { useContestEventBlocker } from '../hooks/useContestEventBlocker';
 import { useAuth } from '@/lib/AuthContext';
 import { MAX_TAB_SWITCHES, getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
 
@@ -67,6 +68,8 @@ export const ContestLayout = () => {
     isCountingEnabled,
     maxSwitches: MAX_TAB_SWITCHES,
   });
+
+  useContestEventBlocker({ enabled: isTrackingActive });
 
   useEffect(() => {
     setHasEnteredContest(false);
@@ -277,7 +280,7 @@ export const ContestLayout = () => {
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0 && !isTabSwitchTerminated && !isSubmittedManually;
 
   return (
-    <div className="contest-screen relative w-full bg-black h-screen flex flex-col overflow-hidden">
+    <div data-proctored={isTrackingActive} className="contest-screen relative w-full bg-black h-screen flex flex-col overflow-hidden">
       <ContestHeader 
         timeRemaining={timeRemaining}
         progress={progress}

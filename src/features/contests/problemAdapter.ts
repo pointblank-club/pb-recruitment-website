@@ -20,8 +20,6 @@ export interface ProblemDetailsResponse extends Omit<ProblemOverviewResponse, 'i
   contest_id: string;
   description?: string;
   options?: string[];
-  time_limit?: number;
-  memory_limit?: number;
   testcases?: ProblemTestCaseResponse[];
 }
 
@@ -44,8 +42,6 @@ export const toProblemDetails = (response: ProblemDetailsResponse): Problem => (
   id: response.problem_id,
   type: problemType(response.type),
   description: response.description ?? '',
-  time_limit: response.time_limit,
-  memory_limit: response.memory_limit,
   examples: (response.testcases ?? [])
     .filter((testcase) => testcase.is_sample !== false && typeof testcase.expected_output === 'string')
     .sort((left, right) => left.index - right.index)
