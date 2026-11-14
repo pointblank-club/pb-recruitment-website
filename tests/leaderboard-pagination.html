@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Leaderboard pagination browser fixture</title>
+<div id="root"></div>
+<script type="module">
+  import React from 'react';
+  import { createRoot } from 'react-dom/client';
+  import { MemoryRouter, Routes, Route } from 'react-router-dom';
+  import { ContestLeaderboardPage } from '/src/features/contests/pages/ContestLeaderboardPage.tsx';
+
+  window.leaderboardFixture = { React, createRoot, MemoryRouter, Routes, Route, ContestLeaderboardPage };
+</script>

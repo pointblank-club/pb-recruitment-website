@@ -1,7 +1,6 @@
 export interface PaginatedLeaderboard {
   entries: LeaderboardEntry[];
-  totalCount: number;
-  totalPages: number;
+  hasNextPage: boolean;
 }
 
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
@@ -19,6 +18,7 @@ import { jitterDelay, parseRetryAfterMs, requestTimeout } from '@/lib/requestPol
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const TAB_SWITCH_REQUEST_TIMEOUT_MS = 10_000;
+const LEADERBOARD_PAGE_SIZE = 20;
 
 interface IdentityScopedRequestConfig {
   _expectedUserId?: string;
@@ -75,37 +75,6 @@ const isValidLeaderboardEntry = (entry: unknown): entry is LeaderboardEntry => {
     typeof e.problems_solved === 'number' &&
     Number.isSafeInteger(e.problems_solved)
   );
-};
-
-const getHeaderValue = (headers: unknown, name: string): unknown => {
-  if (typeof headers !== 'object' || headers === null) return undefined;
-  const h = headers as Record<string, unknown> & { get?: (key: string) => unknown };
-  if (typeof h.get === 'function') {
-    const val = h.get(name);
-    if (val !== undefined && val !== null) return val;
-  }
-  const direct = h[name];
-  if (direct !== undefined && direct !== null) return direct;
-  const lower = name.toLowerCase();
-  for (const key of Object.keys(h)) {
-    if (key.toLowerCase() === lower) return h[key];
-  }
-  return undefined;
-};
-
-const parsePaginationHeader = (value: unknown, min: number): number => {
-  if (typeof value !== 'string' && typeof value !== 'number') {
-    throw new Error('Missing or invalid leaderboard pagination headers. Please try again.');
-  }
-  const text = String(value).trim();
-  if (!/^\d+$/.test(text)) {
-    throw new Error('Missing or invalid leaderboard pagination headers. Please try again.');
-  }
-  const num = Number(text);
-  if (!Number.isSafeInteger(num) || num < min || String(num) !== text.replace(/^0+(?=\d)/, '')) {
-    throw new Error('Missing or invalid leaderboard pagination headers. Please try again.');
-  }
-  return num;
 };
 
 // TODO(PBR-2): Delete mockJudgingSetting, MOCK_SUBMISSION_JUDGING, MockSubmission,
@@ -212,13 +181,10 @@ class ContestApiService {
       throw new Error('Invalid leaderboard response format.');
     }
 
-    const totalCount = parsePaginationHeader(getHeaderValue(response.headers, 'x-total-count'), 0);
-    const totalPages = parsePaginationHeader(getHeaderValue(response.headers, 'x-total-pages'), 1);
-
     return {
       entries: rawData,
-      totalCount,
-      totalPages,
+      // shortcut: full final pages need one extra Next request; use a body cursor if the API adds one.
+      hasNextPage: rawData.length >= LEADERBOARD_PAGE_SIZE,
     };
   }
 
