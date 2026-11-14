@@ -37,8 +37,7 @@ export const ContestLeaderboardPage = () => {
     currentUserRank,
     page,
     setPage,
-    totalPages,
-    totalParticipants,
+    hasNextPage,
     isLoading,
     error,
     hasStarted,
@@ -160,18 +159,24 @@ export const ContestLeaderboardPage = () => {
       </div>
 
       {/* Leaderboard Table */}
-      <LeaderboardTable
-        entries={leaderboard}
-        currentUserId={currentUserRank?.user_id}
-        contestId={contestId}
-        isAdmin={isAdmin}
-      />
+      {leaderboard.length === 0 && page > 0 ? (
+        <div className="bg-black border border-gray-800 p-12 text-center">
+          <p className="text-gray-400 text-lg font-['DM_Sans']">No more participants on this page</p>
+        </div>
+      ) : (
+        <LeaderboardTable
+          entries={leaderboard}
+          currentUserId={currentUserRank?.user_id}
+          contestId={contestId}
+          isAdmin={isAdmin}
+        />
+      )}
 
       {/* Pagination controls */}
-      {(totalPages > 1 || page > 0) && (
+      {(hasNextPage || page > 0) && (
         <div className="flex items-center justify-between mt-4 text-sm text-gray-400 font-['DM_Sans']">
           <span>
-            Page {page + 1} of {Math.max(1, totalPages)} ({totalParticipants} total participants)
+            Page {page + 1}
           </span>
           <div className="flex gap-2">
             <button
@@ -184,21 +189,13 @@ export const ContestLeaderboardPage = () => {
             </button>
             <button
               type="button"
-              disabled={page >= totalPages - 1}
+              disabled={!hasNextPage}
               onClick={() => setPage(page + 1)}
               className="px-3 py-1 bg-gray-900 border border-gray-800 rounded disabled:opacity-40 hover:text-white transition"
             >
               Next
             </button>
           </div>
-        </div>
-      )}
-
-      {/* Empty State for Filtered Results */}
-      {leaderboard.length === 0 && totalParticipants > 0 && (
-        <div className="bg-black border border-gray-800 p-12 text-center mt-4">
-          <p className="text-gray-400 text-lg mb-2 font-['DM_Sans']">NO RESULTS FOUND</p>
-          <p className="text-gray-600 text-sm font-['DM_Sans']">No results found</p>
         </div>
       )}
     </div>

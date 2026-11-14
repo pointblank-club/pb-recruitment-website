@@ -29,6 +29,19 @@ For UI-only development, `VITE_MOCK_SUBMISSION_JUDGING=true` replaces verdict
 polling with fabricated accepted results after the real submit call. It is ignored
 in production builds; keep it false when verifying real judging.
 
+## Leaderboard pagination
+
+Leaderboard rows and Previous/Next navigation use the response body, independent
+of `X-Total-Count` and `X-Total-Pages`. The API currently returns 20 participants
+per page. Exact totals are not displayed; a full final page may allow one extra
+Next request, which shows an end-of-list message with Previous still available.
+
+Run `npm run test:leaderboard` for response validation. With Vite on
+`localhost:5173` and Playwright available, run
+`node --test tests/leaderboard-pagination.browser.cjs` for rendered participants,
+current-user highlighting, and navigation checks. `PLAYWRIGHT_MODULE` can point
+to an existing Playwright installation.
+
 ## Local code drafts
 
 Code and custom-input drafts survive reloads while signed in. Signing out, losing

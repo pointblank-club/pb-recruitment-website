@@ -10,8 +10,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
   const [page, setPage] = useState(0);
   const [refreshCycle, setRefreshCycle] = useState(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [totalParticipants, setTotalParticipants] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
+  const [hasNextPage, setHasNextPage] = useState(false);
   const [contest, setContest] = useState<Contest | null>(null);
   const [isContestLoading, setIsContestLoading] = useState(true);
   const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(true);
@@ -82,6 +81,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
     async (targetPage: number, isBackground = false) => {
       if (!contestId) {
         setLeaderboard([]);
+        setHasNextPage(false);
         setIsLeaderboardLoading(false);
         setLeaderboardError(null);
         hasLoadedDataRef.current = false;
@@ -107,18 +107,8 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
           return;
         }
 
-        // Clamp page if total count/pages shrank below selected page
-        const clampedPage = Math.max(0, res.totalPages - 1);
-        if (targetPage > clampedPage) {
-          setTotalParticipants(res.totalCount);
-          setTotalPages(res.totalPages);
-          setPage(clampedPage);
-          return;
-        }
-
         setLeaderboard(res.entries);
-        setTotalParticipants(res.totalCount);
-        setTotalPages(res.totalPages);
+        setHasNextPage(res.hasNextPage);
         setLeaderboardError(null);
         setHasStarted(true);
         hasLoadedDataRef.current = true;
@@ -137,6 +127,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
             pollingErrorsRef.current = 0;
             setHasStarted(false);
             setLeaderboard([]);
+            setHasNextPage(false);
           }
         }
         if (!isNotStarted) {
@@ -163,6 +154,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
       setContest(null);
       setContestError(null);
       setLeaderboard([]);
+      setHasNextPage(false);
       setLeaderboardError(null);
       if (page !== 0) {
         setPage(0);
@@ -211,8 +203,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
     currentUserRank,
     page,
     setPage,
-    totalPages,
-    totalParticipants,
+    hasNextPage,
     isLoading,
     error,
     hasStarted,
