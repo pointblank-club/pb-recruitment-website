@@ -14,13 +14,13 @@ export const preventContextMenu = (event: React.MouseEvent<HTMLElement>) => {
   event.preventDefault();
 };
 
-export const preventClipboardShortcut = (event: React.KeyboardEvent<HTMLElement>) => {
-  if (isClipboardAllowed(event.target)) return;
+export const preventClipboardShortcut = (event: KeyboardEvent | React.KeyboardEvent<HTMLElement>) => {
+  if (isClipboardAllowed(event.target) || event.altKey) return;
   const key = event.key.toLowerCase();
   const controlShortcut = (event.ctrlKey || event.metaKey) && ['c', 'x', 'v', 'insert'].includes(key);
-  const shiftInsertPaste = event.shiftKey && key === 'insert';
+  const shiftClipboardShortcut = event.shiftKey && !event.ctrlKey && !event.metaKey && ['insert', 'delete'].includes(key);
 
-  if (controlShortcut || shiftInsertPaste) {
+  if (controlShortcut || shiftClipboardShortcut) {
     event.preventDefault();
     event.stopPropagation();
   }

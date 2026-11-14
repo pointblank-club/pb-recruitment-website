@@ -47,24 +47,6 @@ export const ProblemStatementTab: React.FC<ProblemStatementTabProps> = ({
           <span className="px-2.5 py-1 rounded bg-[#10b981]/15 text-[#10b981] font-semibold border border-[#10b981]/30">
             {problem.score} points
           </span>
-          {problem.time_limit && (
-            <span
-              className="px-2.5 py-1 rounded bg-[#141b29] text-slate-300 font-mono border border-[#1e2636] flex items-center gap-1.5"
-              title="Time Limit per test case"
-            >
-              <span className="text-[10px] uppercase font-sans tracking-wide text-slate-400 font-medium">Time Limit:</span>
-              <span>{problem.time_limit} ms</span>
-            </span>
-          )}
-          {problem.memory_limit && (
-            <span
-              className="px-2.5 py-1 rounded bg-[#141b29] text-slate-300 font-mono border border-[#1e2636] flex items-center gap-1.5"
-              title="Memory / Size Limit per test case"
-            >
-              <span className="text-[10px] uppercase font-sans tracking-wide text-slate-400 font-medium">Memory Limit:</span>
-              <span>{problem.memory_limit} MB</span>
-            </span>
-          )}
         </div>
       </div>
 

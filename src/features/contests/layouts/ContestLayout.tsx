@@ -8,6 +8,7 @@ import { EndContestModal } from '../components/EndContestModal';
 import { TabSwitchWarningModal } from '../components/TabSwitchWarningModal';
 import { useContest } from '../hooks/useContest';
 import { useTabSwitchTracker } from '../hooks/useTabSwitchTracker';
+import { useContestEventBlocker } from '../hooks/useContestEventBlocker';
 import { useAuth } from '@/lib/AuthContext';
 import { MAX_TAB_SWITCHES, getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
 
@@ -67,6 +68,9 @@ export const ContestLayout = () => {
     isCountingEnabled,
     maxSwitches: MAX_TAB_SWITCHES,
   });
+
+  const isEventRestrictionsActive = isTrackingActive && !isTabSwitchTerminated;
+  useContestEventBlocker({ enabled: isEventRestrictionsActive });
 
   useEffect(() => {
     setHasEnteredContest(false);

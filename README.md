@@ -29,6 +29,45 @@ For UI-only development, `VITE_MOCK_SUBMISSION_JUDGING=true` replaces verdict
 polling with fabricated accepted results after the real submit call. It is ignored
 in production builds; keep it false when verifying real judging.
 
+## Local code drafts
+
+Code and custom-input drafts survive reloads while signed in. Signing out, losing
+the authenticated session, or switching accounts clears all local code drafts on
+that browser profile, including older guest drafts. Pending autosaves and unmount
+callbacks cannot save drafts for a signed-out or different account. Submission and
+proctoring records are retained. A cleanup failure displays a warning to clear the
+site's browser data before leaving a shared computer.
+
+Run `npm run test:drafts` for the logout and draft-persistence regression checks.
+
+## Exam browser restrictions
+
+Active, registered participants have page-level restrictions throughout the contest
+layout: context menus, clipboard actions (except the custom-input field), native
+drag/drop, DevTools shortcuts, view source, printing, and saving. The shortcut
+guards include Chromium/Edge, Firefox tool-specific keys, and macOS variants.
+Editor redo, accessible Tab navigation, zoom, and ordinary typing remain available.
+Conflicting browser defaults are cancelled without suppressing Monaco's redo and
+macOS Tab-focus handlers.
+Contest pages are hidden by the existing print stylesheet, including after the
+contest ends. The layout's event guards stop on session termination, manual
+submission, contest expiry, or leaving the layout. Tab-switch synchronization
+stays active for terminated sessions so server resets can still be received.
+
+These controls deter casual misuse; they cannot secure a candidate-controlled
+browser. Firefox's Shift+right-click override, browser menus, already-open or remote
+DevTools, extensions, disabled or modified JavaScript, OS screenshots, and other
+devices remain outside page control.
+Do not use DevTools heuristics to disqualify candidates: they cannot reliably
+distinguish cheating from normal browser behavior. Tamper-resistant delivery needs
+a managed exam browser/device and server-enforced contest rules; user-agent checks
+are not proof of a locked-down client.
+
+Run `npm run test:proctoring` for the event-guard regression checks.
+With Vite running on `localhost:5173` and Playwright available, run
+`node tests/contest-event-guards.browser.cjs` for mounted Chromium/Firefox checks.
+`PLAYWRIGHT_MODULE` may point to an existing Playwright package installation.
+
 ## Crash reporting and production source maps
 
 Set `VITE_SENTRY_DSN` to enable crash reporting and UID-only identity. Replay,

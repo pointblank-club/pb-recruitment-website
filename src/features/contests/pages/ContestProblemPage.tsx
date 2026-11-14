@@ -13,8 +13,6 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'react-toastify';
 import { useAuth } from '@/lib/AuthContext';
 import { formatVerdict } from '../submissionUtils';
-import { useClipboardBlocker } from '../hooks/useClipboardBlocker';
-import { adminApi } from '@/services/api/adminApi';
 
 export const ContestProblemPage = () => {
   const { user } = useAuth();
@@ -26,8 +24,6 @@ const ContestProblemContent = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const userId = user?.uid;
-  const [isAdmin, setIsAdmin] = useState(false);
   const {
     isLive = false,
     isContestEnded = false,
@@ -37,20 +33,7 @@ const ContestProblemContent = () => {
     onTabSwitchTerminated,
   } = useOutletContext<ContestOutletContext>() || {};
 
-  const workspaceRef = useRef<HTMLDivElement>(null);
   const { problem, isLoading, error } = useProblemDetails(contestId || '', problemId || '');
-
-  useEffect(() => {
-    let cancelled = false;
-    setIsAdmin(false);
-    if (!userId) return;
-
-    adminApi.checkAdminAccess()
-      .then(() => { if (!cancelled) setIsAdmin(true); })
-      .catch(() => { if (!cancelled) setIsAdmin(false); });
-
-    return () => { cancelled = true; };
-  }, [userId]);
 
   // Enable restrictions only for authenticated, registered participants with a successfully loaded problem in a live contest.
   const isRestrictionsActive =
@@ -61,12 +44,6 @@ const ContestProblemContent = () => {
     !isLoading &&
     !error &&
     Boolean(problem);
-
-  // Disable clipboard operations (copy, paste, cut, contextmenu) during active contest scoped to the workspace
-  useClipboardBlocker({
-    enabled: isRestrictionsActive,
-    containerRef: workspaceRef,
-  });
 
   // For ended contests: only registered + authenticated users see code/submissions.
   // Guests and unregistered users see ONLY the problem statement (hideIDE = true).
@@ -281,7 +258,7 @@ const ContestProblemContent = () => {
       : null;
 
   return (
-    <div ref={workspaceRef} className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
+    <div className="flex h-full min-h-[480px] flex-1 flex-col overflow-hidden">
       {problemsError && <div role="status">Problem updates stopped: {problemsError} <button type="button" onClick={refreshProblems}>Retry</button></div>}
       {/* Informational banners when contest has ended */}
       {isContestEnded && !isAuthenticated && (
@@ -367,7 +344,6 @@ const ContestProblemContent = () => {
                 <CodeProblemView
                   key={`${user?.uid || 'guest'}_${contestId}_${problem.id}`}
                   problem={problem}
-                  isAdmin={isAdmin}
                   contestId={contestId}
                   isContestEnded={true}
                   hideIDE={true}
@@ -396,7 +372,6 @@ const ContestProblemContent = () => {
             <CodeProblemView
               key={`${user?.uid || 'guest'}_${contestId}_${problem.id}`}
               problem={problem}
-              isAdmin={isAdmin}
               contestId={contestId}
               onSubmit={isAuthenticated && !isLocked ? handleSubmitCode : undefined}
               onRun={isAuthenticated && !isLocked ? runCode : undefined}
@@ -424,7 +399,6 @@ const ContestProblemContent = () => {
           <MCQProblemView
             key={problem.id}
             problem={problem}
-            isAdmin={isAdmin}
             onSubmit={canSubmitMCQ ? handleSubmitMCQ : undefined}
             submissionError={mcqSubmissionError}
             onRetryPolling={retryPolling}
