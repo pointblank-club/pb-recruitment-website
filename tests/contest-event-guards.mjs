@@ -4,14 +4,16 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 
 class Element extends EventTarget {
-  constructor({ clipboardAllowed = false, monaco = false } = {}) {
+  constructor({ clipboardAllowed = false, monaco = false, editable = false } = {}) {
     super();
     this.clipboardAllowed = clipboardAllowed;
     this.monaco = monaco;
+    this.editable = editable;
   }
   closest(selector) {
     return (selector.includes('data-clipboard-allowed') ? this.clipboardAllowed : this.monaco) ? this : null;
   }
+  matches() { return this.editable; }
 }
 
 const window = new EventTarget();
@@ -46,7 +48,7 @@ const { useContestEventBlocker } = load('src/features/contests/hooks/useContestE
   '../clipboardGuards': guards,
 });
 const workspace = new Element({ monaco: true });
-const customInput = new Element({ clipboardAllowed: true });
+const customInput = new Element({ clipboardAllowed: true, editable: true });
 const header = new Element();
 const dispatch = (type, properties = {}, target = header) => {
   const event = new Event(type, { cancelable: true, bubbles: true });
@@ -87,7 +89,8 @@ for (let mount = 0; mount < 2; mount++) {
       ]),
     ];
     for (const shortcut of blockedKeys) {
-      assert.equal(dispatch('keydown', shortcut, target), true, `Blocked: ${JSON.stringify(shortcut)}`);
+      const isNativeRedo = target === customInput && shortcut.ctrlKey && shortcut.shiftKey && shortcut.key === 'Z';
+      assert.equal(dispatch('keydown', shortcut, target), !isNativeRedo, `Shortcut: ${JSON.stringify(shortcut)}`);
     }
     for (const shortcut of [
       ...['c', 'x', 'v', 'Insert'].flatMap(key => [{ key, ctrlKey: true }, { key, metaKey: true }]),
@@ -121,6 +124,12 @@ for (let mount = 0; mount < 2; mount++) {
     assert.equal(dispatch('keydown', { key, ctrlKey: true, shiftKey: true }, workspace), true,
       'Cancel conflicting browser defaults even inside Monaco');
     assert.equal(reachedEditor, true, 'Monaco redo and accessible Tab-focus handlers still receive the event');
+  }
+  for (const target of [customInput, new Element({ editable: true })]) {
+    reachedEditor = false;
+    assert.equal(dispatch('keydown', { key: 'z', ctrlKey: true, shiftKey: true }, target), false,
+      'Native editable controls retain the browser redo default');
+    assert.equal(reachedEditor, true, 'Native redo reaches the editable control');
   }
   window.removeEventListener('keydown', editorHandler, true);
   cleanup();

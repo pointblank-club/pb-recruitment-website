@@ -69,7 +69,8 @@ export const ContestLayout = () => {
     maxSwitches: MAX_TAB_SWITCHES,
   });
 
-  useContestEventBlocker({ enabled: isTrackingActive });
+  const isEventRestrictionsActive = isTrackingActive && !isTabSwitchTerminated;
+  useContestEventBlocker({ enabled: isEventRestrictionsActive });
 
   useEffect(() => {
     setHasEnteredContest(false);
@@ -280,7 +281,7 @@ export const ContestLayout = () => {
   const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0 && !isTabSwitchTerminated && !isSubmittedManually;
 
   return (
-    <div data-proctored={isTrackingActive} className="contest-screen relative w-full bg-black h-screen flex flex-col overflow-hidden">
+    <div className="contest-screen relative w-full bg-black h-screen flex flex-col overflow-hidden">
       <ContestHeader 
         timeRemaining={timeRemaining}
         progress={progress}

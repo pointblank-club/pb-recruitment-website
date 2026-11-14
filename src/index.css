@@ -2,12 +2,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@media print {
-  .contest-screen[data-proctored="true"] {
-    display: none !important;
-  }
-}
-
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

@@ -49,8 +49,10 @@ guards include Chromium/Edge, Firefox tool-specific keys, and macOS variants.
 Editor redo, accessible Tab navigation, zoom, and ordinary typing remain available.
 Conflicting browser defaults are cancelled without suppressing Monaco's redo and
 macOS Tab-focus handlers.
-Active exam content is also hidden by print CSS, including browser-menu printing.
-The guards are removed when the session ends or the contestant leaves the layout.
+Contest pages are hidden by the existing print stylesheet, including after the
+contest ends. The layout's event guards stop on session termination, manual
+submission, contest expiry, or leaving the layout. Tab-switch synchronization
+stays active for terminated sessions so server resets can still be received.
 
 These controls deter casual misuse; they cannot secure a candidate-controlled
 browser. Firefox's Shift+right-click override, browser menus, already-open or remote
@@ -62,6 +64,9 @@ a managed exam browser/device and server-enforced contest rules; user-agent chec
 are not proof of a locked-down client.
 
 Run `npm run test:proctoring` for the event-guard regression checks.
+With Vite running on `localhost:5173` and Playwright available, run
+`node tests/contest-event-guards.browser.cjs` for mounted Chromium/Firefox checks.
+`PLAYWRIGHT_MODULE` may point to an existing Playwright package installation.
 
 ## Crash reporting and production source maps
 

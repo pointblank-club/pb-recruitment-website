@@ -55,6 +55,8 @@ export const useContestEventBlocker = ({
         e.preventDefault();
         return;
       }
+      if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && key === 'z' &&
+          e.target instanceof Element && e.target.matches('input:read-write, textarea:read-write')) return;
       const isDeveloperToolShortcut = key === 'f12' ||
         (e.ctrlKey && e.shiftKey && ['i', 'j', 'c', 'k', 'e', 'm', 'z'].includes(key)) ||
         (e.metaKey && e.altKey && ['i', 'j', 'c', 'k', 'e', 'm', 'z', 'u'].includes(key)) ||
