@@ -222,6 +222,10 @@ class ContestApiService {
     };
   }
 
+  async endContestSession(contestId: string): Promise<void> {
+    await this.axiosInstance.post(`/contests/${contestId}/end`);
+  }
+
   async getContestById(contestId: string): Promise<Contest | null> {
     try {
       const response = await this.axiosInstance.get<ContestPayload>(`/contests/${contestId}`);

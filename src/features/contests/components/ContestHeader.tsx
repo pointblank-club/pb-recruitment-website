@@ -50,13 +50,24 @@ export const ContestHeader = ({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-4 md:gap-6">
             {contestId && (
-              <Link
-                to={`/contest/${contestId}`}
-                className="flex items-center gap-1.5 text-sm font-semibold text-green hover:text-green-400 transition-colors py-1 px-2.5 rounded-md hover:bg-gray-800"
-              >
-                <ChevronLeft size={18} />
-                <span>Back to Contest</span>
-              </Link>
+              onSubmitContest ? (
+                <button
+                  type="button"
+                  onClick={onSubmitContest}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-green hover:text-green-400 transition-colors py-1 px-2.5 rounded-md hover:bg-gray-800"
+                >
+                  <ChevronLeft size={18} />
+                  <span>Back to Contest</span>
+                </button>
+              ) : (
+                <Link
+                  to={`/contest/${contestId}`}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-green hover:text-green-400 transition-colors py-1 px-2.5 rounded-md hover:bg-gray-800"
+                >
+                  <ChevronLeft size={18} />
+                  <span>Back to Contest</span>
+                </Link>
+              )
             )}
             <h1 className="text-xl font-bold text-white font-['DM_Sans'] flex items-center h-full">{contestName}</h1>
             {contestId && (

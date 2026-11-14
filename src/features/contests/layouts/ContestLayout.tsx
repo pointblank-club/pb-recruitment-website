@@ -11,6 +11,7 @@ import { useTabSwitchTracker } from '../hooks/useTabSwitchTracker';
 import { useContestEventBlocker } from '../hooks/useContestEventBlocker';
 import { useAuth } from '@/lib/AuthContext';
 import { MAX_TAB_SWITCHES, getContestSubmitted, setContestSubmitted } from '@/lib/contestStorage';
+import { contestApi } from '@/services/api/contestApi';
 
 export interface ContestOutletContext {
   isLive: boolean;
@@ -225,6 +226,16 @@ export const ContestLayout = () => {
 
   const handleLeaveContest = () => {
     hasExitedRef.current = true;
+    if (user?.uid && contestId && contest && Date.now() < contest.end_time) {
+      if (hasEnteredContest) {
+        const alreadySubmitted = getContestSubmitted(contestId, user.uid);
+        setContestSubmitted(contestId, user.uid);
+        contestApi.endContestSession(contestId).catch(() => {});
+        if (!alreadySubmitted) {
+          toast.info("You have left the contest. Re-entry is disabled until the contest ends.");
+        }
+      }
+    }
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
@@ -235,6 +246,7 @@ export const ContestLayout = () => {
     setIsEndModalOpen(false);
     if (user?.uid && contestId) {
       setContestSubmitted(contestId, user.uid);
+      contestApi.endContestSession(contestId).catch(() => {});
     }
     toast.info("Contest ended on this device. Only your submitted solutions will be scored.");
     handleLeaveContest();
