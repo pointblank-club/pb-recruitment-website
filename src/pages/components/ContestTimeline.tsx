@@ -1,3 +1,4 @@
+import { useServerTime } from '@/hooks/useServerTime';
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -52,19 +53,15 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
       message: "",
     });
 
-  // Re-render every second so time-based state (start, end, registration window) stays current.
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const now = useServerTime();
+  const clockReady = Number.isFinite(now);
 
   const contestStarted = now >= contest.start_time;
-  const contestEnded = now >= contest.end_time;
+  const contestEnded = now > contest.end_time;
   const msToStart = contest.start_time - now;
   const days = Math.floor(msToStart / 86_400_000);
   const pad = (value: number) => value.toString().padStart(2, "0");
-  const countdown = isRegistered && !contestStarted
+  const countdown = clockReady && isRegistered && !contestStarted
     ? `${days > 0 ? `${days}d ` : ""}${pad(Math.floor(msToStart / 3_600_000) % 24)}:${pad(Math.floor(msToStart / 60_000) % 60)}:${pad(Math.floor(msToStart / 1000) % 60)}`
     : "";
   const slideUp = {
@@ -255,7 +252,7 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
   }, [contest.id, user?.uid]);
 
   const canStart = contestStarted && isRegistered && !isTerminatedByTabSwitch && !isSubmittedEarly;
-  const canRegister = !isRegistered && contest.isRegistrationOpen();
+  const canRegister = !isRegistered && contest.isRegistrationOpen(now);
 
   const handleStartContest = () => {
     navigate(`/contests/${contest.id}/problems`);
@@ -344,7 +341,9 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
               </div>
             )}
             <p className="text-gray-300 mb-6">
-              {isSubmittedEarly
+              {!clockReady
+                ? "Contest availability is being checked."
+                : isSubmittedEarly
                 ? "You have already completed and submitted your test for this contest."
                 : isTerminatedByTabSwitch
                 ? `Your contest session was locked due to exceeding the maximum allowed tab switches (${MAX_TAB_SWITCHES}/${MAX_TAB_SWITCHES}).`
@@ -353,10 +352,10 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
                 : contestStarted
                 ? isRegistered
                   ? "The contest is currently in progress. Enter the contest to view and solve problems."
-                  : contest.isRegistrationOpen()
+                  : contest.isRegistrationOpen(now)
                   ? "This contest is currently running. Register now to join."
                   : "This contest is currently running. Registration is now closed."
-                : contest.isRegistrationOpen()
+                : contest.isRegistrationOpen(now)
                 ? "Register now and secure your spot in this exciting contest!"
                 : "Registration for this contest has closed."}
             </p>
@@ -434,7 +433,7 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
                 {(canStart || canRegister) && <ChevronRight size={20} />}
               </motion.button>
             )}
-            {!contestEnded && !isSubmittedEarly && contest.isRegistrationOpen() && !isRegistered && (
+            {!contestEnded && !isSubmittedEarly && contest.isRegistrationOpen(now) && !isRegistered && (
               <p className="text-xs text-gray-400 mt-4 text-center">
                 Free to register
               </p>

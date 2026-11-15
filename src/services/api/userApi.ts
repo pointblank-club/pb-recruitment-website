@@ -1,3 +1,4 @@
+import { installServerClock } from './serverClock';
 import axios, { type AxiosInstance } from 'axios';
 import { auth } from '@/lib/firebase';
 
@@ -14,6 +15,7 @@ class UserApiService {
       },
     });
 
+    installServerClock(this.axiosInstance);
     this.axiosInstance.interceptors.request.use(
       async (config) => {
         const user = auth.currentUser;

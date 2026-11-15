@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Server clock regression fixture</title>
+<div id="root"></div>
+<script type="module">
+  import React from 'react';
+  import { createRoot } from 'react-dom/client';
+  import { MemoryRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+  import { ContestLayout } from '/src/features/contests/layouts/ContestLayout.tsx';
+  import { ContestProblemPage } from '/src/features/contests/pages/ContestProblemPage.tsx';
+  import ContestCard from '/src/pages/components/ContestCard.tsx';
+  import ContestTimeline from '/src/pages/components/ContestTimeline.tsx';
+  import { contestApi } from '/src/services/api/contestApi.ts';
+  import { beginClockRecovery, getServerClockStatus, getServerTime, syncServerClock } from '/src/lib/serverClock.ts';
+  import { useServerTime } from '/src/hooks/useServerTime.ts';
+  import { ServerClockNotice } from '/src/components/ServerClockNotice.tsx';
+  import { startServerClockRefresh } from '/src/services/api/serverClock.ts';
+  import { useLeaderboard } from '/src/features/contests/hooks/useLeaderboard.ts';
+  import '/src/App.css';
+  window.clockFixture = { React, createRoot, MemoryRouter, Routes, Route, useNavigate, useLocation,
+    ContestLayout, ContestProblemPage, ContestCard, ContestTimeline, contestApi, getServerTime, useServerTime,
+    ServerClockNotice, startServerClockRefresh, getServerClockStatus, syncServerClock, beginClockRecovery, useLeaderboard };
+</script>

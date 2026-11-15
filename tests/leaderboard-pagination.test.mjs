@@ -1,3 +1,4 @@
+import { loadServerClock } from './helpers/serverClock.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -27,7 +28,8 @@ const axiosWithAdapter = {
   },
 };
 
-const policyModule = { exports: {}, require: () => ({ default: axios }) };
+const apiClock = loadServerClock(axiosWithAdapter, { performance: { now: () => 0 } });
+const policyModule = { exports: {}, require: name => name.endsWith('/serverClock') ? apiClock.clock : ({ default: axios }) };
 policyModule.Math = Object.create(Math);
 policyModule.Math.random = () => 0.5;
 vm.runInNewContext(compile(read('src/lib/requestPolicy.ts')), policyModule);
@@ -39,6 +41,7 @@ const apiModule = {
   AbortController,
   performance: { now: () => 0 },
   require(name) {
+    if (name === './serverClock') return apiClock;
     if (name === 'axios') return { default: axiosWithAdapter };
     if (name.endsWith('/firebase')) return { auth: { currentUser: { uid: 'test-user', getIdToken: async () => 'test-token' } } };
     if (name.endsWith('/requestPolicy')) return policyModule.exports;

@@ -1,3 +1,5 @@
+import { getServerTime } from '@/lib/serverClock';
+import { useServerTime } from '@/hooks/useServerTime';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 
@@ -34,6 +36,7 @@ export const ContestParticipationGate = ({
   hasEntered: propHasEntered,
   onPromptEndContest,
 }: ContestParticipationGateProps) => {
+  const clockReady = Number.isFinite(useServerTime());
   const dialogRef = useRef<HTMLDialogElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const suspendedRef = useRef(suspended);
@@ -59,7 +62,7 @@ export const ContestParticipationGate = ({
   }, [hasEntered, onEnteredChange]);
 
   useEffect(() => {
-    const shouldIgnore = () => isExitingRef.current || Date.now() >= endTime;
+    const shouldIgnore = () => isExitingRef.current || !Number.isFinite(getServerTime()) || getServerTime() > endTime;
     const onFullscreenChange = () => {
       if (!shouldIgnore()) setIsFullscreen(!!document.fullscreenElement);
     };
@@ -120,7 +123,7 @@ export const ContestParticipationGate = ({
         await document.documentElement.requestFullscreen();
         if (!document.fullscreenElement) throw new Error('Fullscreen did not open.');
       }
-      if (isExitingRef.current || Date.now() >= endTime) {
+      if (isExitingRef.current || !Number.isFinite(getServerTime()) || getServerTime() > endTime) {
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
         return;
       }
@@ -164,7 +167,7 @@ export const ContestParticipationGate = ({
       ) : (
         <>
           {requestError && <p role="alert" className="text-red-300 mb-4">{requestError}</p>}
-          <Button type="button" disabled={isRequesting} onClick={continueContest} className="w-full bg-green-600 hover:bg-green-700 text-white">
+          <Button type="button" disabled={isRequesting || !clockReady} onClick={continueContest} className="w-full bg-green-600 hover:bg-green-700 text-white">
             {isRequesting ? 'Requesting fullscreen…' : requestError ? 'Retry' : needsFullscreen ?
               (hasEntered ? 'Return to fullscreen' : 'Enter fullscreen') : 'Continue contest'}
           </Button>

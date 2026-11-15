@@ -1,3 +1,4 @@
+import { installServerClock } from './serverClock';
 import axios, { type AxiosInstance } from 'axios';
 import { getDepartmentFromBranch } from '@/constants';
 
@@ -23,6 +24,7 @@ class AuthApiService {
         'Content-Type': 'application/json',
       },
     });
+    installServerClock(this.axiosInstance);
   }
 
   async signup(data: SignupPayload): Promise<void> {

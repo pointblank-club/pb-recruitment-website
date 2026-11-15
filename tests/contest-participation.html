@@ -5,6 +5,8 @@
 <pre id="result">Running…</pre>
 <script type="module">
   // Open on the Vite dev server. Fullscreen/visibility are mocked; dialogs and focus are native.
+  import { syncServerClock } from '/src/lib/serverClock.ts';
+  syncServerClock(String(Date.now()), performance.now());
   import React from 'react';
   import { createRoot } from 'react-dom/client';
   import { ContestParticipationGate } from '/src/features/contests/components/ContestParticipationGate.tsx';

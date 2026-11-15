@@ -395,7 +395,7 @@ export const useTabSwitchTracker = ({
         // Transient network / 429 / 5xx error: stay offline cleanly and retry with bounded backoff.
         scope.apiStatus = 'offline';
         publishScopeState(scope);
-        if (retryAttempt >= 5) {
+        if (retryAttempt >= 5 || result.retryAfterMs === Infinity) {
           break;
         }
         const baseDelay = Math.min(1000 * Math.pow(2, retryAttempt), 16_000);

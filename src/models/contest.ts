@@ -1,3 +1,5 @@
+import { getServerTime } from '@/lib/serverClock';
+
 export const formatEligibleYears = (years?: number[]): string => {
     if (!years || years.length === 0) {
         return "All Years";
@@ -44,13 +46,11 @@ export class Contest {
         this.is_registered = data.is_registered;
     }
 
-    isRegistrationOpen(): boolean {
-        const now = Date.now();
+    isRegistrationOpen(now = getServerTime()): boolean {
         return now >= this.registration_start_time && now <= this.registration_end_time;
     }
 
-    isContestOngoing(): boolean {
-        const now = Date.now();
+    isContestOngoing(now = getServerTime()): boolean {
         return now >= this.start_time && now <= this.end_time;
     }
 

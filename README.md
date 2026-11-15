@@ -29,6 +29,40 @@ For UI-only development, `VITE_MOCK_SUBMISSION_JUDGING=true` replaces verdict
 polling with fabricated accepted results after the real submit call. It is ignored
 in production builds; keep it false when verifying real judging.
 
+## Server clock
+
+Every backend API response supplies `X-Server-Time-Ms` (Unix milliseconds), including
+error responses. All four API clients calibrate the same in-memory clock before
+returning response data. Request timing starts after token preparation; the clock
+then advances with `performance.now()` so changes to the machine clock do not
+change event availability or countdowns.
+
+Deploy the backend header and CORS exposure before this frontend. Samples use
+only the backend's committed timestamp; request processing time is never added
+to UTC. The estimate is conservative and can lag by response-transfer time.
+Missing or invalid headers preserve an already trusted clock. While synced,
+responses taking more than two seconds cannot replace that estimate.
+
+Startup with unknown UTC triggers immediate calibration. Resume after tab/window
+focus loss or back-forward cache restoration marks the old estimate untrusted,
+blocks time-dependent entry/proctoring, and accepts a fresh sample even on a slow
+connection. Requests dispatched before recovery cannot restore the old estimate.
+An admitted workspace stays mounted behind an interaction-blocking overlay during
+recovery, preserving unsaved MCQ answers while submissions remain paused.
+Three bounded attempts use cancellable, jittered backoff; failures display
+`Retry time sync`. Accepted corrections notify the same subscription as readiness.
+A failed background refinement retains trusted time; a failed recovery does not.
+
+Normal API traffic refreshes the clock, with a jittered idle refresh after ten
+minutes. An absolute `Retry-After` date with unknown UTC stops automatic retries
+and surfaces the request error; numeric delays remain usable. No external time
+service, browser storage, or new endpoint is used.
+
+Run `npm run test:clock` for clock/API checks. With Vite on localhost:5173 and
+Playwright available, run `node --test tests/server-clock.browser.cjs` for mounted
+Chromium/Firefox checks. Set `PLAYWRIGHT_MODULE` to an existing installation if
+Playwright is not installed locally.
+
 ## Leaderboard pagination
 
 Leaderboard rows and Previous/Next navigation use the response body, independent

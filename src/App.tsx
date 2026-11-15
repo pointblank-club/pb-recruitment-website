@@ -1,4 +1,6 @@
-import React from "react";
+import { ServerClockNotice } from '@/components/ServerClockNotice';
+import { startServerClockRefresh } from '@/services/api/serverClock';
+import React, { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import "./App.css";
 import TestPage from "./pages/test_page";
@@ -26,6 +28,7 @@ import * as Sentry from "@sentry/react";
 
 const App: React.FC = () => {
   const { user } = useAuth();
+  useEffect(() => startServerClockRefresh(), []);
 
   return (
     <Sentry.ErrorBoundary
@@ -44,6 +47,7 @@ const App: React.FC = () => {
         </div>
       }
     >
+      <ServerClockNotice />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/test" element={<TestPage />} />

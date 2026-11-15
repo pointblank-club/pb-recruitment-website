@@ -1,3 +1,5 @@
+import { useServerTime } from '@/hooks/useServerTime';
+import { getServerTime } from '@/lib/serverClock';
 import { Navigate, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
@@ -56,8 +58,16 @@ export const ContestLayout = () => {
   const { contest, isLoading: isContestLoading, refetch } = useContest(contestId || '');
   const isLeaderboardPage = location.pathname.endsWith('/leaderboard');
 
-  const isLive = !!contest && Date.now() >= contest.start_time && Date.now() < contest.end_time;
-  const isContestEnded = contest ? (hasElapsedDeadline || Date.now() >= contest.end_time) : false;
+  const now = useServerTime();
+  const clockReady = Number.isFinite(now);
+  const workspaceScope = `${contestId}:${user?.uid ?? ''}`;
+  const admittedScopeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isContestLoading || admittedScopeRef.current !== workspaceScope) admittedScopeRef.current = null;
+    if (!isContestLoading && contest && clockReady) admittedScopeRef.current = workspaceScope;
+  }, [workspaceScope, isContestLoading, contest, clockReady]);
+  const isLive = !!contest && now >= contest.start_time && now <= contest.end_time;
+  const isContestEnded = contest ? (hasElapsedDeadline || now > contest.end_time) : false;
 
   const isSubmittedLocally = Boolean(
     user?.uid && contestId && getContestSubmitted(contestId, user.uid)
@@ -132,7 +142,7 @@ export const ContestLayout = () => {
   }, [contestId, user?.uid, isLeaderboardPage, navigate]);
 
   useEffect(() => {
-    if (isSessionEnded && !hasExitedRef.current && !isLeaderboardPage && contest && Date.now() < contest.end_time) {
+    if (isSessionEnded && !hasExitedRef.current && !isLeaderboardPage && contest && getServerTime() < contest.end_time) {
       hasExitedRef.current = true;
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
@@ -140,7 +150,7 @@ export const ContestLayout = () => {
       toast.info("This contest session has ended.");
       navigate(`/contest/${contestId}`, { replace: true });
     }
-  }, [isSessionEnded, isLeaderboardPage, contest, contestId, navigate]);
+  }, [isSessionEnded, isLeaderboardPage, contest, contestId, navigate, clockReady]);
 
   useEffect(() => {
     if (isTabSwitchTerminated && document.fullscreenElement) {
@@ -175,7 +185,7 @@ export const ContestLayout = () => {
     if (!contest) return;
 
     // Clear hasElapsedDeadline whenever current contest metadata confirms a future deadline
-    if (Date.now() < contest.end_time) {
+    if (getServerTime() < contest.end_time) {
       setHasElapsedDeadline(false);
     }
 
@@ -185,7 +195,7 @@ export const ContestLayout = () => {
       user?.uid && contestId && getContestSubmitted(contestId, user.uid)
     );
 
-    if (isSubmittedEarly && !hasExitedRef.current && !isLeaderboardPage && Date.now() < contest.end_time) {
+    if (isSubmittedEarly && !hasExitedRef.current && !isLeaderboardPage && getServerTime() < contest.end_time) {
       hasExitedRef.current = true;
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
@@ -198,18 +208,19 @@ export const ContestLayout = () => {
     let cancelled = false;
 
     const checkAndExitIfEnded = async () => {
-      const now = Date.now();
+      const now = getServerTime();
+      if (!Number.isFinite(now)) return false;
       const endTime = contest.end_time;
       const startTime = contest.start_time;
       const totalDuration = endTime - startTime;
 
       // Only the problem pages count as participating; watching the leaderboard doesn't.
-      if (!isLeaderboardPage && now >= startTime && now < endTime) {
+      if (!isLeaderboardPage && now >= startTime && now <= endTime) {
         wasLiveRef.current = true;
       }
 
       // If contest is over and user was actively participating in it
-      if (now >= endTime) {
+      if (now > endTime) {
         // Publish elapsed-deadline state immediately before awaiting refetch
         setHasElapsedDeadline(true);
         setTimeRemaining(0);
@@ -220,10 +231,10 @@ export const ContestLayout = () => {
           isRefetchingRef.current = true;
           const updatedContest = await refetch();
           isRefetchingRef.current = false;
-          if (updatedContest && Date.now() < updatedContest.end_time) {
+          if (updatedContest && getServerTime() < updatedContest.end_time) {
             // Reconcile extension: contest was extended while running
             setHasElapsedDeadline(false);
-            const newNow = Date.now();
+            const newNow = getServerTime();
             const newRemaining = Math.floor((updatedContest.end_time - newNow) / 1000);
             const newTotal = updatedContest.end_time - updatedContest.start_time;
             const newElapsed = newNow - updatedContest.start_time;
@@ -283,7 +294,7 @@ export const ContestLayout = () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [contest, contestId, isLeaderboardPage, navigate, refetch, user?.uid]);
+  }, [contest, contestId, isLeaderboardPage, navigate, refetch, user?.uid, clockReady]);
 
   const handleOpenEndModal = () => {
     setEndContestError(null);
@@ -299,7 +310,7 @@ export const ContestLayout = () => {
   };
 
   const handleConfirmEndContest = async () => {
-    if (isEndingContest) return;
+    if (isEndingContest || !Number.isFinite(getServerTime())) return;
     if (isSubmitting) {
       toast.warning("A submission is currently being processed. Please wait for it to complete.");
       return;
@@ -382,7 +393,7 @@ export const ContestLayout = () => {
     );
   }
 
-  if (isContestLoading) {
+  if (isContestLoading || (contest && !clockReady && admittedScopeRef.current !== workspaceScope)) {
     return (
       <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
         <ContestHeader 
@@ -405,10 +416,11 @@ export const ContestLayout = () => {
 
   const isParticipating = !!user && !!contest?.is_registered && isLive &&
     !hasExitedRef.current && !isSubmittedManually && !isTabSwitchTerminated;
-  const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0 && !isTabSwitchTerminated && !isSubmittedManually;
+  const canEnd = clockReady && !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0 && !isTabSwitchTerminated && !isSubmittedManually;
 
   return (
     <div className="contest-screen relative w-full bg-black h-screen flex flex-col overflow-hidden">
+      <div className="contents" inert={!clockReady} aria-busy={!clockReady}>
       <ContestHeader 
         timeRemaining={timeRemaining}
         progress={progress}
@@ -477,7 +489,7 @@ export const ContestLayout = () => {
       </div>
 
       <EndContestModal
-        isOpen={isEndModalOpen}
+        isOpen={isEndModalOpen && clockReady}
         onClose={() => {
           if (!isEndingContest) {
             setIsEndModalOpen(false);
@@ -522,6 +534,12 @@ export const ContestLayout = () => {
         onAcknowledge={closeWarningModal}
         onExitContest={handleLeaveContest}
       />
+      </div>
+      {!clockReady && (
+        <div role="status" className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/80 px-6 text-center text-slate-300">
+          Waiting for verified server time. Your work is preserved.
+        </div>
+      )}
     </div>
   );
 };

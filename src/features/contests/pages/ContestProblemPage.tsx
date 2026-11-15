@@ -274,7 +274,7 @@ const ContestProblemContent = () => {
     isMcq && (submittedOptionIndex !== null || hasSavedMcqSubmission);
 
   const canSubmitMCQ =
-    isAuthenticated && !isLocked && isHistoryResolved && !hasSubmittedMCQ;
+    isLive && isAuthenticated && !isLocked && isHistoryResolved && !hasSubmittedMCQ;
 
   const mcqSubmissionError =
     activeSubmission.phase === 'error' || activeSubmission.phase === 'timeout'
@@ -399,8 +399,8 @@ const ContestProblemContent = () => {
               problem={problem}
               isAdmin={isAdmin}
               contestId={contestId}
-              onSubmit={isAuthenticated && !isLocked ? handleSubmitCode : undefined}
-              onRun={isAuthenticated && !isLocked ? runCode : undefined}
+              onSubmit={isLive && isAuthenticated && !isLocked ? handleSubmitCode : undefined}
+              onRun={isLive && isAuthenticated && !isLocked ? runCode : undefined}
               isContestEnded={isContestEnded}
               hideIDE={hideIDE}
               isLocked={isLocked}

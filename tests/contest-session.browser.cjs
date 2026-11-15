@@ -48,6 +48,7 @@ async function mount({ ended = false, holdStatus = false } = {}) {
       return route.continue();
     }
     if (url.origin !== 'http://localhost:8080') return route.abort();
+    const fulfill = options => route.fulfill({ ...options, headers: { 'X-Server-Time-Ms': String(Date.now()), 'Access-Control-Expose-Headers': 'X-Server-Time-Ms' } });
 
     const contestId = url.pathname.split('/')[2];
     const userId = request.headers().authorization?.replace('Bearer ', '');
@@ -56,7 +57,7 @@ async function mount({ ended = false, holdStatus = false } = {}) {
       endCalls++;
       endRequested.resolve();
       const status = await endReply.promise;
-      await route.fulfill({ status, json: status === 200 ? { message: 'ended' } : { error: 'Synthetic End failure' } });
+      await fulfill({ status, json: status === 200 ? { message: 'ended' } : { error: 'Synthetic End failure' } });
       endHandled.resolve();
       return;
     }
@@ -66,7 +67,7 @@ async function mount({ ended = false, holdStatus = false } = {}) {
         statusRequested.resolve();
         await statusReply.promise;
       }
-      await route.fulfill({ json: {
+      await fulfill({ json: {
         tab_switch_count: 0, is_tab_switch_terminated: false, generation: 0,
         is_session_ended: isEnded || (holdStatus && endCalls && contestId === 'contest-A' && userId === 'user-1'),
       } });
@@ -74,7 +75,7 @@ async function mount({ ended = false, holdStatus = false } = {}) {
       return;
     }
     if (url.pathname === `/contests/${contestId}`) {
-      return route.fulfill({ json: {
+      return fulfill({ json: {
         id: contestId, name: contestId, description: '', eligible_to: [], is_registered: true,
         start_time: Date.now() - 60_000, end_time: Date.now() + 3_600_000,
         registration_start_time: 0, registration_end_time: 0,
