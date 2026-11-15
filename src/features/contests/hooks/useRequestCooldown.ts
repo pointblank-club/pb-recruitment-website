@@ -23,7 +23,7 @@ export const useRequestCooldown = () => {
   const coolDown = useCallback((error: unknown) => {
     if (!mounted.current || !uid) return;
     const delay = retryAfterDelay(error);
-    if (!delay) return;
+    if (!delay || !Number.isFinite(delay)) return;
     const until = performance.now() + delay;
     const previous = deadlines.get(uid);
     if (previous && previous.until >= until) return;

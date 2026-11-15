@@ -37,18 +37,23 @@ returning response data. Request timing starts after token preparation; the cloc
 then advances with `performance.now()` so changes to the machine clock do not
 change event availability or countdowns.
 
-Deploy the backend header and CORS exposure before this frontend. The timestamp
-must come from a fresh response (`Cache-Control: private, no-store`). Missing or
-invalid headers preserve the last valid calibration; without one, event entry
-stays unavailable. Responses over two seconds do not replace a valid clock. A
-slow first response establishes UTC without adding a latency estimate. Normal
-samples use half the round-trip time, which includes server processing and is an
-approximation. Backend admission checks remain authoritative at boundaries.
+Deploy the backend header and CORS exposure before this frontend. Samples use
+only the backend's committed timestamp; request processing time is never added
+to UTC. The estimate is conservative and can lag by response-transfer time.
+Missing or invalid headers preserve an already trusted clock.
 
-The app refreshes through the existing `/health` endpoint on visibility restore,
-reconnection, or after ten minutes without a valid sample. Refreshes share one
-in-flight request; component tickers do not own the global refresh lifecycle. No
-external time service, browser storage, or new endpoint is used.
+Startup with unknown UTC triggers immediate calibration. Resume after tab/window
+focus loss or back-forward cache restoration marks the old estimate untrusted,
+blocks time-dependent entry/proctoring, and accepts a fresh sample even on a slow
+connection. Requests dispatched before recovery cannot restore the old estimate.
+Three bounded attempts use cancellable, jittered backoff; failures display
+`Retry time sync`. Accepted corrections notify the same subscription as readiness.
+A failed background refinement retains trusted time; a failed recovery does not.
+
+Normal API traffic refreshes the clock, with a jittered idle refresh after ten
+minutes. An absolute `Retry-After` date with unknown UTC stops automatic retries
+and surfaces the request error; numeric delays remain usable. No external time
+service, browser storage, or new endpoint is used.
 
 Run `npm run test:clock` for clock/API checks. With Vite on localhost:5173 and
 Playwright available, run `node --test tests/server-clock.browser.cjs` for mounted

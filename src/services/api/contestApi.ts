@@ -530,14 +530,13 @@ class ContestApiService {
         if (httpStatus === 400 || httpStatus === 413 || httpStatus === 422) {
           return { kind: 'invalid', httpStatus, message };
         }
+        const retryAfter = httpStatus === 429 ? parseRetryAfterMs(error.response?.headers) : undefined;
         return {
           kind: 'error',
           httpStatus,
           message,
           // Preserve the tab-switch queue's existing bounded wait; its timer is separate from submission polling.
-          retryAfterMs: httpStatus === 429
-            ? Math.min(parseRetryAfterMs(error.response?.headers) ?? 0, 30_000) || undefined
-            : undefined,
+          retryAfterMs: retryAfter === Infinity ? Infinity : Math.min(retryAfter ?? 0, 30_000) || undefined,
         };
       }
       return {

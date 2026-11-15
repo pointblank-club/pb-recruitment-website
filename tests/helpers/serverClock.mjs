@@ -4,7 +4,7 @@ import ts from 'typescript';
 
 export const loadServerClock = (axios, globals = {}) => {
   const load = (path, imports = {}) => {
-    const context = { exports: {}, performance, AbortController, console, setInterval, clearInterval,
+    const context = { exports: {}, performance, AbortController, console, setInterval, clearInterval, setTimeout, clearTimeout,
       ...globals, require: name => {
         if (name in imports) return imports[name];
         throw new Error(`Unexpected clock import: ${name}`);
@@ -16,6 +16,7 @@ export const loadServerClock = (axios, globals = {}) => {
     return context.exports;
   };
   const clock = load('src/lib/serverClock.ts');
-  const apiClock = load('src/services/api/serverClock.ts', { axios: { default: axios }, '@/lib/serverClock': clock });
-  return { clock, ...apiClock };
+  const policy = load('src/lib/requestPolicy.ts', { axios: { default: axios }, './serverClock': clock });
+  const apiClock = load('src/services/api/serverClock.ts', { axios: { default: axios }, '@/lib/serverClock': clock, '@/lib/requestPolicy': policy });
+  return { clock, policy, ...apiClock };
 };

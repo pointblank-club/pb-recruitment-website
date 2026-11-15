@@ -1,30 +1,48 @@
+export type ServerClockStatus = 'unknown' | 'synced' | 'recovering' | 'error';
+let status: ServerClockStatus = 'unknown';
 let serverTimeMs = NaN;
 let receivedAt = 0;
 let latestRequestStartedAt = -Infinity;
-const readyListeners = new Set<() => void>();
+let generation = 0;
+const listeners = new Set<() => void>();
+const emit = () => listeners.forEach(listener => listener());
 
-// NaN keeps time comparisons closed until a backend response establishes UTC.
-export const getServerTime = (): number => serverTimeMs + performance.now() - receivedAt;
+// Untrusted UTC never falls back to the machine clock for event admission.
+export const getServerTime = (): number => status === 'synced' ? serverTimeMs + performance.now() - receivedAt : NaN;
+export const getServerClockStatus = (): ServerClockStatus => status;
+export const getClockGeneration = (): number => generation;
 export const getLastClockSync = (): number => Number.isFinite(serverTimeMs) ? receivedAt : -Infinity;
 
-export const syncServerClock = (timestamp: unknown, startedAt: number, finishedAt = performance.now()): boolean => {
+export const beginClockRecovery = (): void => {
+  generation++;
+  latestRequestStartedAt = -Infinity;
+  status = 'recovering';
+  emit();
+};
+
+export const failClockRecovery = (): void => {
+  if (status === 'synced') return;
+  status = 'error';
+  emit();
+};
+
+export const syncServerClock = (timestamp: unknown, startedAt: number, finishedAt = performance.now(), requestGeneration = generation): boolean => {
   if (typeof timestamp !== 'string' || !/^\d+$/.test(timestamp)) return false;
   const time = Number(timestamp);
-  const roundTrip = finishedAt - startedAt;
-  const wasUnknown = !Number.isFinite(serverTimeMs);
   if (!Number.isSafeInteger(time) || time < 1_000_000_000_000 || time > 8_640_000_000_000_000 ||
-      !Number.isFinite(roundTrip) || roundTrip < 0 || (roundTrip > 2000 && !wasUnknown) || startedAt <= latestRequestStartedAt) return false;
+      !Number.isFinite(startedAt) || !Number.isFinite(finishedAt) || finishedAt < startedAt ||
+      startedAt <= latestRequestStartedAt || requestGeneration !== generation) return false;
 
-  // shortcut: RTT includes server processing; skip slow refinements and add server timing if tighter precision is needed.
-  // A slow first response still supplies UTC; omit its uncertain latency correction.
-  serverTimeMs = time + (roundTrip <= 2000 ? roundTrip / 2 : 0);
+  // The backend samples at commitment; full request duration includes processing, not just network latency.
+  serverTimeMs = time;
   receivedAt = finishedAt;
   latestRequestStartedAt = startedAt;
-  if (wasUnknown) readyListeners.forEach(listener => listener());
+  status = 'synced';
+  emit();
   return true;
 };
 
-export const subscribeClockReady = (listener: () => void): (() => void) => {
-  readyListeners.add(listener);
-  return () => { readyListeners.delete(listener); };
+export const subscribeServerClock = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
 };

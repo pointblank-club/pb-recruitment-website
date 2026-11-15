@@ -1,3 +1,4 @@
+import { useServerTime } from '@/hooks/useServerTime';
 import { getServerTime } from '@/lib/serverClock';
 import { Navigate, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -57,7 +58,7 @@ export const ContestLayout = () => {
   const { contest, isLoading: isContestLoading, refetch } = useContest(contestId || '');
   const isLeaderboardPage = location.pathname.endsWith('/leaderboard');
 
-  const now = getServerTime();
+  const now = useServerTime();
   const clockReady = Number.isFinite(now);
   const isLive = !!contest && now >= contest.start_time && now <= contest.end_time;
   const isContestEnded = contest ? (hasElapsedDeadline || now > contest.end_time) : false;
@@ -143,7 +144,7 @@ export const ContestLayout = () => {
       toast.info("This contest session has ended.");
       navigate(`/contest/${contestId}`, { replace: true });
     }
-  }, [isSessionEnded, isLeaderboardPage, contest, contestId, navigate]);
+  }, [isSessionEnded, isLeaderboardPage, contest, contestId, navigate, clockReady]);
 
   useEffect(() => {
     if (isTabSwitchTerminated && document.fullscreenElement) {
@@ -287,7 +288,7 @@ export const ContestLayout = () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [contest, contestId, isLeaderboardPage, navigate, refetch, user?.uid]);
+  }, [contest, contestId, isLeaderboardPage, navigate, refetch, user?.uid, clockReady]);
 
   const handleOpenEndModal = () => {
     setEndContestError(null);
