@@ -1,3 +1,4 @@
+import { installServerClock } from './serverClock';
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
 import { Contest } from "@/models/contest";
 import { auth } from '@/lib/firebase';
@@ -167,6 +168,7 @@ class AdminApiService {
         'Content-Type': 'application/json',
       },
     });
+    installServerClock(this.axiosInstance);
     this.axiosInstance.interceptors.request.use(
       async (config) => {
         const user = auth.currentUser;

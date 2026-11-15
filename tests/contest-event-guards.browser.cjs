@@ -20,6 +20,7 @@ const origin = 'http://localhost:5173';
         window.refetchContest = async () => window.fixtureContest;
       });
       const mocks = {
+        '/src/lib/serverClock.ts': 'export const getServerTime = () => Date.now(); export const subscribeClockReady = () => () => {}; export const getLastClockSync = () => performance.now(); export const syncServerClock = () => false;',
         '/src/lib/AuthContext.tsx': 'const user = { uid: "participant" }; export const useAuth = () => ({ user });',
         '/src/features/contests/hooks/useContest.ts': 'export const useContest = () => ({ contest: window.fixtureContest, isLoading: false, refetch: window.refetchContest });',
         '/src/features/contests/components/ContestParticipationGate.tsx': 'export const ContestParticipationGate = () => null;',

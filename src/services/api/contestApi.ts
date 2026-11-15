@@ -1,3 +1,4 @@
+import { installServerClock } from './serverClock';
 export interface PaginatedLeaderboard {
   entries: LeaderboardEntry[];
   hasNextPage: boolean;
@@ -101,6 +102,7 @@ class ContestApiService {
         'Content-Type': 'application/json',
       },
     });
+    installServerClock(this.axiosInstance);
     this.axiosInstance.interceptors.request.use(
       async (config) => {
         if (config.signal?.aborted) {

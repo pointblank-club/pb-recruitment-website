@@ -1,3 +1,4 @@
+import { getServerTime } from './serverClock';
 import axios from 'axios';
 
 export const jitterDelay = (delay: number) => Math.round(delay * (1 + Math.random() * 0.2));
@@ -28,7 +29,7 @@ export const parseRetryAfterMs = (headers: unknown): number | undefined => {
   if (typeof value !== 'string' && typeof value !== 'number') return undefined;
   const text = String(value).trim();
   const delay = /^\d+$/.test(text) ? Number(text) * 1000
-    : /^[A-Za-z]{3,9}(?:,| )/.test(text) ? Date.parse(text) - Date.now() : NaN;
+    : /^[A-Za-z]{3,9}(?:,| )/.test(text) ? Date.parse(text) - getServerTime() : NaN;
   return Number.isFinite(delay) ? Math.max(0, delay) : undefined;
 };
 

@@ -1,3 +1,4 @@
+import { useServerTime } from '@/hooks/useServerTime';
 import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
@@ -5,8 +6,8 @@ import { Contest } from "@/models/contest";
 import { adminApi } from "@/services/api/adminApi";
 import { toast } from "react-toastify";
 
-type RegistrationStatus = "upcoming" | "open" | "closed";
-type RunningStatus = "upcoming" | "open" | "closed";
+type RegistrationStatus = "upcoming" | "open" | "closed" | "checking";
+type RunningStatus = "upcoming" | "open" | "closed" | "checking";
 
 interface ContestManagerProps {
   contests: Contest[];
@@ -14,16 +15,17 @@ interface ContestManagerProps {
 }
 
 const ContestManager: React.FC<ContestManagerProps> = ({ contests, setContests }) => {
+  const now = useServerTime();
   const navigate = useNavigate();
   const getRegistrationStatus = (contest: Contest): RegistrationStatus => {
-    const now = Date.now();
+    if (!Number.isFinite(now)) return "checking";
     if (contest.registration_start_time > now) return "upcoming";
     if (contest.registration_start_time <= now && contest.registration_end_time >= now) return "open";
     return "closed";
   };
 
   const getRunningStatus = (contest: Contest): RunningStatus => {
-    const now = Date.now();
+    if (!Number.isFinite(now)) return "checking";
     if (contest.start_time > now) return "upcoming";
     if (contest.start_time <= now && contest.end_time >= now) return "open";
     return "closed";

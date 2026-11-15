@@ -1,3 +1,4 @@
+import { useServerTime } from '@/hooks/useServerTime';
 import React from "react";
 import { motion } from "framer-motion";
 import type { Contest } from "@/models/contest";
@@ -7,6 +8,7 @@ interface ContestHeroProps {
 }
 
 const ContestHero: React.FC<ContestHeroProps> = ({ contest }) => {
+  const now = useServerTime();
   const slideUp = {
     hidden: { opacity: 0, y: 30 },
     show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
@@ -55,7 +57,7 @@ const ContestHero: React.FC<ContestHeroProps> = ({ contest }) => {
               <div>
                 <p className="text-gray-400 text-sm mb-1">Registration</p>
                 <p className="text-white font-semibold text-lg">
-                  {contest.isRegistrationOpen() ? "Open" : "Closed"}
+                  {Number.isFinite(now) ? (contest.isRegistrationOpen(now) ? "Open" : "Closed") : "Checking"}
                 </p>
               </div>
               <div>

@@ -1,4 +1,5 @@
-import React from "react";
+import { startServerClockRefresh } from '@/services/api/serverClock';
+import React, { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import "./App.css";
 import TestPage from "./pages/test_page";
@@ -26,6 +27,7 @@ import * as Sentry from "@sentry/react";
 
 const App: React.FC = () => {
   const { user } = useAuth();
+  useEffect(() => startServerClockRefresh(), []);
 
   return (
     <Sentry.ErrorBoundary

@@ -1,3 +1,4 @@
+import { useServerTime } from '@/hooks/useServerTime';
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -22,6 +23,7 @@ interface ContestCardProps {
 }
 
 const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
+  const now = useServerTime();
   const navigate = useNavigate();
   const { user } = useAuth();
   const eligibleYearsText = contest.formatEligibleYears();
@@ -30,7 +32,7 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
     contest.is_registered !== undefined
       ? contest.is_registered
       : Boolean(user?.uid && getContestRegistered(contest.id, user.uid));
-  const isOngoing = contest.isContestOngoing();
+  const isOngoing = contest.isContestOngoing(now);
   const [isSubmittedEarly, setIsSubmittedEarly] = useState<boolean>(() =>
     Boolean(user?.uid && getContestSubmitted(contest.id, user.uid))
   );
@@ -149,7 +151,7 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
 
         {/* Call to action buttons */}
         <div className="flex items-center gap-3 mt-4">
-          {Date.now() >= contest.end_time ? (
+          {now > contest.end_time ? (
             <motion.button
               type="button"
               whileHover={{ scale: 1.02 }}
@@ -216,19 +218,19 @@ const ContestCard: React.FC<ContestCardProps> = ({ contest, onClick }) => {
           ) : (
             <motion.button
               type="button"
-              whileHover={contest.isRegistrationOpen() ? { scale: 1.02 } : undefined}
-              whileTap={contest.isRegistrationOpen() ? { scale: 0.98 } : undefined}
+              whileHover={contest.isRegistrationOpen(now) ? { scale: 1.02 } : undefined}
+              whileTap={contest.isRegistrationOpen(now) ? { scale: 0.98 } : undefined}
               onClick={(e) => {
                 e.stopPropagation();
                 onClick();
               }}
               className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-all ${
-                contest.isRegistrationOpen()
+                contest.isRegistrationOpen(now)
                   ? "bg-green text-black hover:bg-green-600"
                   : "bg-gray-800 text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500"
               }`}
             >
-              {contest.isRegistrationOpen() ? "Register" : "Registration Closed"}
+              {contest.isRegistrationOpen(now) ? "Register" : "Registration Closed"}
             </motion.button>
           )}
           <motion.button

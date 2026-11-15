@@ -82,15 +82,15 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
 
   const pollSubmission = useCallback(async (summary: SubmissionDetailsResponse) => {
     const pollToken = ++pollTokenRef.current;
-    const startedAt = Date.now();
+    const startedAt = performance.now();
     let delay = FIRST_POLL_DELAY_MS;
     let consecutiveErrors = 0;
     let retryAfter = 0;
 
-    while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
-      await wait(Math.min(Math.max(jitterDelay(delay), retryAfter), POLL_TIMEOUT_MS - (Date.now() - startedAt)));
+    while (performance.now() - startedAt < POLL_TIMEOUT_MS) {
+      await wait(Math.min(Math.max(jitterDelay(delay), retryAfter), POLL_TIMEOUT_MS - (performance.now() - startedAt)));
       if (pollToken !== pollTokenRef.current) return;
-      if (Date.now() - startedAt >= POLL_TIMEOUT_MS) break;
+      if (performance.now() - startedAt >= POLL_TIMEOUT_MS) break;
       retryAfter = 0;
 
       try {

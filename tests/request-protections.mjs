@@ -1,3 +1,4 @@
+import { loadServerClock } from './helpers/serverClock.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -14,7 +15,9 @@ const compile = source => ts.transpileModule(source.replaceAll('import.meta.env'
 const error = (status, retryAfter) => new axios.AxiosError('Synthetic request failure', undefined, undefined, undefined, {
   status, headers: { 'retry-after': retryAfter }, data: {},
 });
-const policyModule = { exports: {}, require: () => ({ default: axios }) };
+const policyClock = loadServerClock(axios);
+policyClock.clock.syncServerClock(String(Date.now()), performance.now());
+const policyModule = { exports: {}, require: name => name.endsWith('/serverClock') ? policyClock.clock : ({ default: axios }) };
 policyModule.Math = Object.create(Math);
 policyModule.Math.random = () => 0.5;
 vm.runInNewContext(compile(read('src/lib/requestPolicy.ts')), policyModule);
@@ -60,9 +63,11 @@ const axiosWithAdapter = {
 };
 const user = uid => ({ uid, getIdToken: async () => `token-${uid}` });
 const auth = { currentUser: user('synthetic-user') };
+const apiClock = loadServerClock(axiosWithAdapter, { performance: { now: () => requestClock } });
 const apiModule = {
   exports: {}, crypto: { randomUUID }, console, AbortController, performance: { now: () => requestClock },
   require(name) {
+    if (name === './serverClock') return apiClock;
     if (name === 'axios') return { default: axiosWithAdapter };
     if (name.endsWith('/firebase')) return { auth };
     if (name.endsWith('/requestPolicy')) return { ...policyModule.exports, requestTimeout(callback, delay) { if (delay === 30000) { const id = ++deadlineId; requestDeadlines.set(id, callback); return () => requestDeadlines.delete(id); } retryWaits.push(delay); requestClock += delay; duringRetryWait?.(); queueMicrotask(callback); return () => {}; } };
@@ -221,6 +226,7 @@ for (const action of [() => api.runCodeSolution('code', 'cpp', ''), () => api.su
   assert.equal(requests.length - requestStart, 1, 'other POST classes never gain automatic retries');
 }
 const signupModule = { exports: {}, require(name) {
+  if (name === './serverClock') return apiClock;
   if (name === 'axios') return { default: axiosWithAdapter };
   return { getDepartmentFromBranch: value => value };
 } };
@@ -396,7 +402,7 @@ for (const [failure, expectedCalls, minimum] of [[error(403), 1, 0], [error(503)
   let calls = 0;
   const delays = [];
   const context = {
-    pollTokenRef: { current: 0 }, Date: { now: () => now },
+    pollTokenRef: { current: 0 }, performance: { now: () => now },
     FIRST_POLL_DELAY_MS: 1000, MAX_POLL_DELAY_MS: 5000, POLL_TIMEOUT_MS: 60000,
     ...policyModule.exports,
     wait: async delay => { delays.push(delay); now += delay; },
@@ -453,7 +459,7 @@ let wallNow = Date.now();
 let timerId = 0;
 const scheduled = new Map();
 const timerModule = {
-  exports: {}, require: () => ({ default: axios }),
+  exports: {}, require: name => name.endsWith('/serverClock') ? policyClock.clock : ({ default: axios }),
   Date: { now: () => wallNow }, performance: { now: () => timerNow },
   setTimeout(callback, delay) { scheduled.set(++timerId, { callback, delay }); return timerId; },
   clearTimeout(id) { scheduled.delete(id); },

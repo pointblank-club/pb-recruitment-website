@@ -1,3 +1,4 @@
+import { getServerTime } from '@/lib/serverClock';
 import { Navigate, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
@@ -56,8 +57,10 @@ export const ContestLayout = () => {
   const { contest, isLoading: isContestLoading, refetch } = useContest(contestId || '');
   const isLeaderboardPage = location.pathname.endsWith('/leaderboard');
 
-  const isLive = !!contest && Date.now() >= contest.start_time && Date.now() < contest.end_time;
-  const isContestEnded = contest ? (hasElapsedDeadline || Date.now() >= contest.end_time) : false;
+  const now = getServerTime();
+  const clockReady = Number.isFinite(now);
+  const isLive = !!contest && now >= contest.start_time && now <= contest.end_time;
+  const isContestEnded = contest ? (hasElapsedDeadline || now > contest.end_time) : false;
 
   const isSubmittedLocally = Boolean(
     user?.uid && contestId && getContestSubmitted(contestId, user.uid)
@@ -132,7 +135,7 @@ export const ContestLayout = () => {
   }, [contestId, user?.uid, isLeaderboardPage, navigate]);
 
   useEffect(() => {
-    if (isSessionEnded && !hasExitedRef.current && !isLeaderboardPage && contest && Date.now() < contest.end_time) {
+    if (isSessionEnded && !hasExitedRef.current && !isLeaderboardPage && contest && getServerTime() < contest.end_time) {
       hasExitedRef.current = true;
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
@@ -175,7 +178,7 @@ export const ContestLayout = () => {
     if (!contest) return;
 
     // Clear hasElapsedDeadline whenever current contest metadata confirms a future deadline
-    if (Date.now() < contest.end_time) {
+    if (getServerTime() < contest.end_time) {
       setHasElapsedDeadline(false);
     }
 
@@ -185,7 +188,7 @@ export const ContestLayout = () => {
       user?.uid && contestId && getContestSubmitted(contestId, user.uid)
     );
 
-    if (isSubmittedEarly && !hasExitedRef.current && !isLeaderboardPage && Date.now() < contest.end_time) {
+    if (isSubmittedEarly && !hasExitedRef.current && !isLeaderboardPage && getServerTime() < contest.end_time) {
       hasExitedRef.current = true;
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
@@ -198,18 +201,19 @@ export const ContestLayout = () => {
     let cancelled = false;
 
     const checkAndExitIfEnded = async () => {
-      const now = Date.now();
+      const now = getServerTime();
+      if (!Number.isFinite(now)) return false;
       const endTime = contest.end_time;
       const startTime = contest.start_time;
       const totalDuration = endTime - startTime;
 
       // Only the problem pages count as participating; watching the leaderboard doesn't.
-      if (!isLeaderboardPage && now >= startTime && now < endTime) {
+      if (!isLeaderboardPage && now >= startTime && now <= endTime) {
         wasLiveRef.current = true;
       }
 
       // If contest is over and user was actively participating in it
-      if (now >= endTime) {
+      if (now > endTime) {
         // Publish elapsed-deadline state immediately before awaiting refetch
         setHasElapsedDeadline(true);
         setTimeRemaining(0);
@@ -220,10 +224,10 @@ export const ContestLayout = () => {
           isRefetchingRef.current = true;
           const updatedContest = await refetch();
           isRefetchingRef.current = false;
-          if (updatedContest && Date.now() < updatedContest.end_time) {
+          if (updatedContest && getServerTime() < updatedContest.end_time) {
             // Reconcile extension: contest was extended while running
             setHasElapsedDeadline(false);
-            const newNow = Date.now();
+            const newNow = getServerTime();
             const newRemaining = Math.floor((updatedContest.end_time - newNow) / 1000);
             const newTotal = updatedContest.end_time - updatedContest.start_time;
             const newElapsed = newNow - updatedContest.start_time;
@@ -382,7 +386,7 @@ export const ContestLayout = () => {
     );
   }
 
-  if (isContestLoading) {
+  if (isContestLoading || (contest && !clockReady)) {
     return (
       <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
         <ContestHeader 

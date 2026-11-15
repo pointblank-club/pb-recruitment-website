@@ -29,6 +29,32 @@ For UI-only development, `VITE_MOCK_SUBMISSION_JUDGING=true` replaces verdict
 polling with fabricated accepted results after the real submit call. It is ignored
 in production builds; keep it false when verifying real judging.
 
+## Server clock
+
+Every backend API response supplies `X-Server-Time-Ms` (Unix milliseconds), including
+error responses. All four API clients calibrate the same in-memory clock before
+returning response data. Request timing starts after token preparation; the clock
+then advances with `performance.now()` so changes to the machine clock do not
+change event availability or countdowns.
+
+Deploy the backend header and CORS exposure before this frontend. The timestamp
+must come from a fresh response (`Cache-Control: private, no-store`). Missing or
+invalid headers preserve the last valid calibration; without one, event entry
+stays unavailable. Responses over two seconds do not replace a valid clock. A
+slow first response establishes UTC without adding a latency estimate. Normal
+samples use half the round-trip time, which includes server processing and is an
+approximation. Backend admission checks remain authoritative at boundaries.
+
+The app refreshes through the existing `/health` endpoint on visibility restore,
+reconnection, or after ten minutes without a valid sample. Refreshes share one
+in-flight request; component tickers do not own the global refresh lifecycle. No
+external time service, browser storage, or new endpoint is used.
+
+Run `npm run test:clock` for clock/API checks. With Vite on localhost:5173 and
+Playwright available, run `node --test tests/server-clock.browser.cjs` for mounted
+Chromium/Firefox checks. Set `PLAYWRIGHT_MODULE` to an existing installation if
+Playwright is not installed locally.
+
 ## Leaderboard pagination
 
 Leaderboard rows and Previous/Next navigation use the response body, independent
