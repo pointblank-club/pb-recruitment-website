@@ -60,6 +60,12 @@ export const ContestLayout = () => {
 
   const now = useServerTime();
   const clockReady = Number.isFinite(now);
+  const workspaceScope = `${contestId}:${user?.uid ?? ''}`;
+  const admittedScopeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isContestLoading || admittedScopeRef.current !== workspaceScope) admittedScopeRef.current = null;
+    if (!isContestLoading && contest && clockReady) admittedScopeRef.current = workspaceScope;
+  }, [workspaceScope, isContestLoading, contest, clockReady]);
   const isLive = !!contest && now >= contest.start_time && now <= contest.end_time;
   const isContestEnded = contest ? (hasElapsedDeadline || now > contest.end_time) : false;
 
@@ -304,7 +310,7 @@ export const ContestLayout = () => {
   };
 
   const handleConfirmEndContest = async () => {
-    if (isEndingContest) return;
+    if (isEndingContest || !Number.isFinite(getServerTime())) return;
     if (isSubmitting) {
       toast.warning("A submission is currently being processed. Please wait for it to complete.");
       return;
@@ -387,7 +393,7 @@ export const ContestLayout = () => {
     );
   }
 
-  if (isContestLoading || (contest && !clockReady)) {
+  if (isContestLoading || (contest && !clockReady && admittedScopeRef.current !== workspaceScope)) {
     return (
       <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
         <ContestHeader 
@@ -410,10 +416,11 @@ export const ContestLayout = () => {
 
   const isParticipating = !!user && !!contest?.is_registered && isLive &&
     !hasExitedRef.current && !isSubmittedManually && !isTabSwitchTerminated;
-  const canEnd = !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0 && !isTabSwitchTerminated && !isSubmittedManually;
+  const canEnd = clockReady && !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0 && !isTabSwitchTerminated && !isSubmittedManually;
 
   return (
     <div className="contest-screen relative w-full bg-black h-screen flex flex-col overflow-hidden">
+      <div className="contents" inert={!clockReady} aria-busy={!clockReady}>
       <ContestHeader 
         timeRemaining={timeRemaining}
         progress={progress}
@@ -482,7 +489,7 @@ export const ContestLayout = () => {
       </div>
 
       <EndContestModal
-        isOpen={isEndModalOpen}
+        isOpen={isEndModalOpen && clockReady}
         onClose={() => {
           if (!isEndingContest) {
             setIsEndModalOpen(false);
@@ -527,6 +534,12 @@ export const ContestLayout = () => {
         onAcknowledge={closeWarningModal}
         onExitContest={handleLeaveContest}
       />
+      </div>
+      {!clockReady && (
+        <div role="status" className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/80 px-6 text-center text-slate-300">
+          Waiting for verified server time. Your work is preserved.
+        </div>
+      )}
     </div>
   );
 };

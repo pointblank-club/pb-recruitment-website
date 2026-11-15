@@ -40,12 +40,15 @@ change event availability or countdowns.
 Deploy the backend header and CORS exposure before this frontend. Samples use
 only the backend's committed timestamp; request processing time is never added
 to UTC. The estimate is conservative and can lag by response-transfer time.
-Missing or invalid headers preserve an already trusted clock.
+Missing or invalid headers preserve an already trusted clock. While synced,
+responses taking more than two seconds cannot replace that estimate.
 
 Startup with unknown UTC triggers immediate calibration. Resume after tab/window
 focus loss or back-forward cache restoration marks the old estimate untrusted,
 blocks time-dependent entry/proctoring, and accepts a fresh sample even on a slow
 connection. Requests dispatched before recovery cannot restore the old estimate.
+An admitted workspace stays mounted behind an interaction-blocking overlay during
+recovery, preserving unsaved MCQ answers while submissions remain paused.
 Three bounded attempts use cancellable, jittered backoff; failures display
 `Retry time sync`. Accepted corrections notify the same subscription as readiness.
 A failed background refinement retains trusted time; a failed recovery does not.

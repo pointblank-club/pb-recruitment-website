@@ -32,6 +32,8 @@ export const syncServerClock = (timestamp: unknown, startedAt: number, finishedA
   if (!Number.isSafeInteger(time) || time < 1_000_000_000_000 || time > 8_640_000_000_000_000 ||
       !Number.isFinite(startedAt) || !Number.isFinite(finishedAt) || finishedAt < startedAt ||
       startedAt <= latestRequestStartedAt || requestGeneration !== generation) return false;
+  // Slow delivery can make UTC stale; only accept it when no trusted estimate is available.
+  if (status === 'synced' && finishedAt - startedAt > 2000) return false;
 
   // The backend samples at commitment; full request duration includes processing, not just network latency.
   serverTimeMs = time;
