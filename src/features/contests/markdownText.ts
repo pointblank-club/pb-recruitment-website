@@ -47,22 +47,8 @@ const getProtectedRanges = (markdown: string): SourceRange[] => {
 
       // Protect the destination and any title while still allowing math in the label.
       if (start !== undefined && end !== undefined) {
-        let depth = 0;
-        let labelEnd = -1;
-        for (let index = 0; index < source.length; index += 1) {
-          if (source[index] === '\\') {
-            index += 1;
-            continue;
-          }
-          if (source[index] === '[') depth += 1;
-          if (source[index] === ']' && --depth === 0) {
-            labelEnd = index;
-            break;
-          }
-        }
-        if (labelEnd !== -1 && source[labelEnd + 1] === '(') {
-          ranges.push({ start: start + labelEnd + 1, end });
-        }
+        const labelEnd = node.children?.at(-1)?.position?.end?.offset ?? start + 1;
+        ranges.push({ start: labelEnd, end });
       }
     }
     node.children?.forEach(visit);
@@ -126,11 +112,13 @@ const convertVisibleMath = (markdown: string) => {
         )).join('\n').replace(/^\n|\n$/g, '');
         const hasContainerPrefix = containerPrefix.length > 0;
         const hasSurroundingProse = linePrefix !== containerPrefix;
+        const blockPrefix = hasSurroundingProse ? continuationPrefix : containerPrefix;
+        const paragraphBreak = `\n${continuationPrefix}\n`;
         edits.push({
           start: hasContainerPrefix && linePrefix === containerPrefix ? lineStart : absoluteStart,
           end: absoluteEnd,
           replacement: hasContainerPrefix
-            ? `${hasSurroundingProse ? '\n\n' : ''}${containerPrefix}$$\n${continuationPrefix}${content.split('\n').join(`\n${continuationPrefix}`)}\n${continuationPrefix}$$${hasSurroundingProse ? '\n\n' : '\n'}${hasSurroundingProse ? continuationPrefix : ''}`
+            ? `${hasSurroundingProse ? paragraphBreak : ''}${blockPrefix}$$\n${continuationPrefix}${content.split('\n').join(`\n${continuationPrefix}`)}\n${continuationPrefix}$$${hasSurroundingProse ? paragraphBreak : '\n'}${hasSurroundingProse ? continuationPrefix : ''}`
             : `\n$$\n${content}\n$$\n`,
         });
       }
