@@ -49,8 +49,9 @@ blocks time-dependent entry/proctoring, and accepts a fresh sample even on a slo
 connection. Requests dispatched before recovery cannot restore the old estimate.
 An admitted workspace stays mounted behind an interaction blocker during recovery,
 preserving drafts and unsaved MCQ answers while submissions remain paused. An
-accessible status and retry action stay outside the inert workspace; recovery
-restores focus to the previous control, or the workspace if that control was removed.
+accessible status and retry action also appear during initial entry and stay
+outside the inert workspace. Recovery restores focus to the previous control,
+or the workspace if that control was removed.
 Three bounded attempts use cancellable, jittered backoff; exhausted attempts log
 a `[ClockSync]` summary containing only code, status, and message, and retry
 automatically in the background. Accepted responses do not log success messages.

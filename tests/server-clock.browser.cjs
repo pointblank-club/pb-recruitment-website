@@ -133,7 +133,8 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
   test(`${name}: a missing first timestamp cannot start proctoring or mark an exam expired`, { timeout: 15000 }, async () => {
     const fixture = await mount({ skew: 4 * 3600000, header: false });
     try {
-      await fixture.page.getByText('Loading contest...', { exact: true }).waitFor();
+      await fixture.page.getByRole('status').filter({ hasText: 'Verifying server time' }).waitFor();
+      assert.equal(await fixture.page.getByRole('button', { name: 'Retry time sync', exact: true }).isDisabled(), true);
       assert.equal(await fixture.page.locator('#clock-location').textContent(), '/contests/test/problems');
       assert.equal(await fixture.page.locator('dialog[open]').count(), 0);
       assert.equal(await fixture.page.evaluate(() => localStorage.getItem('contest_submitted_test_user')), null);
@@ -265,18 +266,32 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
   });
 
   for (const header of [false, 'hidden']) {
-    test(`${name}: missing/hidden time (${header}) logs errors and recovers silently`, { timeout: 15000 }, async () => {
+    test(`${name}: cold-load missing/hidden time (${header}) explains failure and offers keyboard retry`, { timeout: 15000 }, async () => {
       const fixture = await mount({ skew: 4 * 3600000, header });
+      const page = fixture.page;
       try {
-        await fixture.page.waitForFunction(() => clockFixture.getServerClockStatus() === 'error');
-        assert.equal(await fixture.page.evaluate(() => clockFixture.getServerClockStatus()), 'error');
-        assert.equal(await fixture.page.locator('dialog[open]').count(), 0);
+        await page.waitForFunction(() => clockFixture.getServerClockStatus() === 'error');
+        const retry = page.getByRole('button', { name: 'Retry time sync', exact: true });
+        assert.equal(await retry.count(), 1, 'cold loads must expose the retry action');
+        await page.getByRole('status').filter({ hasText: 'Server time could not be verified' }).waitFor();
+        assert.equal(await retry.isEnabled(), true);
+        assert.equal(await retry.evaluate(node => Boolean(node.closest('[inert]'))), false);
+        assert.equal(await page.getByText('Exam workspace', { exact: true }).count(), 0);
+        assert.equal(await page.locator('dialog[open]').count(), 0);
+        assert.equal(await page.evaluate(() => localStorage.getItem('contest_submitted_test_user')), null);
         assert.equal(fixture.clockErrors.length, 1);
-        assert.doesNotMatch(await fixture.page.locator('body').innerText(), /Verifying server time|Server time could not be verified|Retry time sync|Waiting for verified server time/);
+        await page.waitForFunction(() => document.activeElement?.getAttribute('aria-labelledby') === 'clock-recovery-status');
+        await page.keyboard.press('Tab');
+        assert.equal(await retry.evaluate(node => node === document.activeElement), true);
         fixture.setHeader(true);
-        await fixture.page.evaluate(() => window.dispatchEvent(new Event('online')));
-        await fixture.page.getByText('Exam workspace', { exact: true }).waitFor();
-        assert.equal(await fixture.page.evaluate(() => clockFixture.getServerClockStatus()), 'synced');
+        fixture.setHealthDelay(250);
+        await page.keyboard.press('Enter');
+        await page.getByRole('status').filter({ hasText: 'Verifying server time' }).waitFor();
+        assert.equal(await retry.isDisabled(), true);
+        await page.getByText('Exam workspace', { exact: true }).waitFor();
+        assert.equal(await retry.count(), 0);
+        assert.equal(await page.evaluate(() => clockFixture.getServerClockStatus()), 'synced');
+        assert.equal(await page.locator('#clock-location').textContent(), '/contests/test/problems');
       } finally { await fixture.close(); }
     });
   }

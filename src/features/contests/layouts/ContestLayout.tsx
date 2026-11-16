@@ -403,6 +403,21 @@ export const ContestLayout = () => {
     );
   }
 
+  const clockNotice = (
+    <div ref={clockNoticeRef} tabIndex={-1} aria-labelledby="clock-recovery-status"
+      className="max-w-md rounded-lg border border-gray-700 bg-gray-900 p-6 text-white">
+      <p id="clock-recovery-status" role="status">
+        {clockStatus === 'error'
+          ? 'Server time could not be verified. Check your connection and retry.'
+          : 'Verifying server time…'}
+      </p>
+      <p className="mt-2 text-sm text-gray-300">Your work is preserved. The workspace will unlock when server time is verified.</p>
+      <Button className="mt-4" variant="secondary" onClick={retryServerClock} disabled={clockStatus !== 'error'}>
+        Retry time sync
+      </Button>
+    </div>
+  );
+
   if (isContestLoading || (contest && !clockReady && admittedScopeRef.current !== workspaceScope)) {
     return (
       <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
@@ -413,7 +428,7 @@ export const ContestLayout = () => {
           contestId={contestId}
         />
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-gray-400">Loading contest...</div>
+          {clockReady ? <div className="text-gray-400">Loading contest...</div> : clockNotice}
         </div>
       </div>
     );
@@ -548,18 +563,7 @@ export const ContestLayout = () => {
       </div>
       {!clockReady && (
         <div className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/80 px-6">
-          <div ref={clockNoticeRef} tabIndex={-1} aria-labelledby="clock-recovery-status"
-            className="max-w-md rounded-lg border border-gray-700 bg-gray-900 p-6 text-white">
-            <p id="clock-recovery-status" role="status">
-              {clockStatus === 'error'
-                ? 'Server time could not be verified. Check your connection and retry.'
-                : 'Verifying server time…'}
-            </p>
-            <p className="mt-2 text-sm text-gray-300">Your work is preserved. The workspace will unlock when server time is verified.</p>
-            <Button className="mt-4" variant="secondary" onClick={retryServerClock} disabled={clockStatus !== 'error'}>
-              Retry time sync
-            </Button>
-          </div>
+          {clockNotice}
         </div>
       )}
     </div>
