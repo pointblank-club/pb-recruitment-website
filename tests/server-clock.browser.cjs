@@ -12,8 +12,12 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
     const page = await browser.newPage();
     const reference = Date.now();
     const errors = [];
+    const clockErrors = [];
     let headerMode = header, healthDelay = 0, deliveryDelay = 0, leaderboardCalls = 0, submissions = 0;
     page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (message.type() === 'error' && message.text().startsWith('[ClockSync]')) clockErrors.push(message.text());
+    });
     await page.addInitScript(skew => {
       const OriginalDate = Date;
       window.clockSkew = skew;
@@ -34,9 +38,11 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
         return route.continue();
       }
       if (url.origin !== 'http://localhost:8080') return route.abort();
+      if (url.pathname === '/health' && headerMode === 'failure') return route.abort();
       if (url.pathname === '/health' && healthDelay) await new Promise(resolve => setTimeout(resolve, healthDelay));
       if (url.pathname === '/contests/test' && processingDelay) await new Promise(resolve => setTimeout(resolve, processingDelay));
-      const headers = headerMode ? { 'X-Server-Time-Ms': String(Date.now()), ...(headerMode === 'hidden' ? {} : { 'Access-Control-Expose-Headers': 'X-Server-Time-Ms' }) } : {};
+      const headers = headerMode && (headerMode !== 'health-only' || url.pathname === '/health')
+        ? { 'X-Server-Time-Ms': String(Date.now()), ...(headerMode === 'hidden' ? {} : { 'Access-Control-Expose-Headers': 'X-Server-Time-Ms' }) } : {};
       if (url.pathname === '/contests/test' && deliveryDelay) await new Promise(resolve => setTimeout(resolve, deliveryDelay));
       if (url.pathname === '/health') return route.fulfill({ headers, json: { status: 'ok' } });
       if (url.pathname === '/admin/') return route.fulfill({ status: 403, headers, json: { error: 'Not an admin' } });
@@ -74,7 +80,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       function Location() { return h('output', { id: 'clock-location' }, f.useLocation().pathname); }
       function Clock() { const now = f.useServerTime(); return h('output', { id: 'clock-now' }, String(now)); }
       const render = node => window.clockRoot.render(h(f.React.StrictMode, null, h(Lifecycle, null, node)));
-      function Lifecycle({ children }) { f.React.useEffect(() => f.startServerClockRefresh(), []); return h(f.React.Fragment, null, h(f.ServerClockNotice), children); }
+      function Lifecycle({ children }) { f.React.useEffect(() => f.startServerClockRefresh(), []); return children; }
       if (view === 'polling') {
         function Poller() { const result = f.useLeaderboard('test', 50); return h('output', { id: 'polling-error' }, result.error); }
         render(h(f.MemoryRouter, null, h(Poller)));
@@ -91,7 +97,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
           h(view === 'card' ? f.ContestCard : f.ContestTimeline, { contest: window.clockContest, onClick() {} })));
       }
     }, view);
-    return { page, setHeader(value) { headerMode = value; }, setHealthDelay(value) { healthDelay = value; }, setDeliveryDelay(value) { deliveryDelay = value; }, get submissions() { return submissions; }, get leaderboardCalls() { return leaderboardCalls; }, async close() { await page.close(); assert.deepEqual(errors, []); } };
+    return { page, clockErrors, setHeader(value) { headerMode = value; }, setHealthDelay(value) { healthDelay = value; }, setDeliveryDelay(value) { deliveryDelay = value; }, get submissions() { return submissions; }, get leaderboardCalls() { return leaderboardCalls; }, async close() { await page.close(); assert.deepEqual(errors, []); } };
   }
 
   for (const skew of [4 * 3600000, -4 * 3600000]) {
@@ -127,7 +133,8 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
   test(`${name}: a missing first timestamp cannot start proctoring or mark an exam expired`, { timeout: 15000 }, async () => {
     const fixture = await mount({ skew: 4 * 3600000, header: false });
     try {
-      await fixture.page.getByText('Loading contest...', { exact: true }).waitFor();
+      await fixture.page.getByRole('status').filter({ hasText: 'Verifying server time' }).waitFor();
+      assert.equal(await fixture.page.getByRole('button', { name: 'Retry time sync', exact: true }).isDisabled(), true);
       assert.equal(await fixture.page.locator('#clock-location').textContent(), '/contests/test/problems');
       assert.equal(await fixture.page.locator('dialog[open]').count(), 0);
       assert.equal(await fixture.page.evaluate(() => localStorage.getItem('contest_submitted_test_user')), null);
@@ -153,7 +160,8 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
     } finally { await fixture.close(); }
   });
 
-  test(`${name}: focus recovery preserves an unsubmitted MCQ answer and blocks interaction`, { timeout: 20000 }, async () => {
+  for (const failedHeader of [false, 'hidden', 'failure']) {
+  test(`${name}: failed recovery (${failedHeader}) explains the blocker, retries, and restores focus`, { timeout: 20000 }, async () => {
     const fixture = await mount({ skew: 0, view: 'mcq' });
     const page = fixture.page;
     try {
@@ -162,6 +170,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       await answer.check();
       await page.getByRole('button', { name: 'Submit Answer', exact: true }).waitFor();
       await answer.evaluate(node => { window.selectedAnswerNode = node; });
+      await answer.focus();
       const otherAnswer = await page.locator('#option-1').boundingBox();
       fixture.setHealthDelay(500);
       await page.evaluate(() => {
@@ -169,6 +178,11 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
         window.dispatchEvent(new Event('focus'));
       });
       await page.waitForFunction(() => clockFixture.getServerClockStatus() === 'recovering');
+      await page.waitForFunction(() => document.querySelector('.contest-screen [inert]'));
+      const status = page.getByRole('status').filter({ hasText: 'Verifying server time' });
+      await status.waitFor();
+      assert.equal(await status.evaluate(node => Boolean(node.closest('[inert]'))), false);
+      assert.equal(await page.getByRole('button', { name: 'Retry time sync', exact: true }).isDisabled(), true);
       assert.equal(await page.getByText('Loading contest...', { exact: true }).count(), 0);
       assert.equal(await answer.count(), 1, 'the selected radio must stay mounted');
       assert.equal(await answer.isChecked(), true);
@@ -184,22 +198,48 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       await page.getByRole('button', { name: 'Submit Answer', exact: true }).waitFor();
       assert.equal(await answer.evaluate(node => node === window.selectedAnswerNode), true, 'recovery must retain the same MCQ instance');
       assert.equal(await answer.isChecked(), true);
+      await page.waitForFunction(() => document.activeElement === window.selectedAnswerNode);
 
-      fixture.setHeader(false);
+      fixture.setHeader(failedHeader);
       fixture.setHealthDelay(0);
       await page.evaluate(() => {
         window.dispatchEvent(new Event('blur'));
         window.dispatchEvent(new Event('focus'));
       });
-      await page.getByRole('button', { name: 'Retry time sync', exact: true }).waitFor();
+      await page.waitForFunction(() => clockFixture.getServerClockStatus() === 'error');
       assert.equal(await answer.evaluate(node => node === window.selectedAnswerNode && Boolean(node.closest('[inert]'))), true);
       assert.equal(await answer.isChecked(), true, 'bounded recovery failure also preserves the answer');
+      assert.equal(fixture.clockErrors.length, 1, 'exhausted retries log one console error');
+      await page.getByRole('status').filter({ hasText: 'Server time could not be verified' }).waitFor();
+      const retry = page.getByRole('button', { name: 'Retry time sync', exact: true });
+      assert.equal(await retry.isEnabled(), true);
+      await page.keyboard.press('Tab');
+      assert.equal(await retry.evaluate(node => node === document.activeElement), true, 'retry remains keyboard accessible outside the inert workspace');
       fixture.setHeader(true);
-      await page.getByRole('button', { name: 'Retry time sync', exact: true }).click();
+      await page.keyboard.press('Enter');
       await page.waitForFunction(() => clockFixture.getServerClockStatus() === 'synced');
       await page.getByRole('button', { name: 'Submit Answer', exact: true }).waitFor();
-      assert.equal(await answer.isChecked(), true, 'manual calibration retry restores the same answer');
+      assert.equal(await answer.isChecked(), true, 'background calibration restores the same answer');
+      await page.waitForFunction(() => document.activeElement === window.selectedAnswerNode);
       assert.equal(fixture.submissions, 0);
+    } finally { await fixture.close(); }
+  });
+  }
+
+  test(`${name}: recovery returns focus to the workspace when the focused action was removed`, { timeout: 15000 }, async () => {
+    const fixture = await mount({ skew: 0, view: 'mcq' });
+    try {
+      await fixture.page.getByRole('button', { name: /Enter fullscreen|Continue demo without fullscreen/ }).click();
+      await fixture.page.locator('#option-0').check();
+      await fixture.page.getByRole('button', { name: 'Submit Answer', exact: true }).focus();
+      fixture.setHealthDelay(500);
+      await fixture.page.evaluate(() => {
+        window.dispatchEvent(new Event('blur'));
+        window.dispatchEvent(new Event('focus'));
+      });
+      await fixture.page.waitForFunction(() => document.querySelector('.contest-screen [inert]'));
+      await fixture.page.waitForFunction(() => document.activeElement === document.querySelector('.contest-screen'));
+      assert.equal(await fixture.page.locator('#option-0').isChecked(), true);
     } finally { await fixture.close(); }
   });
 
@@ -207,6 +247,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
     const fixture = await mount({ skew: 0 });
     try {
       await fixture.page.getByText('Exam workspace', { exact: true }).waitFor();
+      fixture.setHeader('health-only');
       fixture.setHealthDelay(2500);
       await fixture.page.evaluate(() => {
         clockFixture.syncServerClock(String(Date.now() - 3600000), performance.now());
@@ -216,6 +257,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
         document.dispatchEvent(new Event('visibilitychange'));
       });
       await fixture.page.waitForFunction(() => clockFixture.getServerClockStatus() === 'recovering');
+      await fixture.page.waitForFunction(() => !document.querySelector('dialog[open]') && document.querySelector('.contest-screen [inert]'));
       assert.equal(await fixture.page.locator('dialog[open]').count(), 0);
       await fixture.page.waitForFunction(() => clockFixture.getServerClockStatus() === 'synced');
       assert.ok(Math.abs(await fixture.page.evaluate(() => clockFixture.getServerTime()) - Date.now()) < 200);
@@ -224,16 +266,32 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
   });
 
   for (const header of [false, 'hidden']) {
-    test(`${name}: missing/hidden time (${header}) offers retry and recovers`, { timeout: 15000 }, async () => {
+    test(`${name}: cold-load missing/hidden time (${header}) explains failure and offers keyboard retry`, { timeout: 15000 }, async () => {
       const fixture = await mount({ skew: 4 * 3600000, header });
+      const page = fixture.page;
       try {
-        await fixture.page.getByRole('button', { name: 'Retry time sync', exact: true }).waitFor();
-        assert.equal(await fixture.page.evaluate(() => clockFixture.getServerClockStatus()), 'error');
-        assert.equal(await fixture.page.locator('dialog[open]').count(), 0);
+        await page.waitForFunction(() => clockFixture.getServerClockStatus() === 'error');
+        const retry = page.getByRole('button', { name: 'Retry time sync', exact: true });
+        assert.equal(await retry.count(), 1, 'cold loads must expose the retry action');
+        await page.getByRole('status').filter({ hasText: 'Server time could not be verified' }).waitFor();
+        assert.equal(await retry.isEnabled(), true);
+        assert.equal(await retry.evaluate(node => Boolean(node.closest('[inert]'))), false);
+        assert.equal(await page.getByText('Exam workspace', { exact: true }).count(), 0);
+        assert.equal(await page.locator('dialog[open]').count(), 0);
+        assert.equal(await page.evaluate(() => localStorage.getItem('contest_submitted_test_user')), null);
+        assert.equal(fixture.clockErrors.length, 1);
+        await page.waitForFunction(() => document.activeElement?.getAttribute('aria-labelledby') === 'clock-recovery-status');
+        await page.keyboard.press('Tab');
+        assert.equal(await retry.evaluate(node => node === document.activeElement), true);
         fixture.setHeader(true);
-        await fixture.page.getByRole('button', { name: 'Retry time sync', exact: true }).click();
-        await fixture.page.getByText('Exam workspace', { exact: true }).waitFor();
-        assert.equal(await fixture.page.evaluate(() => clockFixture.getServerClockStatus()), 'synced');
+        fixture.setHealthDelay(250);
+        await page.keyboard.press('Enter');
+        await page.getByRole('status').filter({ hasText: 'Verifying server time' }).waitFor();
+        assert.equal(await retry.isDisabled(), true);
+        await page.getByText('Exam workspace', { exact: true }).waitFor();
+        assert.equal(await retry.count(), 0);
+        assert.equal(await page.evaluate(() => clockFixture.getServerClockStatus()), 'synced');
+        assert.equal(await page.locator('#clock-location').textContent(), '/contests/test/problems');
       } finally { await fixture.close(); }
     });
   }

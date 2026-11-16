@@ -5,6 +5,8 @@ export interface ProblemOverviewResponse {
   name: string;
   score: number;
   type: string;
+  time_limit?: number;
+  memory_limit?: number;
   progress?: ProblemProgress;
 }
 

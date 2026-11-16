@@ -1,4 +1,3 @@
-import { ServerClockNotice } from '@/components/ServerClockNotice';
 import { startServerClockRefresh } from '@/services/api/serverClock';
 import React, { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
@@ -47,7 +46,6 @@ const App: React.FC = () => {
         </div>
       }
     >
-      <ServerClockNotice />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/test" element={<TestPage />} />

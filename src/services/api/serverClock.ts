@@ -7,6 +7,9 @@ interface TimedRequest extends InternalAxiosRequestConfig {
   _clockGeneration?: number;
 }
 
+let retryRefresh: (() => void) | undefined;
+export const retryServerClock = (): void => retryRefresh?.();
+
 export const installServerClock = (client: AxiosInstance): void => {
   // Axios runs request interceptors in reverse order; install before authentication.
   client.interceptors.request.use(config => {
@@ -31,9 +34,6 @@ export const installServerClock = (client: AxiosInstance): void => {
     return Promise.reject(error);
   });
 };
-
-let retryRefresh: (() => void) | undefined;
-export const retryServerClock = (): void => retryRefresh?.();
 
 export const startServerClockRefresh = (): (() => void) => {
   const client = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080', timeout: 5000 });
@@ -70,13 +70,24 @@ export const startServerClockRefresh = (): (() => void) => {
     const attempt = new AbortController();
     controller = attempt;
     pending = (async () => {
+      let syncError: unknown;
       for (let i = 0; i < 3; i++) {
         if (i) await wait(jitterDelay(1000 * 2 ** (i - 1)), attempt.signal);
         if (disposed || attempt.signal.aborted || document.visibilityState === 'hidden') return;
-        try { await client.get('/health', { signal: attempt.signal }); } catch { /* A failed probe must not fail application requests. */ }
+        try {
+          await client.get('/health', { signal: attempt.signal });
+          syncError = undefined;
+        } catch (error) {
+          syncError = error;
+        }
         if (disposed || attempt.signal.aborted) return;
         if (getServerClockStatus() === 'synced' && getLastClockSync() >= startedAt) return;
       }
+      console.error('[ClockSync] Unable to synchronize server time; retrying in the background.', {
+        code: axios.isAxiosError(syncError) ? syncError.code : undefined,
+        status: axios.isAxiosError(syncError) ? syncError.response?.status : undefined,
+        message: axios.isAxiosError(syncError) || syncError instanceof Error ? syncError.message : 'No usable X-Server-Time-Ms sample was received from the API.',
+      });
       failClockRecovery();
     })().finally(() => {
       pending = undefined;

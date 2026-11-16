@@ -47,10 +47,15 @@ Startup with unknown UTC triggers immediate calibration. Resume after tab/window
 focus loss or back-forward cache restoration marks the old estimate untrusted,
 blocks time-dependent entry/proctoring, and accepts a fresh sample even on a slow
 connection. Requests dispatched before recovery cannot restore the old estimate.
-An admitted workspace stays mounted behind an interaction-blocking overlay during
-recovery, preserving unsaved MCQ answers while submissions remain paused.
-Three bounded attempts use cancellable, jittered backoff; failures display
-`Retry time sync`. Accepted corrections notify the same subscription as readiness.
+An admitted workspace stays mounted behind an interaction blocker during recovery,
+preserving drafts and unsaved MCQ answers while submissions remain paused. An
+accessible status and retry action also appear during initial entry and stay
+outside the inert workspace. Recovery restores focus to the previous control,
+or the workspace if that control was removed.
+Three bounded attempts use cancellable, jittered backoff; exhausted attempts log
+a `[ClockSync]` summary containing only code, status, and message, and retry
+automatically in the background. Accepted responses do not log success messages.
+Accepted corrections notify the same subscription as readiness.
 A failed background refinement retains trusted time; a failed recovery does not.
 
 Normal API traffic refreshes the clock, with a jittered idle refresh after ten
@@ -62,6 +67,18 @@ Run `npm run test:clock` for clock/API checks. With Vite on localhost:5173 and
 Playwright available, run `node --test tests/server-clock.browser.cjs` for mounted
 Chromium/Firefox checks. Set `PLAYWRIGHT_MODULE` to an existing installation if
 Playwright is not installed locally.
+
+## Coding question limits
+
+Only coding questions have editable time and memory limits, shown on their
+problem statements. Time uses milliseconds (1–10000); memory uses MiB (2–500).
+New questions default to 1000 ms / 256 MiB. MCQ forms and payloads omit both fields.
+Deploy the backend with migration 46 and replace all old API instances before
+using these controls. Coding saves require matching persisted limits in the write
+response; missing, null, or mismatched limits keep the form open with an error.
+Restoring configurable limits reverses the fixed-budget policy and requires a
+capacity decision before rollout. Migration 42 deleted historical custom values;
+migration 46 supplies defaults, so recovering those values requires a pre-42 backup.
 
 ## Leaderboard pagination
 

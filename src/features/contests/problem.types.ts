@@ -7,6 +7,8 @@ export interface Problem {
   name: string;
   score: number;
   type: ProblemType;
+  time_limit?: number; // milliseconds, coding questions only
+  memory_limit?: number; // MiB, coding questions only
   progress?: ProblemProgress;
   answer?: number[];
   description?: string;

@@ -10,7 +10,11 @@ const compile = path => ts.transpileModule(readFileSync(new URL(`../${path}`, im
 }).outputText;
 let elapsed = 1000;
 const performance = { now: () => elapsed };
-const { clock } = loadServerClock(axios, { performance, Date: { now() { throw new Error('Machine time must not establish UTC'); } } });
+const syncLogs = [];
+const { clock } = loadServerClock(axios, { performance,
+  console: { ...console, info: message => syncLogs.push(message) },
+  Date: { now() { throw new Error('Machine time must not establish UTC'); } },
+});
 assert.ok(Number.isNaN(clock.getServerTime()));
 let ready = 0;
 const unsubscribe = clock.subscribeServerClock(() => ready++);
@@ -35,6 +39,7 @@ assert.equal(clock.syncServerClock('1700000011000', 4000, elapsed), false, 'slow
 assert.equal(clock.getServerTime(), 1700000013920, 'the existing anchor continues to advance');
 assert.equal(clock.getLastClockSync(), 3080);
 assert.equal(ready, 2, 'rejected slow samples do not notify or change clock readiness');
+assert.deepEqual(syncLogs, [], 'accepted clock samples do not log per-response success messages');
 unsubscribe();
 const initialSlow = loadServerClock(axios, { performance }).clock;
 assert.equal(initialSlow.syncServerClock('1700000000000', 0, 10000), true);
@@ -92,13 +97,16 @@ const document = new EventTarget();
 document.visibilityState = 'visible';
 const window = new EventTarget();
 const timers = new Map();
-let timerId = 0, refreshCalls = 0, release, missing = false;
+let timerId = 0, refreshCalls = 0, release, missing = false, probeError;
+const clockErrors = [];
 const lifecycleAxios = { ...axios, create: config => axios.create({ ...config, adapter: async request => {
   refreshCalls++;
   await new Promise(resolve => { release = resolve; });
+  if (probeError) throw probeError;
   return { config: request, status: 200, headers: missing ? {} : { 'x-server-time-ms': String(stamp) }, data: {} };
 } }) };
 const lifecycle = loadServerClock(lifecycleAxios, { performance, document, window,
+  console: { ...console, error: (...args) => clockErrors.push(args) },
   setTimeout: (callback, delay) => { timers.set(++timerId, { callback, delay }); return timerId; },
   clearTimeout: id => timers.delete(id),
 });
@@ -143,21 +151,24 @@ await flush();
 assert.equal(lifecycle.clock.getServerTime(), stamp, 'slow recovery repairs a suspended clock without artificial lead');
 assert.equal(lifecycle.clock.getServerClockStatus(), 'synced');
 missing = true;
-lifecycle.retryServerClock();
+window.dispatchEvent(new Event('blur'));
+window.dispatchEvent(new Event('focus'));
 await flush();
 for (let attempt = 0; attempt < 3; attempt++) {
   release();
   await flush();
   if (attempt < 2) await fireTimer();
 }
-assert.equal(lifecycle.clock.getServerClockStatus(), 'error', 'bounded failures expose an actionable clock error');
+assert.equal(lifecycle.clock.getServerClockStatus(), 'error');
 assert.ok(Number.isNaN(lifecycle.clock.getServerTime()));
+assert.equal(clockErrors.length, 1, 'exhausted retries log one background synchronization failure');
+assert.match(clockErrors[0][0], /^\[ClockSync\]/);
+assert.match(clockErrors[0][1].message, /X-Server-Time-Ms/);
 missing = false;
-lifecycle.retryServerClock();
-await flush();
+await fireTimer();
 release();
 await flush();
-assert.equal(lifecycle.clock.getServerClockStatus(), 'synced');
+assert.equal(lifecycle.clock.getServerClockStatus(), 'synced', 'scheduled background retries recover without UI controls');
 window.dispatchEvent(new Event('blur'));
 window.dispatchEvent(new Event('focus'));
 await flush();
@@ -165,13 +176,38 @@ assert.equal(lifecycle.clock.getServerClockStatus(), 'recovering', 'focus restor
 release();
 await flush();
 assert.equal(lifecycle.clock.getServerClockStatus(), 'synced');
+probeError = new axios.AxiosError('Synthetic network failure', 'ERR_NETWORK',
+  { headers: { Authorization: 'private' } }, { privateRequest: true }, { status: 503, data: 'private response' });
+window.dispatchEvent(new Event('blur'));
+window.dispatchEvent(new Event('focus'));
+await flush();
+for (let attempt = 0; attempt < 3; attempt++) {
+  release();
+  await flush();
+  if (attempt < 2) await fireTimer();
+}
+assert.equal(clockErrors.length, 2);
+assert.equal(JSON.stringify(clockErrors[1][1]), JSON.stringify({
+  code: 'ERR_NETWORK', status: 503, message: 'Synthetic network failure',
+}), 'diagnostics include only the code, status, and message');
+probeError = undefined;
+const callsBeforeRetry = refreshCalls;
+lifecycle.retryServerClock();
+await flush();
+assert.equal(refreshCalls, callsBeforeRetry + 1, 'manual retry bypasses the scheduled backoff');
+assert.equal(lifecycle.clock.getServerClockStatus(), 'recovering');
+release();
+await flush();
+assert.equal(lifecycle.clock.getServerClockStatus(), 'synced');
 stop();
 assert.equal(timers.size, 0);
 const callsAfterStop = refreshCalls;
 window.dispatchEvent(new Event('online'));
+lifecycle.retryServerClock();
 document.dispatchEvent(new Event('visibilitychange'));
 await flush();
 assert.equal(refreshCalls, callsAfterStop, 'unmount removes refresh listeners');
+assert.equal(clockErrors.length, 2, 'cleanup does not log cancellation errors');
 
 const unknown = loadServerClock(axios, { performance });
 const absolute = { 'retry-after': new Date(stamp + 60000).toUTCString() };
