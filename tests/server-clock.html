@@ -13,11 +13,10 @@
   import { contestApi } from '/src/services/api/contestApi.ts';
   import { beginClockRecovery, getServerClockStatus, getServerTime, syncServerClock } from '/src/lib/serverClock.ts';
   import { useServerTime } from '/src/hooks/useServerTime.ts';
-  import { ServerClockNotice } from '/src/components/ServerClockNotice.tsx';
   import { startServerClockRefresh } from '/src/services/api/serverClock.ts';
   import { useLeaderboard } from '/src/features/contests/hooks/useLeaderboard.ts';
   import '/src/App.css';
   window.clockFixture = { React, createRoot, MemoryRouter, Routes, Route, useNavigate, useLocation,
     ContestLayout, ContestProblemPage, ContestCard, ContestTimeline, contestApi, getServerTime, useServerTime,
-    ServerClockNotice, startServerClockRefresh, getServerClockStatus, syncServerClock, beginClockRecovery, useLeaderboard };
+    startServerClockRefresh, getServerClockStatus, syncServerClock, beginClockRecovery, useLeaderboard };
 </script>

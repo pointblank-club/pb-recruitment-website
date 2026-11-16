@@ -536,9 +536,7 @@ export const ContestLayout = () => {
       />
       </div>
       {!clockReady && (
-        <div role="status" className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/80 px-6 text-center text-slate-300">
-          Waiting for verified server time. Your work is preserved.
-        </div>
+        <div aria-hidden="true" className="absolute inset-0 z-[10000]" />
       )}
     </div>
   );

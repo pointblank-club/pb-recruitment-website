@@ -32,9 +32,6 @@ export const installServerClock = (client: AxiosInstance): void => {
   });
 };
 
-let retryRefresh: (() => void) | undefined;
-export const retryServerClock = (): void => retryRefresh?.();
-
 export const startServerClockRefresh = (): (() => void) => {
   const client = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080', timeout: 5000 });
   installServerClock(client);
@@ -70,13 +67,21 @@ export const startServerClockRefresh = (): (() => void) => {
     const attempt = new AbortController();
     controller = attempt;
     pending = (async () => {
+      let syncError: unknown;
       for (let i = 0; i < 3; i++) {
         if (i) await wait(jitterDelay(1000 * 2 ** (i - 1)), attempt.signal);
         if (disposed || attempt.signal.aborted || document.visibilityState === 'hidden') return;
-        try { await client.get('/health', { signal: attempt.signal }); } catch { /* A failed probe must not fail application requests. */ }
+        try {
+          await client.get('/health', { signal: attempt.signal });
+          syncError = undefined;
+        } catch (error) {
+          syncError = error;
+        }
         if (disposed || attempt.signal.aborted) return;
         if (getServerClockStatus() === 'synced' && getLastClockSync() >= startedAt) return;
       }
+      console.error('[ClockSync] Unable to synchronize server time; retrying in the background.',
+        syncError ?? new Error('No usable X-Server-Time-Ms sample was received from the API.'));
       failClockRecovery();
     })().finally(() => {
       pending = undefined;
@@ -108,7 +113,6 @@ export const startServerClockRefresh = (): (() => void) => {
     }
   };
   const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) recover(); };
-  retryRefresh = recover;
   document.addEventListener('visibilitychange', onVisible);
   window.addEventListener('online', refresh);
   window.addEventListener('blur', onBlur);
@@ -123,7 +127,6 @@ export const startServerClockRefresh = (): (() => void) => {
     window.removeEventListener('blur', onBlur);
     window.removeEventListener('focus', onFocus);
     window.removeEventListener('pageshow', onPageShow);
-    if (retryRefresh === recover) retryRefresh = undefined;
     controller?.abort();
   };
 };

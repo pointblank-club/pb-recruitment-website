@@ -1,5 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
-import { getServerClockStatus, getServerTime, subscribeServerClock } from '@/lib/serverClock';
+import { useEffect, useState } from 'react';
+import { getServerTime, subscribeServerClock } from '@/lib/serverClock';
 
 export const useServerTime = (): number => {
   const [now, setNow] = useState(getServerTime);
@@ -12,5 +12,3 @@ export const useServerTime = (): number => {
   }, []);
   return now;
 };
-
-export const useServerClockStatus = () => useSyncExternalStore(subscribeServerClock, getServerClockStatus);

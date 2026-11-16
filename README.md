@@ -47,10 +47,12 @@ Startup with unknown UTC triggers immediate calibration. Resume after tab/window
 focus loss or back-forward cache restoration marks the old estimate untrusted,
 blocks time-dependent entry/proctoring, and accepts a fresh sample even on a slow
 connection. Requests dispatched before recovery cannot restore the old estimate.
-An admitted workspace stays mounted behind an interaction-blocking overlay during
-recovery, preserving unsaved MCQ answers while submissions remain paused.
-Three bounded attempts use cancellable, jittered backoff; failures display
-`Retry time sync`. Accepted corrections notify the same subscription as readiness.
+An admitted workspace stays visible behind a transparent interaction-blocking
+overlay during recovery, preserving unsaved MCQ answers while submissions remain
+paused. Three bounded attempts use cancellable, jittered backoff; exhausted
+attempts log a `[ClockSync]` error to the console and retry automatically in the
+background. No clock-sync banners, messages, or retry buttons are shown.
+Accepted corrections notify the same subscription as readiness.
 A failed background refinement retains trusted time; a failed recovery does not.
 
 Normal API traffic refreshes the clock, with a jittered idle refresh after ten
