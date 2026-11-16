@@ -59,6 +59,10 @@ const AdminContestContestants: React.FC = () => {
             tabSwitchCount: reg.tab_switch_count ?? 0,
             isTerminatedByTabSwitch: Boolean(reg.is_tab_switch_terminated),
             resetGeneration: reg.reset_generation ?? 0,
+            sebNotDetected: Boolean(reg.seb_not_detected),
+            browserSessionCount: reg.browser_session_count ?? 0,
+            browserSessionGeneration: reg.browser_session_generation ?? 0,
+            isBrowserSessionTerminated: Boolean(reg.is_browser_session_terminated),
           };
         });
 

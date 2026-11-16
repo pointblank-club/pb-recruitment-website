@@ -1,4 +1,5 @@
 import { installServerClock } from './serverClock';
+import { isSEBUserAgent } from '@/lib/seb';
 export interface PaginatedLeaderboard {
   entries: LeaderboardEntry[];
   hasNextPage: boolean;
@@ -92,12 +93,15 @@ interface MockSubmission {
 class ContestApiService {
   private axiosInstance: AxiosInstance;
   private mockSubmissions = new Map<string, MockSubmission>();
+  private browserSessionStarts = new Map<string, Promise<BrowserSession>>();
+  private browserSessionGenerations = new Map<string, number>();
   // shortcut: unresolved payloads remain for this tab; reconcile saved history before adding eviction.
   private pendingCodeSubmissions = new Map<string, { payload: string; key: string }>();
 
   constructor() {
     this.axiosInstance = axios.create({
       baseURL: API_BASE_URL,
+      withCredentials: true,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -162,6 +166,57 @@ class ContestApiService {
     return response.data.map(c => new Contest(c));
   }
 
+  startBrowserSession(contestId: string, userId: string): Promise<BrowserSession> {
+    const scope = `${contestId}:${userId}`;
+    const existing = this.browserSessionStarts.get(scope);
+    if (existing) return existing;
+    const detected = isSEBUserAgent(navigator.userAgent);
+    const start = async () => {
+      const key = `contest_browser_start_${scope}`;
+      let attemptId = detected ? localStorage.getItem(key) || crypto.randomUUID() : crypto.randomUUID();
+      let generation = this.browserSessionGenerations.get(scope) ?? 0;
+      if (detected) localStorage.setItem(key, attemptId);
+      for (let attempt = 0; attempt < 4; attempt++) {
+        let state: BrowserSession;
+        try {
+          const response = await this.axiosInstance.post<BrowserSession>(`/contests/${contestId}/browser-session`,
+            { attempt_id: attemptId, generation }, { timeout: 10000, _expectedUserId: userId } as Record<string, unknown>);
+          state = response.data;
+        } catch (error) {
+          if (axios.isAxiosError(error) && error.response?.status === 409) {
+            const data = error.response.data;
+            if (data?.code === 'BROWSER_SESSION_STALE' && Number.isInteger(data.generation) && data.generation > generation) {
+              generation = data.generation;
+              this.browserSessionGenerations.set(scope, generation);
+              attemptId = crypto.randomUUID();
+              if (detected) localStorage.setItem(key, attemptId);
+              continue;
+            }
+            if (detected) localStorage.removeItem(key);
+          }
+          throw error;
+        }
+        if (!state || typeof state.is_seb !== 'boolean' || !Number.isInteger(state.session_count) || state.session_count < 0 || state.session_count > 3 ||
+          state.generation !== generation || typeof state.is_terminated !== 'boolean' || typeof state.cookie_confirmed !== 'boolean' ||
+          typeof state.seb_not_detected !== 'boolean' || (state.is_seb && state.cookie_confirmed && state.session_count < 1)) {
+          throw new Error('The backend did not confirm the exam session. Please retry.');
+        }
+        this.browserSessionGenerations.set(scope, state.generation);
+        if (!state.is_seb || state.is_terminated || state.cookie_confirmed) {
+          if (detected) localStorage.removeItem(key);
+          return state;
+        }
+      }
+      throw new Error('The exam session cookie could not be confirmed. Allow cookies for the API and retry.');
+    };
+    const pending = (detected
+      ? navigator.locks ? navigator.locks.request(`pb-exam-session:${scope}`, start)
+        : Promise.reject(new Error('This SEB version does not support exam session coordination. Update SEB and retry.'))
+      : start()).finally(() => this.browserSessionStarts.delete(scope));
+    this.browserSessionStarts.set(scope, pending);
+    return pending;
+  }
+
   async getContestProblems(contestId: string, signal?: AbortSignal): Promise<Problem[]> {
     const response = await this.axiosInstance.get<ProblemOverviewResponse[]>(`/contests/${contestId}/problems`, { signal });
     return response.data.map((problem) => toProblemOverview(problem, contestId));
@@ -213,6 +268,7 @@ class ContestApiService {
     code: string,
     language: string,
     stdin: string,
+    contestId?: string,
   ): Promise<RunCodeResponse> {
     if (MOCK_SUBMISSION_JUDGING) {
       await new Promise((r) => setTimeout(r, 600));
@@ -229,6 +285,7 @@ class ContestApiService {
     const response = await this.axiosInstance.post<RunCodeResponse>(
       '/submission/run',
       {
+        ...(contestId ? { contest_id: contestId } : {}),
         code,
         language,
         stdin,
@@ -575,6 +632,10 @@ class ContestApiService {
           generation: Number(raw?.generation ?? 0),
           is_session_ended: Boolean(raw?.is_session_ended),
           ended_at: typeof raw?.ended_at === 'number' ? raw.ended_at : undefined,
+          seb_not_detected: Boolean(raw?.seb_not_detected),
+          browser_session_count: Number(raw?.browser_session_count ?? 0),
+          browser_session_generation: Number(raw?.browser_session_generation ?? 0),
+          is_browser_session_terminated: Boolean(raw?.is_browser_session_terminated),
         },
       };
     } catch (error) {
@@ -606,6 +667,15 @@ export interface TabSwitchRequestOptions {
   timeoutMs?: number;
 }
 
+export interface BrowserSession {
+  is_seb: boolean;
+  generation: number;
+  session_count: number;
+  seb_not_detected: boolean;
+  is_terminated: boolean;
+  cookie_confirmed: boolean;
+}
+
 export interface RecordTabSwitchPayload {
   observation_id: string;
   generation: number;
@@ -619,6 +689,10 @@ export interface TabSwitchReportResponse {
 }
 
 export interface ContestSessionStatus {
+  seb_not_detected?: boolean;
+  browser_session_count?: number;
+  browser_session_generation?: number;
+  is_browser_session_terminated?: boolean;
   tab_switch_count: number;
   is_tab_switch_terminated: boolean;
   generation: number;

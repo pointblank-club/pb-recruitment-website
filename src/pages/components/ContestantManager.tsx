@@ -16,6 +16,10 @@ export interface Contestant {
   tabSwitchCount?: number;
   isTerminatedByTabSwitch?: boolean;
   resetGeneration?: number;
+  sebNotDetected?: boolean;
+  browserSessionCount?: number;
+  browserSessionGeneration?: number;
+  isBrowserSessionTerminated?: boolean;
 }
 
 interface ContestantManagerProps {
@@ -29,6 +33,7 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [updatingMap, setUpdatingMap] = useState<Record<string, boolean>>({});
+  const [resettingSessions, setResettingSessions] = useState<Record<string, boolean>>({});
   const [resettingMap, setResettingMap] = useState<Record<string, boolean>>({});
 
   const contestIdRef = React.useRef<string | null>(contestId);
@@ -81,6 +86,25 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
           return next;
         });
       }
+    }
+  };
+
+  const handleResetSessions = async (id: string) => {
+    const targetContestId = contestId;
+    const current = contestants.find(contestant => contestant.id === id);
+    if (!current || !window.confirm(`Reset browser sessions for ${current.name}? The next SEB session will be 1 of 3. Drafts, submissions, and browser flags are preserved.`)) return;
+    setResettingSessions(previous => ({ ...previous, [id]: true }));
+    try {
+      const response = await adminApi.resetBrowserSessions(targetContestId, id);
+      if (contestIdRef.current === targetContestId) {
+        setContestants(previous => previous.map(contestant => contestant.id === id
+          ? { ...contestant, browserSessionCount: 0, browserSessionGeneration: response.generation, isBrowserSessionTerminated: false } : contestant));
+        toast.success(`Browser sessions reset for ${current.name}.`);
+      }
+    } catch (error) {
+      if (contestIdRef.current === targetContestId) toast.error(error instanceof Error ? error.message : 'Unable to reset browser sessions.');
+    } finally {
+      if (contestIdRef.current === targetContestId) setResettingSessions(previous => ({ ...previous, [id]: false }));
     }
   };
 
@@ -204,6 +228,15 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                     <div>
+                      <span className="text-gray-500">Exam Browser:</span>
+                      <p className={contestant.sebNotDetected ? 'text-amber-300' : 'text-gray-300'}>
+                        {contestant.sebNotDetected ? 'Flagged: SEB not detected' : (contestant.browserSessionCount ?? 0) > 0 ? 'SEB detected' : 'Not observed'}
+                      </p>
+                      <p className={contestant.isBrowserSessionTerminated ? 'text-red-300' : 'text-gray-300'}>
+                        {contestant.browserSessionCount ?? 0} / 3 sessions{contestant.isBrowserSessionTerminated ? ' (Locked)' : ''}
+                      </p>
+                    </div>
+                    <div>
                       <span className="text-gray-500">Email:</span>
                       <p className="text-gray-300">{contestant.email}</p>
                     </div>
@@ -262,6 +295,13 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                       <option value="Banned">Banned</option>
                     </select>
                   </div>
+                  {((contestant.browserSessionCount ?? 0) > 0 || contestant.isBrowserSessionTerminated) && (
+                    <button type="button" disabled={Boolean(resettingSessions[contestant.id])} onClick={() => void handleResetSessions(contestant.id)}
+                      className="flex items-center justify-center gap-1.5 rounded bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50">
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      {resettingSessions[contestant.id] ? 'Resetting…' : 'Reset Sessions'}
+                    </button>
+                  )}
                   {((contestant.tabSwitchCount ?? 0) > 0 || contestant.isTerminatedByTabSwitch) && (
                     <button
                       type="button"

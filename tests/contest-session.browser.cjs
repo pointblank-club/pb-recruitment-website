@@ -61,6 +61,7 @@ async function mount({ ended = false, holdStatus = false } = {}) {
       endHandled.resolve();
       return;
     }
+    if (url.pathname.endsWith('/browser-session')) return fulfill({ json: { is_seb: false, generation: 0, session_count: 0, seb_not_detected: true, is_terminated: false, cookie_confirmed: false } });
     if (url.pathname.endsWith('/session-status')) {
       statusScopes.push(`${contestId}/${userId}`);
       if (holdStatus && endCalls && contestId === 'contest-A' && userId === 'user-1') {

@@ -68,6 +68,47 @@ Playwright available, run `node --test tests/server-clock.browser.cjs` for mount
 Chromium/Firefox checks. Set `PLAYWRIGHT_MODULE` to an existing installation if
 Playwright is not installed locally.
 
+## Safe Exam Browser and browser sessions
+
+The backend detects SEB from its `SEB/<version>` user-agent marker. No Browser
+Exam Keys, hash verification, or per-contest SEB configuration are used. Detection
+is best effort: user-agent strings can be spoofed and do not authenticate a SEB
+build or configuration.
+
+During live exam participation, ordinary browsers are flagged **SEB not detected**
+but remain allowed and consume no SEB sessions. Registration, leaderboard viewing,
+and post-contest review do not create sessions or browser flags.
+
+SEB participants get three server-issued Secure, HttpOnly cookie sessions per
+contest: the initial session and two restarts. In-site navigation (including the
+leaderboard), reconnections, concurrent tabs, and retried startup requests reuse
+the existing session. The fourth distinct SEB session locks participation;
+code/MCQ admission also enforces the lock inside its database transaction.
+Existing drafts and submitted answers remain intact.
+
+Admins can use **Reset Sessions** on the contestant list to clear the current
+count and session-limit lock. Browser flags and other moderation/tab-switch state
+are preserved. The backend records the admin, timestamp, previous count, and new
+reset generation. The next SEB session check becomes 1 of 3 without restarting
+SEB. Old-generation startup retries cannot consume the new allowance.
+
+Configure the `.seb` file to clear session cookies when starting an exam
+(`examSessionClearCookiesOnStart=true`). These are application sessions, not
+cryptographically distinct SEB process launches. SEB needs cookies and Web Locks
+to coordinate startup across tabs; ordinary-browser access does not require them.
+Cookie or connection failures offer a retry action without consuming additional
+sessions for the same startup.
+
+Deploy backend migration **47**, all new API instances, and this frontend together
+before an exam. CloudFront must forward API cookies, and credentialed CORS
+responses must allow the explicit frontend origin. The existing server-clock
+header exposure and no-cache requirements remain unchanged; no custom SEB headers
+are needed.
+
+Run `npm run test:seb` for session protocol checks. With Vite and Playwright,
+run `node --test tests/seb.browser.cjs` for Chromium/Firefox coverage of navigation,
+reconnection, concurrency, flagging, session locks, and admin resets.
+
 ## Coding question limits
 
 Only coding questions have editable time and memory limits, shown on their

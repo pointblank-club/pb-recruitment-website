@@ -20,6 +20,10 @@ export interface ContestRegistration {
   tab_switch_count?: number;
   is_tab_switch_terminated?: boolean;
   reset_generation?: number;
+  seb_not_detected?: boolean;
+  browser_session_count?: number;
+  browser_session_generation?: number;
+  is_browser_session_terminated?: boolean;
 }
 
 export interface PlagiarismReport {
@@ -417,6 +421,12 @@ class AdminApiService {
       ? `/admin/contests/${contestId}/submissions/${submissionId}`
       : `/admin/submissions/${submissionId}`;
     const response = await this.axiosInstance.get<AdminSubmissionDetails>(url);
+    return response.data;
+  }
+
+  async resetBrowserSessions(contestId: string, userId: string): Promise<{ generation: number }> {
+    const response = await this.axiosInstance.post<{ generation: number }>(`/admin/contests/${contestId}/contestants/${userId}/reset-browser-sessions`);
+    if (!Number.isInteger(response.data?.generation) || response.data.generation < 1) throw new Error('The backend did not confirm the session reset. Refresh before retrying.');
     return response.data;
   }
 
