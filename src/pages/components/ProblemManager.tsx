@@ -14,6 +14,7 @@ import {
 interface ProblemFormData {
   title: string;
   description: string;
+  includeDescription: boolean;
   points: number;
   type: AdminProblemType;
   options: string[];
@@ -33,6 +34,7 @@ const emptyTestCase = (): ProblemTestCase => ({ input: "", expected_output: "", 
 const initialFormData = (): ProblemFormData => ({
   title: "",
   description: "",
+  includeDescription: true,
   points: 100,
   type: "code",
   options: ["", "", "", ""],
@@ -43,6 +45,7 @@ const initialFormData = (): ProblemFormData => ({
 const formDataFromProblem = (problem: AdminProblem): ProblemFormData => ({
   title: problem.name,
   description: problem.description,
+  includeDescription: problem.type === "code" || Boolean(problem.description.trim()),
   points: problem.score,
   type: problem.type,
   options: problem.options.length > 0 ? problem.options : ["", "", "", ""],
@@ -155,6 +158,9 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
     setFormData((current) => ({
       ...current,
       type,
+      includeDescription: type === "code"
+        ? true
+        : current.includeDescription && Boolean(current.description.trim()),
       options: current.options.length > 0 ? current.options : ["", "", "", ""],
       testcases: current.testcases.length > 0 ? current.testcases : [emptyTestCase()],
     }));
@@ -180,8 +186,14 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
     event.preventDefault();
     setFormError("");
 
-    if (!getQuestionTextBody(formData.description).trim()) {
+    if (formData.type === "code" && !getQuestionTextBody(formData.description).trim()) {
       setFormError("Description is required.");
+      return;
+    }
+
+    if (formData.type === "mcq" && formData.includeDescription
+      && !getQuestionTextBody(formData.description).trim()) {
+      setFormError("Enter a description or uncheck Add description.");
       return;
     }
 
@@ -192,7 +204,9 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
 
     const basePayload = {
       name: formData.title.trim(),
-      description: formData.description,
+      description: formData.type === "mcq" && !formData.includeDescription
+        ? ""
+        : formData.description,
       score: formData.points,
     };
     const payload: UpsertProblemPayload = formData.type === "code"
@@ -350,21 +364,40 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="mb-2 block text-gray-400" htmlFor="problem-description">Description</label>
-                <textarea
-                  id="problem-description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  rows={8}
-                  className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 font-mono text-sm text-gray-300 focus:border-green-500 focus:outline-none"
-                  required
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Plain text by default. Start with <code>:::markdown</code> on its own line to render Markdown.
-                </p>
-              </div>
+              {formData.type === "mcq" && (
+                <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={formData.includeDescription}
+                    onChange={(event) => setFormData((current) => ({
+                      ...current,
+                      includeDescription: event.target.checked,
+                    }))}
+                    className="h-4 w-4 cursor-pointer rounded border-gray-600 bg-gray-900 text-green-500 focus:ring-green-500 focus:ring-offset-gray-900"
+                  />
+                  <span>Add description (optional)</span>
+                </label>
+              )}
+
+              {(formData.type === "code" || formData.includeDescription) && (
+                <div>
+                  <label className="mb-2 block text-gray-400" htmlFor="problem-description">
+                    {formData.type === "mcq" ? "Question Description" : "Description"}
+                  </label>
+                  <textarea
+                    id="problem-description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    rows={8}
+                    className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 font-mono text-sm text-gray-300 focus:border-green-500 focus:outline-none"
+                    required={formData.type === "code" || formData.includeDescription}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Plain text by default. Start with <code>:::markdown</code> on its own line to render Markdown.
+                  </p>
+                </div>
+              )}
 
               {formData.type === "mcq" && (
                 <>

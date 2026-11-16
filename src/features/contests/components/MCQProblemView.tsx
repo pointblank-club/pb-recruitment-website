@@ -149,7 +149,7 @@ export const MCQProblemView = ({
             <div className="h-px bg-gray-700" />
           </div>
 
-          {problem.description && (
+          {problem.description?.trim() && (
             <div className="space-y-2">
               <h2 className="text-lg font-semibold text-green-400 font-['DM_Sans'] flex items-center gap-2">
                 <ListChecks className="w-5 h-5" />
