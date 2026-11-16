@@ -27,12 +27,13 @@ const localStorage = {
 const module = { exports: {}, console, performance, AbortController, crypto: { randomUUID }, navigator, localStorage,
   require(name) {
     if (name === 'axios') return { default: { ...axios, create: config => axios.create({ ...config, adapter: async request => {
-      requests.push({ ...request, body: JSON.parse(request.data) });
+      requests.push({ ...request, body: request.data ? JSON.parse(request.data) : undefined });
       return { data: await outcome(requests.at(-1)), status: 200, statusText: 'OK', headers: {}, config: request };
     } }) } };
     if (name === './serverClock') return { installServerClock() {} };
     if (name.endsWith('/firebase')) return { auth };
     if (name.endsWith('/seb')) return detection.exports;
+    if (name.endsWith('/problemAdapter')) return { toProblemDetails: response => response, toProblemOverview: response => response };
     return {};
   },
 };
@@ -75,4 +76,32 @@ for (const invalid of [null, {}, { is_seb: true, session_count: 0, generation, i
   outcome = () => invalid;
   await assert.rejects(api.startBrowserSession('exam', 'first-user'), /backend did not confirm/);
 }
-console.log('SEB session checks passed: user-agent detection, scoped authentication, startup deduplication, reset reconciliation, ordinary-browser allowance, and malformed responses.');
+const required = request => new axios.AxiosError('Session required', undefined, request, undefined,
+  { status: 428, data: { code: 'BROWSER_SESSION_REQUIRED' } });
+const question = { id: 'question' };
+const session = { is_seb: false, session_count: 0, generation, is_terminated: false, cookie_confirmed: false, seb_not_detected: true };
+let reads = 0, checks = 0;
+outcome = request => {
+  if (request.method === 'post') { checks++; return session; }
+  if (++reads === 1) throw required(request);
+  return question;
+};
+assert.deepEqual(await api.getProblemById('exam', 'question'), question);
+assert.equal(reads, 2, 'a reset retries the protected read after verifying the session');
+assert.equal(checks, 1);
+reads = checks = 0;
+outcome = request => {
+  if (request.method === 'post') { checks++; return session; }
+  reads++; throw required(request);
+};
+await assert.rejects(api.getContestProblems('exam'), error => error.response?.status === 428);
+assert.equal(reads, 2, 'session recovery retries each protected read at most once');
+assert.equal(checks, 1);
+const beforeAccountChange = requests.length;
+outcome = request => {
+  auth.currentUser = { uid: 'second-user', getIdToken: async () => 'other-token' };
+  throw required(request);
+};
+await assert.rejects(api.getProblemById('exam', 'question'), axios.isCancel);
+assert.equal(requests.length, beforeAccountChange + 1, 'a failed read cannot restart or replay as a different account');
+console.log('SEB session checks passed: detection, scoped authentication, startup deduplication, reset reconciliation, ordinary-browser allowance, malformed responses, and bounded protected-read recovery.');

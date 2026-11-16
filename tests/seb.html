@@ -5,12 +5,13 @@
 <script type="module">
   import React from 'react';
   import { createRoot } from 'react-dom/client';
-  import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
+  import { MemoryRouter, Routes, Route } from 'react-router-dom';
   import { ContestLayout } from '/src/features/contests/layouts/ContestLayout.tsx';
   import { ContestProblemPage } from '/src/features/contests/pages/ContestProblemPage.tsx';
+  import { ContestProblemsPage } from '/src/features/contests/pages/ContestProblemsPage.tsx';
   import AdminContestContestants from '/src/pages/AdminContestContestants.tsx';
   import { startServerClockRefresh } from '/src/services/api/serverClock.ts';
   import '/src/App.css';
-  window.sebFixture = { React, createRoot, MemoryRouter, Routes, Route, useNavigate, ContestLayout, ContestProblemPage,
+  window.sebFixture = { React, createRoot, MemoryRouter, Routes, Route, ContestLayout, ContestProblemPage, ContestProblemsPage,
     AdminContestContestants, startServerClockRefresh };
 </script>

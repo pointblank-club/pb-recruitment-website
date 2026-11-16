@@ -13,7 +13,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
   async function fixture({ seb = true, drop = false, cookies = true } = {}) {
     const context = await browser.newContext({ userAgent: seb ? 'Mozilla/5.0 SEB/3.9.0' : 'Mozilla/5.0 Chrome/139.0' });
     const sessions = new Map(), errors = [];
-    let flagged = false, locked = false, dropNext = drop, generation = 0, submissions = 0, resets = 0, admissionDelay = 0;
+    let flagged = false, locked = false, dropNext = drop, generation = 0, submissions = 0, resets = 0, admissionGate;
     const count = () => [...sessions.values()].filter(session => session.generation === generation).length;
     await context.addInitScript(() => {
       document.hasFocus = () => true;
@@ -55,7 +55,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       if (url.pathname === '/contests/test/browser-session') {
         const body = request.postDataJSON();
         if (body.generation !== generation) return route.fulfill({ status: 409, headers, json: { code: 'BROWSER_SESSION_STALE', generation } });
-        if (admissionDelay) await new Promise(resolve => setTimeout(resolve, admissionDelay));
+        if (admissionGate) await admissionGate;
         const detected = /(?:^|[\s;(])SEB\/\d+(?:\.\d+)*(?:$|[\s;)])/i.test(requestHeaders['user-agent'] || '');
         flagged ||= !detected;
         const token = /(?:^|;\s*)__Host-browser-fixture=([^;]+)/.exec(requestHeaders.cookie || '')?.[1];
@@ -99,23 +99,29 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       await page.waitForFunction(() => window.sebFixture);
       await page.evaluate(view => {
         const f = window.sebFixture, h = f.React.createElement;
-        function Navigation() { window.sebNavigate = f.useNavigate(); return null; }
         function Lifecycle({ children }) { f.React.useEffect(() => f.startServerClockRefresh(), []); return children; }
         const child = view === 'admin'
           ? h(f.Routes, null, h(f.Route, { path: '/admin/contest/:contestId/contestants', element: h(f.AdminContestContestants) }))
           : h(f.Routes, null, h(f.Route, { path: '/contests/:contestId', element: h(f.ContestLayout) },
+            h(f.Route, { path: 'problems', element: h(f.ContestProblemsPage) }),
             h(f.Route, { path: 'problems/:problemId', element: h(f.ContestProblemPage) }),
             h(f.Route, { path: 'leaderboard', element: h('p', null, 'Leaderboard view') })),
             h(f.Route, { path: '/contest/:contestId', element: h('p', null, 'Contest details') }));
         f.createRoot(document.getElementById('root')).render(h(f.React.StrictMode, null, h(Lifecycle, null,
-          h(f.MemoryRouter, { initialEntries: [view === 'admin' ? '/admin/contest/test/contestants' : '/contests/test/problems/mcq'] }, h(Navigation), child))));
+          h(f.MemoryRouter, { initialEntries: [view === 'admin' ? '/admin/contest/test/contestants' : '/contests/test/problems/mcq'] }, child))));
       }, view);
     }
     async function enter(page) {
       await page.getByRole('button', { name: /Enter fullscreen|Continue demo without fullscreen/ }).click();
       await page.locator('#option-0').waitFor();
     }
-    return { context, open, enter, mount, dropNext() { dropNext = true; }, setAdmissionDelay(value) { admissionDelay = value; }, get count() { return count(); }, get resets() { return resets; }, get flagged() { return flagged; }, get submissions() { return submissions; },
+    return { context, open, enter, mount, dropNext() { dropNext = true; },
+      holdAdmissions() {
+        let resume;
+        admissionGate = new Promise(resolve => { resume = resolve; });
+        return () => { admissionGate = undefined; resume(); };
+      },
+      get count() { return count(); }, get resets() { return resets; }, get flagged() { return flagged; }, get submissions() { return submissions; },
       async close() { await context.close(); assert.deepEqual(errors, []); } };
   }
 
@@ -132,12 +138,23 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       await first.getByRole('link', { name: 'Leaderboard', exact: true }).click();
       await first.getByText('Leaderboard view', { exact: true }).waitFor();
       assert.equal(f.count, 1);
-      await first.evaluate(() => window.sebNavigate('/contests/test/problems/mcq'));
-      await first.locator('#option-0').waitFor();
+      const resume = f.holdAdmissions();
+      try {
+        const checking = first.waitForRequest(request => request.url() === `${api}/contests/test/browser-session`);
+        await first.getByRole('link', { name: 'Problems', exact: true }).click();
+        await checking;
+        assert.equal(await first.locator('#browser-session-status').count(), 0, 'navigation rechecks the session without a popup');
+        await first.getByRole('link', { name: /SEB question/ }).click();
+        await first.locator('#option-0').check();
+        await first.locator('#option-0').focus();
+        assert.equal(await first.locator('#option-0').evaluate(node => Boolean(node.closest('[inert]'))), false, 'answers remain usable while verification is pending');
+      } finally { resume(); }
       await first.evaluate(async () => {
         const { contestApi } = await import('/src/services/api/contestApi.ts');
         for (let i = 0; i < 3; i++) await contestApi.startBrowserSession('test', 'participant');
       });
+      assert.equal(await first.locator('#option-0').isChecked(), true);
+      assert.equal(await first.locator('#option-0').evaluate(node => node === document.activeElement), true, 'background verification does not steal focus');
       assert.equal(f.count, 1);
     } finally { await f.close(); }
   });
@@ -252,7 +269,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
     } finally { await f.close(); }
   });
 
-  test(`${name}: returning from leaderboard after an admin reset validates the session before loading questions`, { timeout: 15000 }, async () => {
+  test(`${name}: returning from leaderboard recovers an admin reset in the background`, { timeout: 15000 }, async () => {
     const f = await fixture();
     try {
       const page = await f.open(); await f.enter(page);
@@ -264,8 +281,17 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       await admin.getByText('Not observed', { exact: true }).waitFor();
       await admin.getByText('0 / 3 sessions', { exact: true }).waitFor({ state: 'hidden' });
       assert.equal(f.count, 0, 'leaderboard viewing does not consume the reset allowance');
-      f.setAdmissionDelay(150);
-      await page.evaluate(() => window.sebNavigate('/contests/test/problems/mcq'));
+      const resume = f.holdAdmissions();
+      try {
+        const checking = page.waitForRequest(request => request.url() === `${api}/contests/test/browser-session`);
+        const missingCookie = page.waitForResponse(response => response.status() === 428 && response.url().includes('/problems')).catch(() => undefined);
+        await page.getByRole('link', { name: 'Problems', exact: true }).click();
+        await checking;
+        assert.equal(await page.locator('#browser-session-status').count(), 0, 'reset reconciliation does not show a verification popup');
+        assert.equal(await page.locator('.contest-screen [inert]').count(), 0, 'navigation remains available while the reset is reconciled');
+        assert.ok(await missingCookie, 'protected reads detect the old-generation cookie');
+      } finally { resume(); }
+      await page.getByRole('link', { name: /SEB question/ }).click();
       await page.locator('#option-0').waitFor();
       assert.equal(f.count, 1);
       assert.equal(await page.locator('dialog[open]').count(), 0, 'navigation does not require another entry confirmation');

@@ -25,6 +25,8 @@ const LEADERBOARD_PAGE_SIZE = 20;
 interface IdentityScopedRequestConfig {
   _expectedUserId?: string;
   _deadline?: number;
+  _authenticatedUserId?: string;
+  _browserSessionRetried?: boolean;
 }
 
 const submissionTimeoutError = () => new axios.AxiosError('Submission request timed out.', 'ECONNABORTED');
@@ -119,6 +121,7 @@ class ContestApiService {
         if (deadline !== undefined && performance.now() >= deadline) throw submissionTimeoutError();
 
         const user = auth.currentUser;
+        (config as IdentityScopedRequestConfig)._authenticatedUserId = user?.uid;
         if (expectedUserId && user?.uid !== expectedUserId) {
           return Promise.reject(new axios.CanceledError('Authenticated account changed before request dispatch.'));
         }
@@ -152,7 +155,17 @@ class ContestApiService {
 
     this.axiosInstance.interceptors.response.use(
       (response) => response,
-      (error: AxiosError<{ error?: string }>) => {
+      async (error: AxiosError<{ error?: string; code?: string }>) => {
+        const config = error.config as (NonNullable<typeof error.config> & IdentityScopedRequestConfig) | undefined;
+        const contestId = config?.method === 'get' && /^\/contests\/([^/]+)\/problems(?:\/|$)/.exec(config.url || '')?.[1];
+        // An admin reset can invalidate the cookie while navigation rechecks it in the background.
+        if (contestId && config && !config._browserSessionRetried && !config.signal?.aborted && config._authenticatedUserId &&
+          error.response?.status === 428 && error.response.data?.code === 'BROWSER_SESSION_REQUIRED') {
+          await this.startBrowserSession(contestId, config._authenticatedUserId);
+          config._browserSessionRetried = true;
+          config._expectedUserId = config._authenticatedUserId;
+          return this.axiosInstance.request(config);
+        }
         // Surface the server's message (e.g. "user not registered") instead of axios' generic text.
         const serverMessage = error.response?.data?.error;
         if (typeof serverMessage === 'string' && serverMessage) error.message = serverMessage;

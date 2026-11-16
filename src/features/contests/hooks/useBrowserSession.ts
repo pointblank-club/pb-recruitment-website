@@ -3,12 +3,12 @@ import axios from 'axios';
 import { contestApi, type BrowserSession } from '@/services/api/contestApi';
 
 export const useBrowserSession = (contestId: string | undefined, userId: string | undefined, enabled: boolean) => {
-  const scope = enabled && contestId && userId ? `${contestId}:${userId}` : '';
+  const scope = contestId && userId ? `${contestId}:${userId}` : '';
   const activation = useMemo(() => ({ scope }), [scope]);
   const [state, setState] = useState<{ activation?: typeof activation; session?: BrowserSession; error?: string }>({});
   const [retry, setRetry] = useState(0);
   useEffect(() => {
-    if (!activation.scope || !contestId || !userId) return;
+    if (!enabled || !activation.scope || !contestId || !userId) return;
     let cancelled = false;
     let pending = false;
     const refresh = async () => {
@@ -35,12 +35,12 @@ export const useBrowserSession = (contestId: string | undefined, userId: string 
       window.removeEventListener('online', refresh);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [activation, contestId, userId, retry]);
+  }, [activation, contestId, userId, enabled, retry]);
   const current = state.activation === activation ? state : undefined;
   return {
-    ready: !scope || Boolean(current?.session && !current.error),
-    locked: Boolean(scope && current?.session?.is_terminated),
-    error: scope ? current?.error : undefined,
+    ready: !enabled || !scope || Boolean(current?.session && !current.error),
+    locked: Boolean(enabled && scope && current?.session?.is_terminated),
+    error: enabled && scope ? current?.error : undefined,
     retry: () => { setState({ activation }); setRetry(value => value + 1); },
   };
 };
