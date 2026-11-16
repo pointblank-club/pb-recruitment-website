@@ -226,16 +226,7 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                       {contestant.status}
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-500">Exam Browser:</span>
-                      <p className={contestant.sebNotDetected ? 'text-amber-300' : 'text-gray-300'}>
-                        {contestant.sebNotDetected ? 'Flagged: SEB not detected' : (contestant.browserSessionCount ?? 0) > 0 ? 'SEB detected' : 'Not observed'}
-                      </p>
-                      <p className={contestant.isBrowserSessionTerminated ? 'text-red-300' : 'text-gray-300'}>
-                        {contestant.browserSessionCount ?? 0} / 3 sessions{contestant.isBrowserSessionTerminated ? ' (Locked)' : ''}
-                      </p>
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
                       <span className="text-gray-500">Email:</span>
                       <p className="text-gray-300">{contestant.email}</p>
@@ -274,6 +265,17 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                         </span>
                       </div>
                     </div>
+                    <div>
+                      <span className="text-gray-500">Exam Browser:</span>
+                      <p className={contestant.sebNotDetected ? 'text-amber-300' : 'text-gray-300'}>
+                        {contestant.sebNotDetected ? 'Flagged: SEB not detected' : (contestant.browserSessionCount ?? 0) > 0 ? 'SEB detected' : 'Not observed'}
+                      </p>
+                      {((contestant.browserSessionCount ?? 0) > 0 || contestant.isBrowserSessionTerminated) && (
+                        <p className={contestant.isBrowserSessionTerminated ? 'text-red-300' : 'text-gray-300'}>
+                          {contestant.browserSessionCount ?? 0} / 3 sessions{contestant.isBrowserSessionTerminated ? ' (Locked)' : ''}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex flex-col gap-2 md:ml-4 min-w-[140px]">
@@ -295,13 +297,6 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                       <option value="Banned">Banned</option>
                     </select>
                   </div>
-                  {((contestant.browserSessionCount ?? 0) > 0 || contestant.isBrowserSessionTerminated) && (
-                    <button type="button" disabled={Boolean(resettingSessions[contestant.id])} onClick={() => void handleResetSessions(contestant.id)}
-                      className="flex items-center justify-center gap-1.5 rounded bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50">
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      {resettingSessions[contestant.id] ? 'Resetting…' : 'Reset Sessions'}
-                    </button>
-                  )}
                   {((contestant.tabSwitchCount ?? 0) > 0 || contestant.isTerminatedByTabSwitch) && (
                     <button
                       type="button"
@@ -314,6 +309,20 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       {resettingMap[contestant.id] ? "Resetting..." : "Reset Tab Switches"}
+                    </button>
+                  )}
+                  {((contestant.browserSessionCount ?? 0) > 0 || contestant.isBrowserSessionTerminated) && (
+                    <button
+                      type="button"
+                      disabled={Boolean(resettingSessions[contestant.id])}
+                      onClick={() => void handleResetSessions(contestant.id)}
+                      className={`w-full flex items-center justify-center gap-1.5 bg-amber-700 hover:bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-semibold transition-colors shadow ${
+                        resettingSessions[contestant.id] ? "opacity-50 cursor-wait" : ""
+                      }`}
+                      title="Reset browser sessions and allow candidate to resume without losing drafts or submissions"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      {resettingSessions[contestant.id] ? "Resetting..." : "Reset Browser Sessions"}
                     </button>
                   )}
                   <button

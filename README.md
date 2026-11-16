@@ -86,7 +86,7 @@ the existing session. The fourth distinct SEB session locks participation;
 code/MCQ admission also enforces the lock inside its database transaction.
 Existing drafts and submitted answers remain intact.
 
-Admins can use **Reset Sessions** on the contestant list to clear the current
+Admins can use **Reset Browser Sessions** on the contestant list to clear the current
 count and session-limit lock. Browser flags and other moderation/tab-switch state
 are preserved. The backend records the admin, timestamp, previous count, and new
 reset generation. The next SEB session check becomes 1 of 3 without restarting

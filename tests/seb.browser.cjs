@@ -151,7 +151,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       assert.equal(f.flagged, true);
       const admin = await f.open('admin');
       await admin.getByText('Flagged: SEB not detected', { exact: true }).waitFor();
-      await admin.getByText('0 / 3 sessions', { exact: true }).waitFor();
+      await admin.getByText('0 / 3 sessions', { exact: true }).waitFor({ state: 'hidden' });
       assert.equal(await admin.getByText('Active', { exact: true }).count() > 0, true);
     } finally { await f.close(); }
   });
@@ -240,8 +240,9 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       await page.getByRole('alert').filter({ hasText: 'Maximum three exam browser sessions reached' }).waitFor();
       const admin = await f.open('admin');
       admin.on('dialog', dialog => dialog.accept());
-      await admin.getByRole('button', { name: 'Reset Sessions', exact: true }).click();
-      await admin.getByText('0 / 3 sessions', { exact: true }).waitFor();
+      await admin.getByRole('button', { name: 'Reset Browser Sessions', exact: true }).click();
+      await admin.getByText('Not observed', { exact: true }).waitFor();
+      await admin.getByText('0 / 3 sessions', { exact: true }).waitFor({ state: 'hidden' });
       assert.equal(f.resets, 1);
       await page.evaluate(() => window.dispatchEvent(new Event('online')));
       await page.waitForFunction(() => !document.querySelector('.contest-screen [inert]'));
@@ -259,8 +260,9 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       await page.getByText('Leaderboard view', { exact: true }).waitFor();
       const admin = await f.open('admin');
       admin.on('dialog', dialog => dialog.accept());
-      await admin.getByRole('button', { name: 'Reset Sessions', exact: true }).click();
-      await admin.getByText('0 / 3 sessions', { exact: true }).waitFor();
+      await admin.getByRole('button', { name: 'Reset Browser Sessions', exact: true }).click();
+      await admin.getByText('Not observed', { exact: true }).waitFor();
+      await admin.getByText('0 / 3 sessions', { exact: true }).waitFor({ state: 'hidden' });
       assert.equal(f.count, 0, 'leaderboard viewing does not consume the reset allowance');
       f.setAdmissionDelay(150);
       await page.evaluate(() => window.sebNavigate('/contests/test/problems/mcq'));
