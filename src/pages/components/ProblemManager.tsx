@@ -19,6 +19,8 @@ interface ProblemFormData {
   options: string[];
   correctAnswer: number;
   testcases: ProblemTestCase[];
+  timeLimit: number;
+  memoryLimit: number;
 }
 
 interface ProblemManagerProps {
@@ -38,6 +40,8 @@ const initialFormData = (): ProblemFormData => ({
   options: ["", "", "", ""],
   correctAnswer: 0,
   testcases: [emptyTestCase()],
+  timeLimit: 1000,
+  memoryLimit: 256,
 });
 
 const formDataFromProblem = (problem: AdminProblem): ProblemFormData => ({
@@ -48,6 +52,8 @@ const formDataFromProblem = (problem: AdminProblem): ProblemFormData => ({
   options: problem.options.length > 0 ? problem.options : ["", "", "", ""],
   correctAnswer: problem.answer[0] ?? 0,
   testcases: problem.testcases.length > 0 ? problem.testcases : [emptyTestCase()],
+  timeLimit: problem.time_limit ?? 1000,
+  memoryLimit: problem.memory_limit ?? 256,
 });
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
@@ -109,7 +115,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
     const { name, value } = event.target;
     setFormData((current) => ({
       ...current,
-      [name]: name === "points"
+      [name]: ["points", "timeLimit", "memoryLimit"].includes(name)
         ? (value === "" ? 0 : Number(value))
         : value,
     }));
@@ -200,6 +206,8 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
           ...basePayload,
           type: "code",
           testcases: formData.testcases,
+          time_limit: formData.timeLimit,
+          memory_limit: formData.memoryLimit,
         }
       : {
           ...basePayload,
@@ -223,6 +231,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
         name: payload.name,
         score: payload.score,
         type: payload.type,
+        ...(payload.type === 'code' ? { time_limit: payload.time_limit, memory_limit: payload.memory_limit } : {}),
       });
       toast.success(editingProblemId ? "Problem updated." : "Problem created.");
       resetForm();
@@ -489,6 +498,23 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                   required
                 />
               </div>
+
+              {formData.type === "code" && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="problem-time-limit" className="mb-2 block text-gray-400">Time Limit (ms)</label>
+                    <input id="problem-time-limit" type="number" name="timeLimit"
+                      value={formData.timeLimit} onChange={handleInputChange} min="1" max="10000" step="1" required
+                      className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label htmlFor="problem-memory-limit" className="mb-2 block text-gray-400">Memory Limit (MiB)</label>
+                    <input id="problem-memory-limit" type="number" name="memoryLimit"
+                      value={formData.memoryLimit} onChange={handleInputChange} min="2" max="500" step="1" required
+                      className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 text-gray-300 focus:border-green-500 focus:outline-none" />
+                  </div>
+                </div>
+              )}
 
               {formError && (
                 <p role="alert" className="rounded border border-red-800 bg-red-950/50 p-3 text-red-300">

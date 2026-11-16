@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Coding resource limits regression fixture</title>
+<div id="root"></div>
+<script type="module">
+  import React from 'react';
+  import { createRoot } from 'react-dom/client';
+  import { MemoryRouter } from 'react-router-dom';
+  import ProblemManager from '/src/pages/components/ProblemManager.tsx';
+  import { ProblemStatementTab } from '/src/features/contests/components/workspace/ProblemStatementTab.tsx';
+  import { MCQProblemView } from '/src/features/contests/components/MCQProblemView.tsx';
+  import '/src/index.css';
+  window.problemLimitsFixture = { React, createRoot, MemoryRouter, ProblemManager, ProblemStatementTab, MCQProblemView };
+</script>

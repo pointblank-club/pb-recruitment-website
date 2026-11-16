@@ -65,6 +65,13 @@ Playwright available, run `node --test tests/server-clock.browser.cjs` for mount
 Chromium/Firefox checks. Set `PLAYWRIGHT_MODULE` to an existing installation if
 Playwright is not installed locally.
 
+## Coding question limits
+
+Only coding questions have editable time and memory limits, shown on their
+problem statements. Time uses milliseconds (1–10000); memory uses MiB (2–500).
+New questions default to 1000 ms / 256 MiB. MCQ forms and payloads omit both fields.
+Deploy the backend with migration 46 before using these controls.
+
 ## Leaderboard pagination
 
 Leaderboard rows and Previous/Next navigation use the response body, independent
