@@ -186,14 +186,11 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
     event.preventDefault();
     setFormError("");
 
-    if (formData.type === "code" && !getQuestionTextBody(formData.description).trim()) {
-      setFormError("Description is required.");
-      return;
-    }
-
-    if (formData.type === "mcq" && formData.includeDescription
+    if ((formData.type === "code" || formData.includeDescription)
       && !getQuestionTextBody(formData.description).trim()) {
-      setFormError("Enter a description or uncheck Add description.");
+      setFormError(formData.type === "code"
+        ? "Description is required."
+        : "Enter a description or uncheck Add description.");
       return;
     }
 
@@ -391,7 +388,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
                     onChange={handleInputChange}
                     rows={8}
                     className="w-full rounded border border-gray-700 bg-gray-800 px-4 py-2 font-mono text-sm text-gray-300 focus:border-green-500 focus:outline-none"
-                    required={formData.type === "code" || formData.includeDescription}
+                    required
                   />
                   <p className="mt-1 text-xs text-gray-500">
                     Plain text by default. Start with <code>:::markdown</code> on its own line to render Markdown.
