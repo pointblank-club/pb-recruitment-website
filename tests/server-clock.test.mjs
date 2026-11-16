@@ -10,7 +10,11 @@ const compile = path => ts.transpileModule(readFileSync(new URL(`../${path}`, im
 }).outputText;
 let elapsed = 1000;
 const performance = { now: () => elapsed };
-const { clock } = loadServerClock(axios, { performance, Date: { now() { throw new Error('Machine time must not establish UTC'); } } });
+const syncLogs = [];
+const { clock } = loadServerClock(axios, { performance,
+  console: { ...console, info: message => syncLogs.push(message) },
+  Date: { now() { throw new Error('Machine time must not establish UTC'); } },
+});
 assert.ok(Number.isNaN(clock.getServerTime()));
 let ready = 0;
 const unsubscribe = clock.subscribeServerClock(() => ready++);
@@ -18,6 +22,7 @@ assert.equal(clock.syncServerClock('1700000000000', 1000, 1080), true);
 elapsed = 2080;
 assert.equal(clock.getServerTime(), 1700000001000);
 assert.equal(ready, 1);
+assert.deepEqual(syncLogs, ['[ClockSync] Server time synchronized.']);
 const lastGood = clock.getLastClockSync();
 for (const bad of [undefined, '', ' ', 'NaN', 'Infinity', '-1', '1700000000', '1700000000000junk', '1e12', '1700000000000.5', '8640000000000001']) {
   assert.equal(clock.syncServerClock(bad, 2000, 2100), false);
@@ -35,6 +40,7 @@ assert.equal(clock.syncServerClock('1700000011000', 4000, elapsed), false, 'slow
 assert.equal(clock.getServerTime(), 1700000013920, 'the existing anchor continues to advance');
 assert.equal(clock.getLastClockSync(), 3080);
 assert.equal(ready, 2, 'rejected slow samples do not notify or change clock readiness');
+assert.deepEqual(syncLogs, Array(2).fill('[ClockSync] Server time synchronized.'), 'only accepted initial/correction samples log success');
 unsubscribe();
 const initialSlow = loadServerClock(axios, { performance }).clock;
 assert.equal(initialSlow.syncServerClock('1700000000000', 0, 10000), true);
