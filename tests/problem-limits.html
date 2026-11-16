@@ -5,10 +5,10 @@
 <script type="module">
   import React from 'react';
   import { createRoot } from 'react-dom/client';
-  import { MemoryRouter } from 'react-router-dom';
+  import { MemoryRouter, Routes, Route, Outlet } from 'react-router-dom';
   import ProblemManager from '/src/pages/components/ProblemManager.tsx';
-  import { ProblemStatementTab } from '/src/features/contests/components/workspace/ProblemStatementTab.tsx';
-  import { MCQProblemView } from '/src/features/contests/components/MCQProblemView.tsx';
+  import { ContestProblemPage } from '/src/features/contests/pages/ContestProblemPage.tsx';
+  import { adminApi } from '/src/services/api/adminApi.ts';
   import '/src/index.css';
-  window.problemLimitsFixture = { React, createRoot, MemoryRouter, ProblemManager, ProblemStatementTab, MCQProblemView };
+  window.problemLimitsFixture = { React, createRoot, MemoryRouter, Routes, Route, Outlet, ProblemManager, ContestProblemPage, adminApi };
 </script>

@@ -72,7 +72,12 @@ Playwright is not installed locally.
 Only coding questions have editable time and memory limits, shown on their
 problem statements. Time uses milliseconds (1–10000); memory uses MiB (2–500).
 New questions default to 1000 ms / 256 MiB. MCQ forms and payloads omit both fields.
-Deploy the backend with migration 46 before using these controls.
+Deploy the backend with migration 46 and replace all old API instances before
+using these controls. Coding saves require matching persisted limits in the write
+response; missing, null, or mismatched limits keep the form open with an error.
+Restoring configurable limits reverses the fixed-budget policy and requires a
+capacity decision before rollout. Migration 42 deleted historical custom values;
+migration 46 supplies defaults, so recovering those values requires a pre-42 backup.
 
 ## Leaderboard pagination
 

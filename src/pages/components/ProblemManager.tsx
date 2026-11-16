@@ -226,13 +226,7 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
         throw new Error("The backend did not return a problem ID.");
       }
 
-      onProblemSaved({
-        id: savedProblem.id,
-        name: payload.name,
-        score: payload.score,
-        type: payload.type,
-        ...(payload.type === 'code' ? { time_limit: payload.time_limit, memory_limit: payload.memory_limit } : {}),
-      });
+      onProblemSaved(savedProblem);
       toast.success(editingProblemId ? "Problem updated." : "Problem created.");
       resetForm();
     } catch (error) {

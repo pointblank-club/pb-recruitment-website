@@ -152,16 +152,24 @@ export type UpsertProblemPayload =
 const normalizeProblemSummary = (
   problem: AdminProblemResponse,
   problemId: string,
-): AdminProblemSummary => ({
-  id: problem.id ?? problem.problem_id ?? problemId,
-  name: problem.name,
-  score: problem.score,
-  type: problem.type,
-  ...(problem.type === 'code' ? {
-    time_limit: problem.time_limit ?? 1000,
-    memory_limit: problem.memory_limit ?? 256,
-  } : {}),
-});
+  submittedProblem?: UpsertProblemPayload,
+): AdminProblemSummary => {
+  if (submittedProblem?.type === 'code' && (problem.type !== 'code'
+    || problem.time_limit !== submittedProblem.time_limit
+    || problem.memory_limit !== submittedProblem.memory_limit)) {
+    throw new Error('The backend did not confirm the requested time and memory limits. The problem may already have been saved. Refresh before retrying.');
+  }
+  return {
+    id: problem.id ?? problem.problem_id ?? problemId,
+    name: problem.name,
+    score: problem.score,
+    type: problem.type,
+    ...(problem.type === 'code' ? {
+      time_limit: problem.time_limit,
+      memory_limit: problem.memory_limit,
+    } : {}),
+  };
+};
 
 export interface ResetTabSwitchesResponse {
   success: boolean;
@@ -289,7 +297,7 @@ class AdminApiService {
       `/admin/${contestId}/problem`,
       problem,
     );
-    return normalizeProblemSummary(response.data, response.data.id ?? '');
+    return normalizeProblemSummary(response.data, response.data.id ?? '', problem);
   }
 
   async updateProblem(
@@ -301,7 +309,7 @@ class AdminApiService {
       `/admin/${contestId}/problem/${problemId}`,
       problem,
     );
-    return normalizeProblemSummary(response.data, problemId);
+    return normalizeProblemSummary(response.data, problemId, problem);
   }
 
   async deleteProblem(contestId: string, problemId: string): Promise<void> {
