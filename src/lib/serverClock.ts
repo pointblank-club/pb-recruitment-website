@@ -41,7 +41,6 @@ export const syncServerClock = (timestamp: unknown, startedAt: number, finishedA
   latestRequestStartedAt = startedAt;
   status = 'synced';
   emit();
-  console.info('[ClockSync] Server time synchronized.');
   return true;
 };
 

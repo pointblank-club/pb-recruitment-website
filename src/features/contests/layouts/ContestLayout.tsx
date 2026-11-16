@@ -1,5 +1,7 @@
-import { useServerTime } from '@/hooks/useServerTime';
+import { useServerTime, useServerClockStatus } from '@/hooks/useServerTime';
 import { getServerTime } from '@/lib/serverClock';
+import { retryServerClock } from '@/services/api/serverClock';
+import { Button } from '@/components/ui/button';
 import { Navigate, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
@@ -59,7 +61,15 @@ export const ContestLayout = () => {
   const isLeaderboardPage = location.pathname.endsWith('/leaderboard');
 
   const now = useServerTime();
+  const clockStatus = useServerClockStatus();
   const clockReady = Number.isFinite(now);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const workspaceFocusRef = useRef<HTMLElement | null>(null);
+  const clockNoticeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!clockReady) clockNoticeRef.current?.focus();
+    else (workspaceFocusRef.current?.isConnected ? workspaceFocusRef.current : workspaceRef.current)?.focus();
+  }, [clockReady, clockStatus]);
   const workspaceScope = `${contestId}:${user?.uid ?? ''}`;
   const admittedScopeRef = useRef<string | null>(null);
   useEffect(() => {
@@ -419,8 +429,9 @@ export const ContestLayout = () => {
   const canEnd = clockReady && !!contest?.is_registered && !isLeaderboardPage && timeRemaining > 0 && !isTabSwitchTerminated && !isSubmittedManually;
 
   return (
-    <div className="contest-screen relative w-full bg-black h-screen flex flex-col overflow-hidden">
-      <div className="contents" inert={!clockReady} aria-busy={!clockReady}>
+    <div ref={workspaceRef} tabIndex={-1} className="contest-screen relative w-full bg-black h-screen flex flex-col overflow-hidden">
+      <div className="contents" inert={!clockReady} aria-busy={!clockReady}
+        onFocusCapture={event => { workspaceFocusRef.current = event.target; }}>
       <ContestHeader 
         timeRemaining={timeRemaining}
         progress={progress}
@@ -536,7 +547,20 @@ export const ContestLayout = () => {
       />
       </div>
       {!clockReady && (
-        <div aria-hidden="true" className="absolute inset-0 z-[10000]" />
+        <div className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/80 px-6">
+          <div ref={clockNoticeRef} tabIndex={-1} aria-labelledby="clock-recovery-status"
+            className="max-w-md rounded-lg border border-gray-700 bg-gray-900 p-6 text-white">
+            <p id="clock-recovery-status" role="status">
+              {clockStatus === 'error'
+                ? 'Server time could not be verified. Check your connection and retry.'
+                : 'Verifying server time…'}
+            </p>
+            <p className="mt-2 text-sm text-gray-300">Your work is preserved. The workspace will unlock when server time is verified.</p>
+            <Button className="mt-4" variant="secondary" onClick={retryServerClock} disabled={clockStatus !== 'error'}>
+              Retry time sync
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

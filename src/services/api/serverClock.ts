@@ -7,6 +7,9 @@ interface TimedRequest extends InternalAxiosRequestConfig {
   _clockGeneration?: number;
 }
 
+let retryRefresh: (() => void) | undefined;
+export const retryServerClock = (): void => retryRefresh?.();
+
 export const installServerClock = (client: AxiosInstance): void => {
   // Axios runs request interceptors in reverse order; install before authentication.
   client.interceptors.request.use(config => {
@@ -80,8 +83,11 @@ export const startServerClockRefresh = (): (() => void) => {
         if (disposed || attempt.signal.aborted) return;
         if (getServerClockStatus() === 'synced' && getLastClockSync() >= startedAt) return;
       }
-      console.error('[ClockSync] Unable to synchronize server time; retrying in the background.',
-        syncError ?? new Error('No usable X-Server-Time-Ms sample was received from the API.'));
+      console.error('[ClockSync] Unable to synchronize server time; retrying in the background.', {
+        code: axios.isAxiosError(syncError) ? syncError.code : undefined,
+        status: axios.isAxiosError(syncError) ? syncError.response?.status : undefined,
+        message: axios.isAxiosError(syncError) || syncError instanceof Error ? syncError.message : 'No usable X-Server-Time-Ms sample was received from the API.',
+      });
       failClockRecovery();
     })().finally(() => {
       pending = undefined;
@@ -113,6 +119,7 @@ export const startServerClockRefresh = (): (() => void) => {
     }
   };
   const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) recover(); };
+  retryRefresh = recover;
   document.addEventListener('visibilitychange', onVisible);
   window.addEventListener('online', refresh);
   window.addEventListener('blur', onBlur);
@@ -127,6 +134,7 @@ export const startServerClockRefresh = (): (() => void) => {
     window.removeEventListener('blur', onBlur);
     window.removeEventListener('focus', onFocus);
     window.removeEventListener('pageshow', onPageShow);
+    if (retryRefresh === recover) retryRefresh = undefined;
     controller?.abort();
   };
 };

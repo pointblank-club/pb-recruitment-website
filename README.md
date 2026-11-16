@@ -47,11 +47,13 @@ Startup with unknown UTC triggers immediate calibration. Resume after tab/window
 focus loss or back-forward cache restoration marks the old estimate untrusted,
 blocks time-dependent entry/proctoring, and accepts a fresh sample even on a slow
 connection. Requests dispatched before recovery cannot restore the old estimate.
-An admitted workspace stays visible behind a transparent interaction-blocking
-overlay during recovery, preserving unsaved MCQ answers while submissions remain
-paused. Three bounded attempts use cancellable, jittered backoff; exhausted
-attempts log a `[ClockSync]` error to the console and retry automatically in the
-background. No clock-sync banners, messages, or retry buttons are shown.
+An admitted workspace stays mounted behind an interaction blocker during recovery,
+preserving drafts and unsaved MCQ answers while submissions remain paused. An
+accessible status and retry action stay outside the inert workspace; recovery
+restores focus to the previous control, or the workspace if that control was removed.
+Three bounded attempts use cancellable, jittered backoff; exhausted attempts log
+a `[ClockSync]` summary containing only code, status, and message, and retry
+automatically in the background. Accepted responses do not log success messages.
 Accepted corrections notify the same subscription as readiness.
 A failed background refinement retains trusted time; a failed recovery does not.
 

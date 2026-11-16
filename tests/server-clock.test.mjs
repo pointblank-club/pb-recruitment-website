@@ -22,7 +22,6 @@ assert.equal(clock.syncServerClock('1700000000000', 1000, 1080), true);
 elapsed = 2080;
 assert.equal(clock.getServerTime(), 1700000001000);
 assert.equal(ready, 1);
-assert.deepEqual(syncLogs, ['[ClockSync] Server time synchronized.']);
 const lastGood = clock.getLastClockSync();
 for (const bad of [undefined, '', ' ', 'NaN', 'Infinity', '-1', '1700000000', '1700000000000junk', '1e12', '1700000000000.5', '8640000000000001']) {
   assert.equal(clock.syncServerClock(bad, 2000, 2100), false);
@@ -40,7 +39,7 @@ assert.equal(clock.syncServerClock('1700000011000', 4000, elapsed), false, 'slow
 assert.equal(clock.getServerTime(), 1700000013920, 'the existing anchor continues to advance');
 assert.equal(clock.getLastClockSync(), 3080);
 assert.equal(ready, 2, 'rejected slow samples do not notify or change clock readiness');
-assert.deepEqual(syncLogs, Array(2).fill('[ClockSync] Server time synchronized.'), 'only accepted initial/correction samples log success');
+assert.deepEqual(syncLogs, [], 'accepted clock samples do not log per-response success messages');
 unsubscribe();
 const initialSlow = loadServerClock(axios, { performance }).clock;
 assert.equal(initialSlow.syncServerClock('1700000000000', 0, 10000), true);
@@ -177,7 +176,8 @@ assert.equal(lifecycle.clock.getServerClockStatus(), 'recovering', 'focus restor
 release();
 await flush();
 assert.equal(lifecycle.clock.getServerClockStatus(), 'synced');
-probeError = new Error('Synthetic network failure');
+probeError = new axios.AxiosError('Synthetic network failure', 'ERR_NETWORK',
+  { headers: { Authorization: 'private' } }, { privateRequest: true }, { status: 503, data: 'private response' });
 window.dispatchEvent(new Event('blur'));
 window.dispatchEvent(new Event('focus'));
 await flush();
@@ -187,11 +187,23 @@ for (let attempt = 0; attempt < 3; attempt++) {
   if (attempt < 2) await fireTimer();
 }
 assert.equal(clockErrors.length, 2);
-assert.equal(clockErrors[1][1], probeError, 'network errors are preserved in the console diagnostic');
+assert.equal(JSON.stringify(clockErrors[1][1]), JSON.stringify({
+  code: 'ERR_NETWORK', status: 503, message: 'Synthetic network failure',
+}), 'diagnostics include only the code, status, and message');
+probeError = undefined;
+const callsBeforeRetry = refreshCalls;
+lifecycle.retryServerClock();
+await flush();
+assert.equal(refreshCalls, callsBeforeRetry + 1, 'manual retry bypasses the scheduled backoff');
+assert.equal(lifecycle.clock.getServerClockStatus(), 'recovering');
+release();
+await flush();
+assert.equal(lifecycle.clock.getServerClockStatus(), 'synced');
 stop();
 assert.equal(timers.size, 0);
 const callsAfterStop = refreshCalls;
 window.dispatchEvent(new Event('online'));
+lifecycle.retryServerClock();
 document.dispatchEvent(new Event('visibilitychange'));
 await flush();
 assert.equal(refreshCalls, callsAfterStop, 'unmount removes refresh listeners');
