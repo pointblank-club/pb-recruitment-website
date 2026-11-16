@@ -177,6 +177,9 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
     setLoadingProblemId(problem.id);
     try {
       const details = await adminApi.getProblemById(contestId, problem.id);
+      if (details.type === "mcq" && details.answer.length !== 1) {
+        throw new Error("This editor cannot safely modify an MCQ with multiple correct answers.");
+      }
       setFormData(formDataFromProblem(details));
       setEditingProblemId(problem.id);
       setFormError("");

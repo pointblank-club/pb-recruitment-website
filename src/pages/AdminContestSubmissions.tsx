@@ -14,12 +14,16 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
+  HelpCircle,
+  Check,
+  X,
 } from "lucide-react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/footer";
 import {
   adminApi,
   type AdminProblemSummary,
+  type AdminProblem,
   type ContestRegistration,
   type AdminSubmissionItem,
   type AdminSubmissionDetails,
@@ -31,6 +35,8 @@ import {
   getVerdictClasses,
   formatSubmittedAt,
 } from "@/features/contests/submissionUtils";
+import { QuestionDescription } from "@/features/contests/components/workspace/QuestionDescription";
+import { MathText } from "@/features/contests/components/workspace/MathText";
 import { toast } from "react-toastify";
 
 const PAGE_SIZE = 200;
@@ -43,10 +49,13 @@ export default function AdminContestSubmissions() {
   // Filters derived directly from URL search parameters
   const selectedUserId = searchParams.get("userId") || "";
   const selectedProblemId = searchParams.get("problemId") || "";
+  const selectedType = searchParams.get("type") || "";
 
   // Data states
   const [contestName, setContestName] = useState<string>("");
-  const [codeProblems, setCodeProblems] = useState<AdminProblemSummary[]>([]);
+  const [problems, setProblems] = useState<AdminProblemSummary[]>([]);
+  const [problemDetailsMap, setProblemDetailsMap] = useState<Record<string, AdminProblem>>({});
+  const [isLoadingProblemDetails, setIsLoadingProblemDetails] = useState<boolean>(false);
   const [registrations, setRegistrations] = useState<ContestRegistration[]>([]);
   const [submissions, setSubmissions] = useState<AdminSubmissionItem[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
@@ -98,6 +107,21 @@ export default function AdminContestSubmissions() {
     );
   };
 
+  const handleTypeChange = (type: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (type) {
+          next.set("type", type);
+        } else {
+          next.delete("type");
+        }
+        return next;
+      },
+      { replace: true }
+    );
+  };
+
   const handleRetryDetails = () => {
     setRetryCount((c) => c + 1);
   };
@@ -105,9 +129,9 @@ export default function AdminContestSubmissions() {
   // Reset page when route or filters change
   useEffect(() => {
     setPage(0);
-  }, [contestId, selectedUserId, selectedProblemId, statusFilter]);
+  }, [contestId, selectedUserId, selectedProblemId, selectedType, statusFilter]);
 
-  // Load contest metadata, coding problems, and contestants
+  // Load contest metadata, all problems, and contestants
   useEffect(() => {
     if (!contestId) return;
 
@@ -124,9 +148,7 @@ export default function AdminContestSubmissions() {
         if (cancelled) return;
         if (!contest) throw new Error(`Contest ${contestId} was not found.`);
         setContestName(contest.name ?? contestId);
-        // Only keep coding problems
-        const coding = allProblems.filter((p) => p.type === "code");
-        setCodeProblems(coding);
+        setProblems(allProblems);
         setRegistrations(allRegistrations);
         setIsLoadingMeta(false);
       })
@@ -142,7 +164,7 @@ export default function AdminContestSubmissions() {
     };
   }, [contestId, metaRetryCount]);
 
-  // Load submissions whenever contestId, selectedUserId, selectedProblemId, or page changes
+  // Load submissions whenever contestId, selectedUserId, selectedProblemId, selectedType, statusFilter, or page changes
   useEffect(() => {
     if (!contestId) return;
 
@@ -151,11 +173,12 @@ export default function AdminContestSubmissions() {
     setSelectedSubmissionId(null);
     setSubmissionDetails(null);
 
-    const params: { user_id?: string; problem_id?: string; verdict?: string; page?: number; page_size?: number } = {
+    const params: { user_id?: string; problem_id?: string; verdict?: string; type?: string; page?: number; page_size?: number } = {
       page,
       page_size: PAGE_SIZE,
     };
     if (statusFilter !== "all") params.verdict = statusFilter;
+    if (selectedType) params.type = selectedType;
     if (selectedUserId) {
       params.user_id = selectedUserId;
     }
@@ -199,7 +222,7 @@ export default function AdminContestSubmissions() {
     return () => {
       cancelled = true;
     };
-  }, [contestId, selectedUserId, selectedProblemId, statusFilter, page]);
+  }, [contestId, selectedUserId, selectedProblemId, selectedType, statusFilter, page]);
 
   // Load submission details when a submission is selected
   useEffect(() => {
@@ -272,11 +295,45 @@ export default function AdminContestSubmissions() {
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  // Active submission for code viewer: only valid if loaded ID matches selected ID
+  // Active submission for code/mcq viewer: only valid if loaded ID matches selected ID
   const selectedSubmission =
     selectedSubmissionId && submissionDetails?.id === selectedSubmissionId
       ? submissionDetails
       : null;
+
+  const selectedSubmissionSummary = useMemo(
+    () => submissions.find((s) => s.id === selectedSubmissionId) || null,
+    [submissions, selectedSubmissionId]
+  );
+
+  const displaySubmission = selectedSubmission || selectedSubmissionSummary;
+  const activeProblemId = selectedSubmission?.problem_id || selectedSubmissionSummary?.problem_id || "";
+  const isMcqSubmission = selectedSubmission?.type === "mcq" || selectedSubmissionSummary?.type === "mcq";
+  const currentProblem = activeProblemId ? problemDetailsMap[activeProblemId] : null;
+
+  useEffect(() => {
+    if (!contestId || !activeProblemId || !isMcqSubmission) return;
+    if (problemDetailsMap[activeProblemId]) return;
+
+    let cancelled = false;
+    setIsLoadingProblemDetails(true);
+    adminApi
+      .getProblemById(contestId, activeProblemId)
+      .then((prob) => {
+        if (cancelled) return;
+        setProblemDetailsMap((prev) => ({ ...prev, [activeProblemId]: prob }));
+        setIsLoadingProblemDetails(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Failed to load problem details:", err);
+        setIsLoadingProblemDetails(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId, activeProblemId, isMcqSubmission, problemDetailsMap]);
 
   if (!contestId) {
     return (
@@ -328,11 +385,8 @@ export default function AdminContestSubmissions() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl md:text-3xl font-bold text-green-400">
-                Participant Submissions & Code
+                Participant Submissions
               </h1>
-              <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">
-                Coding Problems
-              </span>
             </div>
             <p className="text-gray-400 mt-1">
               Contest: <span className="text-green-400 font-semibold">{contestName || contestId}</span>
@@ -342,7 +396,7 @@ export default function AdminContestSubmissions() {
 
         {/* Filters and Controls Card */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 md:p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Participant selector */}
             <div>
               <label htmlFor="participant-filter" className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-1.5">
@@ -363,23 +417,40 @@ export default function AdminContestSubmissions() {
               </select>
             </div>
 
-            {/* Coding Problem selector */}
+            {/* Problem selector */}
             <div>
               <label htmlFor="problem-filter" className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-1.5">
                 <FileCode size={15} className="text-green-400" />
-                Coding Problem
+                Problem
               </label>
-              <select id="problem-filter" aria-label="Coding Problem"
+              <select id="problem-filter" aria-label="Problem"
                 value={selectedProblemId}
                 onChange={(e) => handleProblemChange(e.target.value)}
                 className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-gray-200 text-sm focus:border-green-500 focus:outline-none"
               >
-                <option value="">— All Coding Problems —</option>
-                {codeProblems.map((prob) => (
+                <option value="">— All Problems —</option>
+                {problems.map((prob) => (
                   <option key={prob.id} value={prob.id}>
-                    {prob.name} ({prob.score} pts)
+                    [{prob.type.toUpperCase()}] {prob.name} ({prob.score} pts)
                   </option>
                 ))}
+              </select>
+            </div>
+
+            {/* Problem Type selector */}
+            <div>
+              <label htmlFor="type-filter" className="block text-gray-400 text-sm mb-1 font-semibold flex items-center gap-1.5">
+                <Layers size={15} className="text-green-400" />
+                Problem Type
+              </label>
+              <select id="type-filter" aria-label="Problem Type"
+                value={selectedType}
+                onChange={(e) => handleTypeChange(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-gray-200 text-sm focus:border-green-500 focus:outline-none"
+              >
+                <option value="">All Types</option>
+                <option value="code">Coding</option>
+                <option value="mcq">MCQ</option>
               </select>
             </div>
 
@@ -469,7 +540,7 @@ export default function AdminContestSubmissions() {
                 <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
                   {selectedUserId
                     ? "This participant hasn't made any submissions matching the selected filters."
-                    : "No submissions recorded for coding problems under the current filters."}
+                    : "No submissions recorded under the current filters."}
                 </p>
               </div>
             ) : (
@@ -492,7 +563,7 @@ export default function AdminContestSubmissions() {
                       <div className="flex items-start justify-between gap-2 mb-1.5">
                         <div className="min-w-0">
                           <h3 className="font-semibold text-sm text-gray-200 truncate">
-                            {sub.problem_name || "Coding Problem"}
+                            {sub.problem_name || (sub.type === "mcq" ? "MCQ Problem" : "Coding Problem")}
                           </h3>
                           {!selectedUserId && (
                             <p className="text-xs text-gray-400 truncate">
@@ -509,10 +580,16 @@ export default function AdminContestSubmissions() {
 
                       <div className="flex items-center justify-between text-xs text-gray-500 mt-2 pt-2 border-t border-gray-800/60 font-mono">
                         <div className="flex items-center gap-2">
-                          <span className="px-1.5 py-0.5 rounded bg-gray-950 text-gray-400 border border-gray-800 uppercase">
-                            {sub.language || "code"}
+                          <span
+                            className={`px-1.5 py-0.5 rounded uppercase ${
+                              sub.type === "mcq"
+                                ? "bg-purple-950/70 text-purple-300 border border-purple-800"
+                                : "bg-gray-950 text-gray-400 border border-gray-800"
+                            }`}
+                          >
+                            {sub.type === "mcq" ? "MCQ" : (sub.language || "code")}
                           </span>
-                          {sub.runtime > 0 && (
+                          {sub.type !== "mcq" && sub.runtime > 0 && (
                             <span className="text-gray-400 flex items-center gap-0.5">
                               <Cpu size={12} />
                               {sub.runtime}ms
@@ -556,12 +633,21 @@ export default function AdminContestSubmissions() {
             )}
           </div>
 
-          {/* Right: Code & Execution Details Pane (7 columns) */}
+          {/* Right: Code / MCQ Execution Details Pane (7 columns) */}
           <div className="lg:col-span-7 flex flex-col space-y-3">
             <div className="flex items-center justify-between px-1">
               <h2 className="text-base font-bold text-gray-200 flex items-center gap-2">
-                <Code2 size={16} className="text-green-400" />
-                Submitted Code Viewer
+                {isMcqSubmission ? (
+                  <>
+                    <HelpCircle size={16} className="text-purple-400" />
+                    Submitted MCQ Response
+                  </>
+                ) : (
+                  <>
+                    <Code2 size={16} className="text-green-400" />
+                    Submitted Code Viewer
+                  </>
+                )}
               </h2>
             </div>
 
@@ -570,118 +656,248 @@ export default function AdminContestSubmissions() {
                 <Code2 className="w-12 h-12 text-gray-700 mb-3" />
                 <h3 className="text-base font-semibold text-gray-400 mb-1">No Submission Selected</h3>
                 <p className="text-xs text-gray-500 max-w-sm">
-                  Select a submission from the list on the left to view the participant's code, language, and test case results.
+                  Select a submission from the list on the left to view the participant's code or MCQ answer details.
                 </p>
               </div>
             ) : (
               <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden flex flex-col">
                 {/* Submission Metadata Header */}
-                {selectedSubmission && (
+                {displaySubmission && (
                   <div className="p-4 bg-gray-950 border-b border-gray-800">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2.5">
                           <h3 className="text-lg font-bold text-white">
-                            {selectedSubmission.problem_name}
+                            {displaySubmission.problem_name || (displaySubmission.type === "mcq" ? "MCQ Problem" : "Coding Problem")}
                           </h3>
                           <span
                             className={`px-2.5 py-0.5 rounded text-xs font-semibold border ${getVerdictClasses(
-                              selectedSubmission.status
+                              displaySubmission.status
                             )}`}
                           >
-                            {formatVerdict(selectedSubmission.status)}
+                            {formatVerdict(displaySubmission.status)}
                           </span>
                         </div>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 mt-1.5">
                           <span>
                             Participant:{" "}
                             <strong className="text-gray-200">
-                              {selectedSubmission.user_name || "Unknown"}
+                              {displaySubmission.user_name || "Unknown"}
                             </strong>{" "}
-                            ({selectedSubmission.user_email || selectedSubmission.user_id})
+                            ({displaySubmission.user_email || displaySubmission.user_id})
                           </span>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2 text-xs font-mono">
-                        <span className="bg-gray-800 text-gray-300 px-2.5 py-1 rounded border border-gray-700 uppercase font-semibold">
-                          {selectedSubmission.language}
-                        </span>
-                        {selectedSubmission.runtime > 0 && (
-                          <span className="bg-gray-800 text-gray-300 px-2.5 py-1 rounded border border-gray-700">
-                            {selectedSubmission.runtime} ms
+                        {displaySubmission.type === "mcq" ? (
+                          <span className="bg-purple-950/70 text-purple-300 px-2.5 py-1 rounded border border-purple-800 uppercase font-semibold">
+                            MCQ
                           </span>
-                        )}
-                        {selectedSubmission.memory > 0 && (
-                          <span className="bg-gray-800 text-gray-300 px-2.5 py-1 rounded border border-gray-700">
-                            {Math.round(selectedSubmission.memory / 1024)} MB
-                          </span>
+                        ) : (
+                          <>
+                            <span className="bg-gray-800 text-gray-300 px-2.5 py-1 rounded border border-gray-700 uppercase font-semibold">
+                              {displaySubmission.language || "code"}
+                            </span>
+                            {displaySubmission.runtime > 0 && (
+                              <span className="bg-gray-800 text-gray-300 px-2.5 py-1 rounded border border-gray-700">
+                                {displaySubmission.runtime} ms
+                              </span>
+                            )}
+                            {displaySubmission.memory > 0 && (
+                              <span className="bg-gray-800 text-gray-300 px-2.5 py-1 rounded border border-gray-700">
+                                {Math.round(displaySubmission.memory / 1024)} MB
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
 
                     <div className="mt-2.5 text-[11px] text-gray-500 flex items-center justify-between font-mono">
-                      <span>Submission ID: {selectedSubmission.id}</span>
-                      <span>Submitted: {formatSubmittedAt(selectedSubmission.created_at)}</span>
+                      <span>Submission ID: {displaySubmission.id}</span>
+                      <span>Submitted: {formatSubmittedAt(displaySubmission.created_at)}</span>
                     </div>
                   </div>
                 )}
 
-                {/* Reused Solution Viewer */}
-                <div className="min-h-[300px] flex flex-col">
-                  <SubmittedSolutionViewer
-                    submission={
-                      selectedSubmission
-                        ? (selectedSubmission as unknown as SubmissionDetailsResponse)
-                        : null
-                    }
-                    isLoading={isLoadingDetails}
-                    error={detailsError}
-                    onRetry={handleRetryDetails}
-                    hasHistory={Boolean(selectedSubmissionId)}
-                  />
-                </div>
-
-                {/* Test Cases Results Section */}
-                {selectedSubmission?.test_case_results && selectedSubmission.test_case_results.length > 0 && (
-                  <div className="p-4 bg-gray-950 border-t border-gray-800">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
-                        <CheckCircle2 size={14} className="text-green-400" />
-                        Test Case Results (
-                        {selectedSubmission.test_case_results.filter((tc) => tc.status === "pass").length} /{" "}
-                        {selectedSubmission.test_case_results.length} Passed)
-                      </h4>
+                {/* Main Viewer Area: MCQ inspector or Code viewer */}
+                {isMcqSubmission ? (
+                  isLoadingDetails ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-12 bg-black text-gray-400 font-['DM_Sans']">
+                      <RefreshCw className="animate-spin w-8 h-8 text-purple-400 mb-3" />
+                      <span className="text-sm">Loading MCQ submission details…</span>
                     </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                      {selectedSubmission.test_case_results.map((tc, idx) => {
-                        const isPass = tc.status === "pass";
-                        return (
-                          <div
-                            key={tc.id || idx}
-                            className={`p-2 rounded border text-xs font-mono flex items-center justify-between ${
-                              isPass
-                                ? "bg-emerald-950/40 border-emerald-800/60 text-emerald-300"
-                                : "bg-rose-950/40 border-rose-800/60 text-rose-300"
-                            }`}
-                          >
-                            <span className="font-semibold flex items-center gap-1.5">
-                              {isPass ? (
-                                <CheckCircle2 size={13} className="text-emerald-400" />
-                              ) : (
-                                <XCircle size={13} className="text-rose-400" />
-                              )}
-                              Case {tc.test_case_id || idx + 1}
-                            </span>
-                            <span className="text-[11px] opacity-80 uppercase">
-                              {tc.status}
-                            </span>
+                  ) : detailsError ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-black text-gray-400 font-['DM_Sans'] text-center">
+                      <AlertCircle className="w-10 h-10 text-red-500 mb-3" />
+                      <h3 className="text-base font-semibold text-gray-300 mb-1">Could Not Load Submission</h3>
+                      <p className="text-xs text-gray-500 max-w-xs mb-4">{detailsError}</p>
+                      <button
+                        type="button"
+                        onClick={handleRetryDetails}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 transition-colors"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Retry
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-6 bg-gray-950 flex flex-col space-y-6">
+                      {/* Problem Statement */}
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                          Question Statement
+                        </h4>
+                        {isLoadingProblemDetails && !currentProblem ? (
+                          <div className="flex items-center gap-2 text-gray-500 text-sm py-4">
+                            <RefreshCw size={16} className="animate-spin text-purple-400" />
+                            <span>Loading question details...</span>
                           </div>
-                        );
-                      })}
+                        ) : currentProblem?.description ? (
+                          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-gray-200">
+                            <QuestionDescription isAdmin={true}>
+                              {currentProblem.description}
+                            </QuestionDescription>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 italic">No description provided for this question.</p>
+                        )}
+                      </div>
+
+                      {/* Options and Selected Answer */}
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                          Options & Participant Response
+                        </h4>
+                        {currentProblem && currentProblem.options && currentProblem.options.length > 0 ? (
+                          <div className="space-y-3">
+                            {currentProblem.options.map((optionText, idx) => {
+                              const chosenOptions = selectedSubmission?.option ?? selectedSubmissionSummary?.option ?? [];
+                              const isChosen = chosenOptions.includes(idx);
+                              const isCorrect = (currentProblem.answer ?? []).includes(idx);
+
+                              let borderClass = "border-gray-800 bg-gray-900/40 text-gray-300";
+                              if (isChosen && isCorrect) {
+                                borderClass = "border-green-500/80 bg-green-950/30 text-green-200";
+                              } else if (isChosen && !isCorrect) {
+                                borderClass = "border-red-500/80 bg-red-950/30 text-red-200";
+                              } else if (isCorrect) {
+                                borderClass = "border-green-600/50 bg-green-950/10 text-gray-300";
+                              }
+
+                              return (
+                                <div
+                                  key={idx}
+                                  className={`rounded-lg border p-4 transition-colors flex items-start justify-between gap-4 ${borderClass}`}
+                                >
+                                  <div className="flex items-start gap-3 min-w-0">
+                                    <span className="flex-shrink-0 w-6 h-6 rounded-full border border-gray-700 bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-300">
+                                      {String.fromCharCode(65 + idx)}
+                                    </span>
+                                    <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                                      <MathText>{optionText}</MathText>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-col items-end gap-1 flex-shrink-0 text-xs font-semibold">
+                                    {isChosen && (
+                                      <span
+                                        className={`px-2 py-0.5 rounded flex items-center gap-1 ${
+                                          isCorrect
+                                            ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                            : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                        }`}
+                                      >
+                                        {isCorrect ? <Check size={12} /> : <X size={12} />}
+                                        Participant&apos;s Choice
+                                      </span>
+                                    )}
+                                    {isCorrect && (
+                                      <span className="px-2 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20 flex items-center gap-1">
+                                        <Check size={12} />
+                                        Correct Answer
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-sm text-gray-300">
+                            <p>
+                              Participant chose option:{" "}
+                              <span className="font-mono font-bold text-white">
+                                {(selectedSubmission?.option ?? selectedSubmissionSummary?.option ?? []).length > 0
+                                  ? (selectedSubmission?.option ?? selectedSubmissionSummary?.option ?? []).map((i) => `Option ${String.fromCharCode(65 + i)} (Index ${i})`).join(", ")
+                                  : "None recorded"}
+                              </span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )
+                ) : (
+                  <>
+                    {/* Reused Solution Viewer */}
+                    <div className="min-h-[300px] flex flex-col">
+                      <SubmittedSolutionViewer
+                        submission={
+                          selectedSubmission
+                            ? (selectedSubmission as unknown as SubmissionDetailsResponse)
+                            : null
+                        }
+                        isLoading={isLoadingDetails}
+                        error={detailsError}
+                        onRetry={handleRetryDetails}
+                        hasHistory={Boolean(selectedSubmissionId)}
+                      />
+                    </div>
+
+                    {/* Test Cases Results Section */}
+                    {selectedSubmission?.test_case_results && selectedSubmission.test_case_results.length > 0 && (
+                      <div className="p-4 bg-gray-950 border-t border-gray-800">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+                            <CheckCircle2 size={14} className="text-green-400" />
+                            Test Case Results (
+                            {selectedSubmission.test_case_results.filter((tc) => tc.status === "pass").length} /{" "}
+                            {selectedSubmission.test_case_results.length} Passed)
+                          </h4>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                          {selectedSubmission.test_case_results.map((tc, idx) => {
+                            const isPass = tc.status === "pass";
+                            return (
+                              <div
+                                key={tc.id || idx}
+                                className={`p-2 rounded border text-xs font-mono flex items-center justify-between ${
+                                  isPass
+                                    ? "bg-emerald-950/40 border-emerald-800/60 text-emerald-300"
+                                    : "bg-rose-950/40 border-rose-800/60 text-rose-300"
+                                }`}
+                              >
+                                <span className="font-semibold flex items-center gap-1.5">
+                                  {isPass ? (
+                                    <CheckCircle2 size={13} className="text-emerald-400" />
+                                  ) : (
+                                    <XCircle size={13} className="text-rose-400" />
+                                  )}
+                                  Case {tc.test_case_id || idx + 1}
+                                </span>
+                                <span className="text-[11px] opacity-80 uppercase">
+                                  {tc.status}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

@@ -10,6 +10,7 @@ interface LeaderboardTableProps {
   currentUserId?: string;
   contestId?: string;
   isAdmin?: boolean;
+  problemTypesMap?: Record<string, string>;
 }
 
 export const LeaderboardTable = ({
@@ -17,6 +18,7 @@ export const LeaderboardTable = ({
   currentUserId,
   contestId,
   isAdmin: propIsAdmin,
+  problemTypesMap,
 }: LeaderboardTableProps) => {
   const navigate = useNavigate();
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
@@ -168,6 +170,7 @@ export const LeaderboardTable = ({
                           userId={entry.user_id}
                           contestId={contestId}
                           isAdmin={isAdmin}
+                          problemTypesMap={problemTypesMap}
                         />
                       </td>
                     </tr>

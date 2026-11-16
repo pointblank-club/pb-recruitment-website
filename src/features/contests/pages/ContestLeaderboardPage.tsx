@@ -4,6 +4,7 @@ import { Code2 } from 'lucide-react';
 import { useLeaderboard } from '../hooks/useLeaderboard';
 import { LeaderboardTable } from '../components/LeaderboardTable';
 import { adminApi } from '@/services/api/adminApi';
+import { contestApi } from '@/services/api/contestApi';
 import { useAuth } from '@/lib/AuthContext';
 
 export const ContestLeaderboardPage = () => {
@@ -12,6 +13,7 @@ export const ContestLeaderboardPage = () => {
   const leaderboardState = useLeaderboard(contestId || '');
   const { user, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [problemTypesMap, setProblemTypesMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -29,7 +31,30 @@ export const ContestLeaderboardPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, user?.uid]);
+  }, [authLoading, user]);
+
+  useEffect(() => {
+    if (!contestId || authLoading) return;
+    let cancelled = false;
+    const fetcher = isAdmin
+      ? adminApi.getContestProblems(contestId)
+      : contestApi.getContestProblems(contestId);
+
+    fetcher
+      .then((probs) => {
+        if (cancelled) return;
+        const map: Record<string, string> = {};
+        probs.forEach((p) => {
+          map[p.id] = p.type;
+        });
+        setProblemTypesMap(map);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId, isAdmin, authLoading]);
 
   const {
     leaderboard,
@@ -169,6 +194,7 @@ export const ContestLeaderboardPage = () => {
           currentUserId={currentUserRank?.user_id}
           contestId={contestId}
           isAdmin={isAdmin}
+          problemTypesMap={problemTypesMap}
         />
       )}
 
