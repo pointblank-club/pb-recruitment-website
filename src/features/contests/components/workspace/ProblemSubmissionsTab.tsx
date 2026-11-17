@@ -1,7 +1,7 @@
 import React from 'react';
 import { History, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { SubmissionDetailsResponse } from '@/services/api/contestApi';
-import { formatVerdict, getVerdictClasses, formatSubmittedAt } from '../../submissionUtils';
+import { formatVerdict, getVerdictClasses, formatSubmittedAt, formatScore } from '../../submissionUtils';
 
 interface ProblemSubmissionsTabProps {
   history: SubmissionDetailsResponse[];
@@ -66,6 +66,7 @@ export const ProblemSubmissionsTab: React.FC<ProblemSubmissionsTabProps> = ({
             <thead className="bg-[#0e1422] text-slate-400 uppercase text-[10px] tracking-wider border-b border-[#1e2636]">
               <tr>
                 <th className="py-2.5 px-3">Status</th>
+                <th className="py-2.5 px-3">Score</th>
                 <th className="py-2.5 px-3">Time</th>
                 <th className="py-2.5 px-3">Memory</th>
                 <th className="py-2.5 px-3">Lang</th>
@@ -73,27 +74,31 @@ export const ProblemSubmissionsTab: React.FC<ProblemSubmissionsTabProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e2636]">
-              {history.map((sub) => (
-                <tr key={sub.id} className="hover:bg-[#141b29]/50 transition-colors">
-                  <td className="py-2.5 px-3">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getVerdictClasses(sub.status)}`}>
-                      {formatVerdict(sub.status)}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-300 font-mono">
-                    {sub.runtime !== undefined ? `${sub.runtime} ms` : '—'}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-300 font-mono">
-                    {sub.memory !== undefined ? `${sub.memory} KB` : '—'}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
-                    {sub.language || 'Code'}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-500 text-[11px]">
-                    {formatSubmittedAt(sub.created_at)}
-                  </td>
-                </tr>
-              ))}
+              {history.map((sub) => {
+                const isSubPartial = sub.status !== 'accepted' && sub.status !== 'completed' && sub.score !== undefined && sub.score > 0;
+                return (
+                  <tr key={sub.id} className="hover:bg-[#141b29]/50 transition-colors">
+                    <td className="py-2.5 px-3">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getVerdictClasses(sub.status, sub.score)}`}>
+                        {formatVerdict(sub.status)}
+                        {isSubPartial ? ' (Partial)' : ''}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-300 font-mono">
+                      {sub.score !== undefined ? formatScore(sub.score) : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-300 font-mono">
+                      {sub.runtime !== undefined ? `${sub.runtime} ms` : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
+                      {sub.language || 'Code'}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                      {formatSubmittedAt(sub.created_at)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Code2 } from 'lucide-react';
 import type { LeaderboardEntry } from '../problem.types';
-import { formatTimestamp } from '@/lib/utils';
+import { formatTimestamp, formatScore } from '@/lib/utils';
 import { LeaderboardRowDetails } from './LeaderboardRowDetails.tsx';
 
 interface LeaderboardTableProps {
@@ -60,10 +60,10 @@ export const LeaderboardTable = ({
               <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
                 USN
               </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
+              <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']" title="Problems with 100% test cases passed">
                 Solved
               </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
+              <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']" title="Total score (includes partial credit)">
                 Score
               </th>
               <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
@@ -121,7 +121,7 @@ export const LeaderboardTable = ({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <span className="text-sm font-bold text-green-400 font-['DM_Sans']">
-                        {entry.total_score}
+                        {formatScore(entry.total_score)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

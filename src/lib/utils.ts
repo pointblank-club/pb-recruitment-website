@@ -13,3 +13,9 @@ export function formatTimestamp(timestamp: number): string {
   
   return `${minutes}m ago`;
 }
+
+export function formatScore(score: number | null | undefined): string {
+  if (score == null || isNaN(score)) return '0';
+  // Strip trailing zeroes if clean integer, or show up to 2 decimal places:
+  return Number.isInteger(score) ? score.toString() : score.toFixed(2);
+}

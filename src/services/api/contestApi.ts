@@ -818,7 +818,7 @@ export interface SubmissionDetailsResponse {
   contest_id: string;
   type: SubmissionType;
   status?: SubmissionStatus;
-  score?: number;
+  score?: number; // Supports decimal numbers with up to 2 decimal places (e.g. 12.5)
   max_score?: number;
   language?: string;
   option?: number[];
@@ -826,9 +826,13 @@ export interface SubmissionDetailsResponse {
   runtime?: number;
   memory?: number;
   test_case_results?: TestCaseResult[];
+  test_cases_passed?: number;
+  total_test_cases?: number;
   code?: string;
   error_message?: string;
 }
+
+export type SubmissionDetails = SubmissionDetailsResponse;
 
 export interface TestCaseResult {
   id?: string;

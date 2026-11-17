@@ -34,6 +34,7 @@ import {
   formatVerdict,
   getVerdictClasses,
   formatSubmittedAt,
+  formatScore,
 } from "@/features/contests/submissionUtils";
 import { QuestionDescription } from "@/features/contests/components/workspace/QuestionDescription";
 import { MathText } from "@/features/contests/components/workspace/MathText";
@@ -567,7 +568,8 @@ export default function AdminContestSubmissions() {
               <div className="space-y-2 max-h-[750px] overflow-y-auto pr-1">
                 {filteredSubmissions.map((sub) => {
                   const isSelected = sub.id === selectedSubmissionId;
-                  const verdictBadgeClass = getVerdictClasses(sub.status);
+                  const verdictBadgeClass = getVerdictClasses(sub.status, sub.score);
+                  const isSubPartial = sub.status !== "accepted" && sub.status !== "completed" && sub.score !== undefined && sub.score > 0;
                   return (
                     <button
                       type="button"
@@ -591,11 +593,18 @@ export default function AdminContestSubmissions() {
                             </p>
                           )}
                         </div>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[11px] font-semibold border whitespace-nowrap ${verdictBadgeClass}`}
-                        >
-                          {formatVerdict(sub.status)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {isSubPartial && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold border border-yellow-500/40 bg-yellow-500/10 text-yellow-300">
+                              PARTIAL
+                            </span>
+                          )}
+                          <span
+                            className={`px-2 py-0.5 rounded text-[11px] font-semibold border whitespace-nowrap ${verdictBadgeClass}`}
+                          >
+                            {formatVerdict(sub.status)}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between text-xs text-gray-500 mt-2 pt-2 border-t border-gray-800/60 font-mono">
@@ -609,6 +618,11 @@ export default function AdminContestSubmissions() {
                           >
                             {sub.type === "mcq" ? "MCQ" : (sub.language || "code")}
                           </span>
+                          {sub.score !== undefined && (
+                            <span className={`font-semibold ${isSubPartial ? "text-yellow-300" : "text-emerald-400"}`}>
+                              {formatScore(sub.score)} pts
+                            </span>
+                          )}
                           {sub.type !== "mcq" && sub.runtime > 0 && (
                             <span className="text-gray-400 flex items-center gap-0.5">
                               <Cpu size={12} />

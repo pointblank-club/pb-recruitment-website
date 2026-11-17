@@ -125,4 +125,22 @@ const unavailable = new axios.AxiosError('Synthetic unavailable response', 'ERR_
 });
 mockResponse = unavailable;
 await assert.rejects(api.getContestLeaderboard('c1', 0), error => error === unavailable);
-console.log('Leaderboard checks passed: header-independent rows/pagination, participant identity, malformed body rejection, and request errors.');
+// Decimal scores support (partial marking)
+const decimalEntry = { ...makeEntry(1), total_score: 142.75 };
+mockResponse = { status: 200, data: [decimalEntry], headers: {} };
+const decimalResult = await api.getContestLeaderboard('c1', 0);
+assert.deepEqual(decimalResult.entries[0], decimalEntry);
+
+const utilsModule = { exports: {}, require: () => ({ clsx: () => '', twMerge: () => '' }) };
+vm.runInNewContext(compile(read('src/lib/utils.ts')), utilsModule);
+const { formatScore } = utilsModule.exports;
+assert.equal(formatScore(10), '10');
+assert.equal(formatScore(12.5), '12.50');
+assert.equal(formatScore(87.75), '87.75');
+assert.equal(formatScore(1.25), '1.25');
+assert.equal(formatScore(0), '0');
+assert.equal(formatScore(12.50000001), '12.50');
+assert.equal(formatScore(null), '0');
+assert.equal(formatScore(undefined), '0');
+
+console.log('Leaderboard checks passed: header-independent rows/pagination, participant identity, decimal scores, malformed body rejection, and request errors.');

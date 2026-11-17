@@ -91,6 +91,8 @@ export interface AdminSubmissionItem {
   created_at: number;
   runtime: number;
   memory: number;
+  score?: number;
+  max_score?: number;
   option?: number[];
 }
 

@@ -119,6 +119,8 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
             status,
             score: statusResponse.score,
             max_score: statusResponse.max_score,
+            test_cases_passed: statusResponse.test_cases_passed,
+            total_test_cases: statusResponse.total_test_cases,
           };
           let detailsMessage: string | undefined;
 
@@ -131,6 +133,8 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
               option: response.option && response.option.length > 0 ? response.option : summary.option,
               score: response.score ?? statusResponse.score,
               max_score: response.max_score ?? statusResponse.max_score,
+              test_cases_passed: response.test_cases_passed ?? statusResponse.test_cases_passed,
+              total_test_cases: response.total_test_cases ?? statusResponse.total_test_cases,
             };
           } catch (error) {
             detailsMessage = `Verdict received, but result details could not be loaded: ${getErrorMessage(

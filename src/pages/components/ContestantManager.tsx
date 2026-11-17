@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { useAuth } from '@/lib/AuthContext';
 import { auth } from '@/lib/firebase';
 import { MAX_TAB_SWITCHES } from "@/lib/contestStorage";
+import { formatScore } from "@/lib/utils";
 
 export interface Contestant {
   id: string;
@@ -249,7 +250,7 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
                     </div>
                     <div>
                       <span className="text-gray-500">Score:</span>
-                      <p className="text-green-400 font-semibold">{contestant.score}</p>
+                      <p className="text-green-400 font-semibold">{formatScore(contestant.score)}</p>
                     </div>
                     <div>
                       <span className="text-gray-500">Registered:</span>

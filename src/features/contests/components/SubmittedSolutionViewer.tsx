@@ -1,6 +1,6 @@
 import { Code2, AlertCircle, RefreshCw } from 'lucide-react';
 import { decodeBase64 } from '@/lib/base64';
-import { formatVerdict, getVerdictClasses } from '../submissionUtils';
+import { formatVerdict, getVerdictClasses, formatScore, PASSING_STATUSES } from '../submissionUtils';
 import type { SubmissionDetailsResponse } from '@/services/api/contestApi';
 import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
 
@@ -73,7 +73,9 @@ export const SubmittedSolutionViewer = ({
     );
   }
 
-  const badgeClass = getVerdictClasses(submission.status);
+  const isPassing = Boolean(submission.status && PASSING_STATUSES.has(submission.status));
+  const isPartial = Boolean(!isPassing && submission.score !== undefined && submission.score > 0);
+  const badgeClass = getVerdictClasses(submission.status, submission.score);
 
   return (
     <div
@@ -94,9 +96,26 @@ export const SubmittedSolutionViewer = ({
           <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-gray-800 text-gray-300 border border-gray-700">
             {submission.language || 'Code'}
           </span>
+          {isPartial && (
+            <span className="px-2 py-0.5 rounded text-[11px] font-semibold border border-yellow-500/40 bg-yellow-500/10 text-yellow-300">
+              Partial Credit
+            </span>
+          )}
           {submission.status && (
             <span className={'px-2 py-0.5 rounded text-[11px] font-medium border ' + badgeClass}>
               {formatVerdict(submission.status)}
+            </span>
+          )}
+          {submission.score !== undefined && (
+            <span className={`px-2 py-0.5 rounded text-[11px] font-mono border ${
+              isPartial
+                ? 'bg-yellow-950/40 text-yellow-300 border-yellow-800/60'
+                : isPassing
+                ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
+                : 'bg-gray-800 text-gray-300 border-gray-700'
+            }`}>
+              Score: {submission.score > 0 ? `+${formatScore(submission.score)}` : formatScore(submission.score)}
+              {submission.max_score !== undefined ? ` / ${formatScore(submission.max_score)}` : ' pts'}
             </span>
           )}
           {onRetry && (submission.status === 'pending' || submission.status === 'processing') && (
