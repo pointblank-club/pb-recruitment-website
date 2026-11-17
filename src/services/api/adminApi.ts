@@ -193,15 +193,20 @@ class AdminApiService {
     installServerClock(this.axiosInstance);
     this.axiosInstance.interceptors.request.use(
       async (config) => {
+        const expectedUserId = (config as typeof config & { _expectedUserId?: string })._expectedUserId;
+        delete (config as typeof config & { _expectedUserId?: string })._expectedUserId;
         const user = auth.currentUser;
+        if (expectedUserId && user?.uid !== expectedUserId) throw new axios.CanceledError('Authenticated account changed before reset dispatch.');
         if (user && config.headers) {
           try {
             const token = await user.getIdToken();
+            if (expectedUserId && auth.currentUser?.uid !== expectedUserId) throw new axios.CanceledError('Authenticated account changed during reset authentication.');
             if (token) {
               config.headers.Authorization = `Bearer ${token}`;
             }
 
           } catch (error) {
+            if (expectedUserId) throw error;
             console.error('Error getting auth token:', error);
           }
         }
@@ -424,18 +429,23 @@ class AdminApiService {
     return response.data;
   }
 
-  async resetBrowserSessions(contestId: string, userId: string): Promise<{ generation: number }> {
-    const response = await this.axiosInstance.post<{ generation: number }>(`/admin/contests/${contestId}/contestants/${userId}/reset-browser-sessions`);
+  async resetBrowserSessions(contestId: string, userId: string, adminId = auth.currentUser?.uid): Promise<{ generation: number }> {
+    if (!adminId) throw new axios.CanceledError('Sign in before resetting browser sessions.');
+    const response = await this.axiosInstance.post<{ generation: number }>(`/admin/contests/${contestId}/contestants/${userId}/reset-browser-sessions`, undefined,
+      { _expectedUserId: adminId } as Record<string, unknown>);
     if (!Number.isInteger(response.data?.generation) || response.data.generation < 1) throw new Error('The backend did not confirm the session reset. Refresh before retrying.');
     return response.data;
   }
 
   async resetContestantTabSwitches(
     contestId: string,
-    userId: string
+    userId: string,
+    adminId = auth.currentUser?.uid
   ): Promise<ResetTabSwitchesResponse> {
+    if (!adminId) throw new axios.CanceledError('Sign in before resetting tab switches.');
     const response = await this.axiosInstance.post<ResetTabSwitchesResponse>(
-      `/admin/contests/${contestId}/contestants/${userId}/reset-tab-switches`
+      `/admin/contests/${contestId}/contestants/${userId}/reset-tab-switches`, undefined,
+      { _expectedUserId: adminId } as Record<string, unknown>
     );
     return response.data;
   }

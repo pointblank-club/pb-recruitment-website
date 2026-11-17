@@ -12,7 +12,6 @@ import { ContestParticipationGate } from '../components/ContestParticipationGate
 import { EndContestModal } from '../components/EndContestModal';
 import { TabSwitchWarningModal } from '../components/TabSwitchWarningModal';
 import { useContest } from '../hooks/useContest';
-import { useBrowserSession } from '../hooks/useBrowserSession';
 import { useTabSwitchTracker } from '../hooks/useTabSwitchTracker';
 import { useContestEventBlocker } from '../hooks/useContestEventBlocker';
 import { useAuth } from '@/lib/AuthContext';
@@ -78,21 +77,8 @@ export const ContestLayout = () => {
     user?.uid && contestId && getContestSubmitted(contestId, user.uid)
   );
 
-  const browser = useBrowserSession(contestId, user?.uid, Boolean(isLive && !isContestEnded && contest?.is_registered && !isSubmittedLocally && !isLeaderboardPage));
-  const workspaceBlocked = !clockReady || !browser.ready || browser.locked;
-  useEffect(() => {
-    if (workspaceBlocked) clockNoticeRef.current?.focus();
-    else (workspaceFocusRef.current?.isConnected ? workspaceFocusRef.current : workspaceRef.current)?.focus();
-  }, [workspaceBlocked, clockStatus, browser.error, browser.locked]);
-  useEffect(() => {
-    if (isContestLoading || admittedScopeRef.current !== workspaceScope) admittedScopeRef.current = null;
-    if (!isContestLoading && contest && !workspaceBlocked) {
-      admittedScopeRef.current = workspaceScope;
-      admittedRouteRef.current = routeScope;
-    }
-  }, [workspaceScope, routeScope, isContestLoading, contest, workspaceBlocked]);
-
   const {
+    browser,
     tabSwitchCount,
     pendingSyncCount,
     maxSwitches,
@@ -107,10 +93,23 @@ export const ContestLayout = () => {
   } = useTabSwitchTracker({
     contestId,
     userId: user?.uid,
-    isSessionActive: Boolean(!workspaceBlocked && isLive && !isContestEnded && user?.uid && contest?.is_registered && !isSubmittedLocally),
-    isCountingEnabled: Boolean(!workspaceBlocked && isLive && !isContestEnded && user?.uid && contest?.is_registered && !isSubmittedLocally && hasEnteredContest),
+    isSessionActive: Boolean(isLive && !isContestEnded && user?.uid && contest?.is_registered && !isSubmittedLocally),
+    isCountingEnabled: Boolean(clockReady && isLive && !isContestEnded && user?.uid && contest?.is_registered && !isSubmittedLocally && hasEnteredContest),
+    isBrowserSessionEnabled: !isLeaderboardPage,
     maxSwitches: MAX_TAB_SWITCHES,
   });
+  const workspaceBlocked = !clockReady || !browser.ready || browser.locked;
+  useEffect(() => {
+    if (workspaceBlocked) clockNoticeRef.current?.focus();
+    else (workspaceFocusRef.current?.isConnected ? workspaceFocusRef.current : workspaceRef.current)?.focus();
+  }, [workspaceBlocked, clockStatus, browser.error, browser.locked]);
+  useEffect(() => {
+    if (isContestLoading || admittedScopeRef.current !== workspaceScope) admittedScopeRef.current = null;
+    if (!isContestLoading && contest && !workspaceBlocked) {
+      admittedScopeRef.current = workspaceScope;
+      admittedRouteRef.current = routeScope;
+    }
+  }, [workspaceScope, routeScope, isContestLoading, contest, workspaceBlocked]);
 
   const isSubmittedManually = Boolean(isSubmittedLocally || isSessionEnded);
   const isTrackingActive = Boolean(

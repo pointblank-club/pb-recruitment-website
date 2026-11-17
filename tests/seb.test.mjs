@@ -18,13 +18,17 @@ for (const [agent, expected] of [['Mozilla/5.0 SEB/3.9.0', true], ['SEB/3.3.2', 
 let releaseAuth, outcome, allowStorage = true;
 const requests = [], values = new Map();
 const auth = { currentUser: { uid: 'first-user', getIdToken: () => new Promise(resolve => { releaseAuth = resolve; }) } };
-const navigator = { userAgent: 'Mozilla/5.0 SEB/3.9.0', locks: { request: (_, callback) => callback() } };
+const navigator = { userAgent: 'Mozilla/5.0 SEB/3.9.0', locks: { request: (_, _options, callback) => callback() } };
 const localStorage = {
   getItem(key) { assert.equal(allowStorage, true); return values.get(key); },
   setItem(key, value) { assert.equal(allowStorage, true); values.set(key, value); },
   removeItem(key) { assert.equal(allowStorage, true); values.delete(key); },
 };
-const module = { exports: {}, console, performance, AbortController, crypto: { randomUUID }, navigator, localStorage,
+let timerId = 0;
+const timers = new Map();
+const module = { exports: {}, console, performance, AbortController,
+  setTimeout(callback) { timers.set(++timerId, callback); return timerId; },
+  clearTimeout(id) { timers.delete(id); }, crypto: { randomUUID }, navigator, localStorage,
   require(name) {
     if (name === 'axios') return { default: { ...axios, create: config => axios.create({ ...config, adapter: async request => {
       requests.push({ ...request, body: request.data ? JSON.parse(request.data) : undefined });
@@ -41,11 +45,12 @@ vm.runInNewContext(compile('src/services/api/contestApi.ts'), module);
 const api = module.exports.contestApi;
 const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
 const starting = api.startBrowserSession('exam', 'first-user');
-assert.equal(api.startBrowserSession('exam', 'first-user'), starting, 'concurrent startup calls share one operation');
+const joining = api.startBrowserSession('exam', 'first-user');
+const together = Promise.all([starting, joining]);
 await flush();
 auth.currentUser = { uid: 'second-user', getIdToken: async () => 'other-token' };
 releaseAuth('old-token');
-await assert.rejects(starting, /account changed/);
+await assert.rejects(together, /account changed/);
 assert.equal(requests.length, 0, 'account changes during authentication cannot dispatch a session');
 auth.currentUser = { uid: 'first-user', getIdToken: async () => 'fixture-token' };
 let cookie = false, generation = 0;
@@ -104,4 +109,66 @@ outcome = request => {
 };
 await assert.rejects(api.getProblemById('exam', 'question'), axios.isCancel);
 assert.equal(requests.length, beforeAccountChange + 1, 'a failed read cannot restart or replay as a different account');
-console.log('SEB session checks passed: detection, scoped authentication, startup deduplication, reset reconciliation, ordinary-browser allowance, malformed responses, and bounded protected-read recovery.');
+
+// Cancellation stops an abandoned 428 recovery before more confirmations dispatch.
+auth.currentUser = { uid: 'first-user', getIdToken: async () => 'fixture-token' };
+navigator.userAgent = 'Mozilla/5.0 SEB/3.9.0';
+navigator.locks = { request: (_, _options, callback) => callback() };
+allowStorage = true;
+let confirmations = 0, releaseConfirmation;
+outcome = request => {
+  if (request.method === 'get') throw required(request);
+  confirmations++;
+  const state = { ...session, is_seb: true, session_count: 1, generation: request.body.generation };
+  if (confirmations === 1) return state;
+  return new Promise(resolve => { releaseConfirmation = () => resolve(state); });
+};
+const readController = new AbortController();
+const abandoned = api.getContestProblems('cancel-exam', readController.signal);
+for (let i = 0; i < 10 && !releaseConfirmation; i++) await flush();
+assert.equal(confirmations, 2);
+readController.abort();
+await assert.rejects(abandoned, axios.isCancel);
+releaseConfirmation(); await flush();
+assert.equal(confirmations, 2, 'aborted recovery cannot send remaining confirmation POSTs');
+
+// A cancelled subscriber must not cancel another subscriber's shared handshake.
+let releaseShared;
+outcome = request => new Promise(resolve => { releaseShared = () => resolve({ ...session, generation: request.body.generation }); });
+const firstController = new AbortController();
+const sharedStart = api.startBrowserSession('shared-exam', 'first-user', firstController.signal);
+const sharedSurvivor = api.startBrowserSession('shared-exam', 'first-user');
+await flush();
+const sharedRequestCount = requests.length;
+firstController.abort();
+await assert.rejects(sharedStart, axios.isCancel);
+releaseShared();
+await sharedSurvivor;
+assert.equal(requests.length, sharedRequestCount, 'shared consumers dispatch one handshake');
+
+// The total deadline includes authentication and waiting for another tab's Web Lock.
+for (const waitAt of ['authentication', 'web-lock']) {
+  auth.currentUser = { uid: 'first-user', getIdToken: () => new Promise(() => {}) };
+  navigator.locks = { request: (_, _options, callback) => waitAt === 'web-lock' ? new Promise(() => {}) : callback() };
+  const before = requests.length;
+  const waiting = api.startBrowserSession(`deadline-${waitAt}`, 'first-user');
+  await flush();
+  assert.equal(timers.size, 1);
+  [...timers.values()][0]();
+  await assert.rejects(waiting, error => error.code === 'ECONNABORTED');
+  assert.equal(requests.length, before, `${waitAt} deadline prevents dispatch`);
+}
+
+const adminModule = { ...module, exports: {} };
+vm.runInNewContext(compile('src/services/api/adminApi.ts'), adminModule);
+for (const reset of ['resetBrowserSessions', 'resetContestantTabSwitches']) {
+  auth.currentUser = { uid: 'first-admin', getIdToken: () => new Promise(resolve => { releaseAuth = resolve; }) };
+  const before = requests.length;
+  const pendingReset = adminModule.exports.adminApi[reset]('exam', 'participant');
+  await flush();
+  auth.currentUser = { uid: 'second-admin', getIdToken: async () => 'second-admin-token' };
+  releaseAuth('first-admin-token');
+  await assert.rejects(pendingReset, axios.isCancel);
+  assert.equal(requests.length, before, `${reset} cannot dispatch with the previous account's token`);
+}
+console.log('SEB checks passed: scoped/deduplicated startup, bounded cancellation/deadlines, protected-read recovery, and reset account fencing.');

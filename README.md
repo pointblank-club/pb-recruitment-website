@@ -97,7 +97,12 @@ Configure the `.seb` file to clear session cookies when starting an exam
 cryptographically distinct SEB process launches. SEB needs cookies and Web Locks
 to coordinate startup across tabs; ordinary-browser access does not require them.
 Cookie or connection failures offer a retry action without consuming additional
-sessions for the same startup.
+sessions for the same startup. Confirmation and protected-read recovery share a
+15-second total deadline, including authentication and waiting for Web Locks.
+Cancelling the last caller cancels recovery; another active caller keeps the shared
+handshake alive. Ongoing browser locks and resets use the existing session-status
+reconciler, including while admission is blocked. Completion and tab termination
+stop startup retries and use their existing terminal flows.
 
 Deploy backend migration **47**, all new API instances, and this frontend together
 before an exam. CloudFront must forward API cookies, and credentialed CORS

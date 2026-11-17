@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { randomUUID } = require('node:crypto');
+const { randomUUID, createHash } = require('node:crypto');
 const { before, after, test } = require('node:test');
 const { chromium, firefox } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const origin = 'http://localhost:5173';
@@ -13,7 +13,8 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
   async function fixture({ seb = true, drop = false, cookies = true } = {}) {
     const context = await browser.newContext({ userAgent: seb ? 'Mozilla/5.0 SEB/3.9.0' : 'Mozilla/5.0 Chrome/139.0' });
     const sessions = new Map(), errors = [];
-    let flagged = false, locked = false, dropNext = drop, generation = 0, submissions = 0, resets = 0, admissionGate;
+    let flagged = false, locked = false, dropNext = drop, generation = 0, submissions = 0, resets = 0, admissionGate, statusGate, resetGate, statusReads = 0, starts = 0, ended = false, tabTerminated = false, dropStatus = false;
+    const cookieName = '__Host-pb-exam-' + createHash('sha256').update('test\0participant').digest('hex').slice(0, 24);
     const count = () => [...sessions.values()].filter(session => session.generation === generation).length;
     await context.addInitScript(() => {
       document.hasFocus = () => true;
@@ -28,7 +29,10 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       const request = route.request(), url = new URL(request.url());
       if (url.origin === origin) {
         if (url.pathname === '/src/lib/AuthContext.tsx') return route.fulfill({ contentType: 'text/javascript', body:
-          'export const useAuth = () => ({ user: window.sebUser, loading: false });' });
+          `export const useAuth = () => ({ user: window.sebFixture.React.useSyncExternalStore(callback => {
+              window.addEventListener('seb-auth-change', callback);
+              return () => window.removeEventListener('seb-auth-change', callback);
+            }, () => window.sebUser), loading: false });` });
         if (url.pathname === '/src/lib/firebase.ts') return route.fulfill({ contentType: 'text/javascript', body:
           'export const auth = { get currentUser() { return window.sebUser; } };' });
         return route.continue();
@@ -45,6 +49,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       if (url.pathname === '/contests/test' || url.pathname === '/admin/contest/test') return fulfill(contest());
       if (url.pathname.endsWith('/reset-browser-sessions')) {
         generation++; locked = false; resets++;
+        if (resetGate) await resetGate;
         return fulfill({ generation });
       }
       if (url.pathname === '/admin/contests/test/registrations') return fulfill([{
@@ -53,35 +58,49 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
         is_browser_session_terminated: locked,
       }]);
       if (url.pathname === '/contests/test/browser-session') {
+        starts++;
         const body = request.postDataJSON();
-        if (body.generation !== generation) return route.fulfill({ status: 409, headers, json: { code: 'BROWSER_SESSION_STALE', generation } });
         if (admissionGate) await admissionGate;
+        if (body.generation !== generation) return route.fulfill({ status: 409, headers, json: { code: 'BROWSER_SESSION_STALE', generation } });
+        if (ended) return route.fulfill({ status: 403, headers, json: { code: 'BROWSER_SESSION_FORBIDDEN', error: 'Contest session already ended' } });
         const detected = /(?:^|[\s;(])SEB\/\d+(?:\.\d+)*(?:$|[\s;)])/i.test(requestHeaders['user-agent'] || '');
         flagged ||= !detected;
-        const token = /(?:^|;\s*)__Host-browser-fixture=([^;]+)/.exec(requestHeaders.cookie || '')?.[1];
+        const token = (requestHeaders.cookie || '').split('; ').find(value => value.startsWith(cookieName + '='))?.slice(cookieName.length + 1);
         let session = [...sessions.values()].find(saved => saved.token === token && saved.generation === generation);
         const confirmed = Boolean(session);
+        if (tabTerminated && detected && !session) return route.fulfill({ status: 403, headers, json: { code: 'BROWSER_SESSION_FORBIDDEN', error: 'Contest participation terminated due to tab switching' } });
+        if (confirmed) session.confirmed = true;
         if (detected && !session && !locked) {
           const attempt = `${generation}:${body.attempt_id}`;
           session = sessions.get(attempt);
+          if (session?.confirmed) return route.fulfill({ status: 409, headers, json: { code: 'BROWSER_SESSION_CONFLICT', error: 'Startup already confirmed' } });
           if (!session) {
             if (count() >= 3) locked = true;
-            else { session = { token: randomUUID(), generation }; sessions.set(attempt, session); }
+            else { session = { token: randomUUID(), generation, confirmed: false, user: 'participant', contest: 'test' }; sessions.set(attempt, session); }
           }
         }
         if (dropNext) { dropNext = false; return route.abort(); }
-        if (detected && cookies && session && !locked) headers['Set-Cookie'] = `__Host-browser-fixture=${session.token}; Path=/; Secure; HttpOnly; SameSite=None`;
+        if (detected && cookies && session && !locked) headers['Set-Cookie'] = `${cookieName}=${session.token}; Path=/; Secure; HttpOnly; SameSite=None`;
         return fulfill({ is_seb: detected, generation, session_count: count(), seb_not_detected: flagged, is_terminated: locked, cookie_confirmed: confirmed });
       }
-      if (url.pathname.endsWith('/session-status')) return fulfill({ tab_switch_count: 0, is_tab_switch_terminated: false, generation: 0, is_session_ended: false });
+      if (url.pathname.endsWith('/session-status')) {
+        statusReads++;
+        if (statusGate) await statusGate;
+        if (dropStatus) { dropStatus = false; return route.abort(); }
+        return fulfill({ tab_switch_count: tabTerminated ? 5 : 0, is_tab_switch_terminated: tabTerminated, generation: 0,
+          is_session_ended: ended, seb_not_detected: flagged, browser_session_count: count(), browser_session_generation: generation, is_browser_session_terminated: locked });
+      }
       if (url.pathname === '/submission/list') return fulfill({ submissions: [] });
       if (url.pathname === '/submission/submit') { submissions++; return route.fulfill({ status: locked ? 403 : 503, headers, json: { error: 'Fixture submission' } }); }
       if (url.pathname.startsWith('/contests/test/problems')) {
+        if (ended) return route.fulfill({ status: 403, headers, json: { error: 'Contest session already ended' } });
         if (locked) return route.fulfill({ status: 403, headers, json: { error: 'Browser session limit', code: 'BROWSER_SESSION_LIMIT' } });
-        const token = /(?:^|;\s*)__Host-browser-fixture=([^;]+)/.exec(requestHeaders.cookie || '')?.[1];
+        const token = (requestHeaders.cookie || '').split('; ').find(value => value.startsWith(cookieName + '='))?.slice(cookieName.length + 1);
         if (/SEB\//i.test(requestHeaders['user-agent'] || '') && ![...sessions.values()].some(session => session.token === token && session.generation === generation)) {
           return route.fulfill({ status: 428, headers, json: { error: 'Start your browser exam session before participating', code: 'BROWSER_SESSION_REQUIRED' } });
         }
+        const session = [...sessions.values()].find(session => session.token === token && session.generation === generation);
+        if (session) session.confirmed = true;
         const problem = { id: 'mcq', problem_id: 'mcq', contest_id: 'test', name: 'SEB question', type: 'mcq', score: 1, options: ['First answer', 'Second answer'] };
         return fulfill(url.pathname.endsWith('/mcq') ? problem : [problem]);
       }
@@ -115,7 +134,19 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       await page.getByRole('button', { name: /Enter fullscreen|Continue demo without fullscreen/ }).click();
       await page.locator('#option-0').waitFor();
     }
-    return { context, open, enter, mount, dropNext() { dropNext = true; },
+    return { context, open, enter, mount, dropNext() { dropStatus = true; },
+      setTerminal(value) { ended = value === 'ended'; tabTerminated = value === 'tab'; },
+      get starts() { return starts; }, get statusReads() { return statusReads; },
+      holdStatus() {
+        let resume;
+        statusGate = new Promise(resolve => { resume = resolve; });
+        return () => { statusGate = undefined; resume(); };
+      },
+      holdReset() {
+        let resume;
+        resetGate = new Promise(resolve => { resume = resolve; });
+        return () => { resetGate = undefined; resume(); };
+      },
       holdAdmissions() {
         let resume;
         admissionGate = new Promise(resolve => { resume = resolve; });
@@ -132,15 +163,16 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       await Promise.all([f.enter(first), f.enter(second)]);
       assert.equal(f.count, 1);
       assert.equal(f.flagged, false);
-      const cookie = (await f.context.cookies(api)).find(cookie => cookie.name === '__Host-browser-fixture');
+      const cookie = (await f.context.cookies(api)).find(cookie => cookie.name.startsWith('__Host-pb-exam-'));
       assert.equal(cookie.httpOnly, true);
       assert.equal(cookie.secure, true);
       await first.getByRole('link', { name: 'Leaderboard', exact: true }).click();
       await first.getByText('Leaderboard view', { exact: true }).waitFor();
       assert.equal(f.count, 1);
-      const resume = f.holdAdmissions();
+      const initialStarts = f.starts;
+      const resume = f.holdStatus();
       try {
-        const checking = first.waitForRequest(request => request.url() === `${api}/contests/test/browser-session`);
+        const checking = first.waitForRequest(request => request.url() === `${api}/contests/test/session-status`);
         await first.getByRole('link', { name: 'Problems', exact: true }).click();
         await checking;
         assert.equal(await first.locator('#browser-session-status').count(), 0, 'navigation rechecks the session without a popup');
@@ -149,10 +181,8 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
         await first.locator('#option-0').focus();
         assert.equal(await first.locator('#option-0').evaluate(node => Boolean(node.closest('[inert]'))), false, 'answers remain usable while verification is pending');
       } finally { resume(); }
-      await first.evaluate(async () => {
-        const { contestApi } = await import('/src/services/api/contestApi.ts');
-        for (let i = 0; i < 3; i++) await contestApi.startBrowserSession('test', 'participant');
-      });
+      await first.evaluate(() => window.dispatchEvent(new Event('online')));
+      assert.equal(f.starts, initialStarts, 'navigation and reconnect reuse the accepted cookie without startup POSTs');
       assert.equal(await first.locator('#option-0').isChecked(), true);
       assert.equal(await first.locator('#option-0').evaluate(node => node === document.activeElement), true, 'background verification does not steal focus');
       assert.equal(f.count, 1);
@@ -199,16 +229,17 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
   test(`${name}: lost startup responses retry without consuming another session`, { timeout: 20000 }, async () => {
     const f = await fixture({ drop: true });
     try {
+      const lost = f.context.waitForEvent('requestfailed', request => request.url().endsWith('/browser-session'));
       const page = await f.open();
-      await page.getByRole('button', { name: 'Retry exam session', exact: true }).waitFor();
-      await page.getByRole('button', { name: 'Retry exam session', exact: true }).click();
+      await lost;
+      await page.evaluate(() => window.dispatchEvent(new Event('online')));
       await f.enter(page);
       assert.equal(f.count, 1);
       assert.equal(f.flagged, false);
     } finally { await f.close(); }
   });
 
-  test(`${name}: a failed recheck preserves the mounted answer and restores focus after retry`, { timeout: 20000 }, async () => {
+  test(`${name}: failed background status reads preserve the mounted answer and focus`, { timeout: 20000 }, async () => {
     const f = await fixture();
     try {
       const page = await f.open(); await f.enter(page);
@@ -216,17 +247,54 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       await answer.check(); await answer.focus();
       await answer.evaluate(node => { window.originalAnswer = node; });
       f.dropNext();
+      const read = page.waitForRequest(request => request.url().endsWith('/session-status'));
       await page.evaluate(() => window.dispatchEvent(new Event('online')));
-      const retry = page.getByRole('button', { name: 'Retry exam session', exact: true });
-      await retry.waitFor();
+      await read;
       assert.equal(await answer.isChecked(), true);
-      assert.equal(await answer.evaluate(node => node === window.originalAnswer && Boolean(node.closest('[inert]'))), true);
-      await retry.click();
-      await page.waitForFunction(() => !document.querySelector('.contest-screen [inert]'));
-      assert.equal(await answer.isChecked(), true);
-      await page.waitForFunction(() => document.activeElement === window.originalAnswer);
+      assert.equal(await answer.evaluate(node => node === window.originalAnswer && !node.closest('[inert]')), true);
+      assert.equal(await page.locator('#browser-session-status').count(), 0);
+      assert.equal(await answer.evaluate(node => node === document.activeElement), true);
       assert.equal(f.count, 1);
-      assert.equal(f.flagged, false);
+    } finally { await f.close(); }
+  });
+
+  for (const terminal of ['ended', 'tab']) {
+    test(`${name}: ${terminal} status reconciles while browser startup is forbidden`, { timeout: 15000 }, async () => {
+      const f = await fixture();
+      const resume = f.holdStatus();
+      try {
+        f.setTerminal(terminal);
+        const read = f.context.waitForEvent('request', request => request.url().endsWith('/session-status'));
+        const page = await f.open();
+        await read;
+        await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Retry exam session' && !button.disabled));
+        assert.ok(f.statusReads > 0, 'browser blocking does not stop authoritative status requests');
+        resume();
+        if (terminal === 'ended') await page.getByText('Contest details', { exact: true }).waitFor();
+        else await page.getByRole('alert').filter({ hasText: 'Session Locked' }).waitFor();
+        assert.equal(await page.getByRole('button', { name: 'Retry exam session', exact: true }).count(), 0);
+        assert.equal(f.count, 0);
+      } finally { resume(); await f.close(); }
+    });
+  }
+
+  test(`${name}: reset cannot dispatch after the admin account changes during token lookup`, { timeout: 15000 }, async () => {
+    const f = await fixture();
+    try {
+      const participant = await f.open(); await f.enter(participant);
+      const admin = await f.open('admin'); admin.on('dialog', dialog => dialog.accept());
+      await admin.getByRole('button', { name: 'Reset Browser Sessions', exact: true }).waitFor();
+      await admin.evaluate(() => { window.sebUser.getIdToken = () => new Promise(resolve => { window.releaseAdminToken = resolve; }); });
+      await admin.getByRole('button', { name: 'Reset Browser Sessions', exact: true }).click();
+      await admin.waitForFunction(() => window.releaseAdminToken);
+      await admin.evaluate(() => {
+        window.sebUser = { uid: 'another-admin', getIdToken: async () => 'another-token' };
+        window.dispatchEvent(new Event('seb-auth-change'));
+        window.releaseAdminToken('old-admin-token');
+      });
+      await admin.getByRole('button', { name: 'Reset Browser Sessions', exact: true }).waitFor({ state: 'visible' });
+      assert.equal(f.resets, 0);
+      assert.equal(f.count, 1);
     } finally { await f.close(); }
   });
 
@@ -240,6 +308,48 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       assert.equal(f.count, 1);
       assert.equal(f.flagged, false);
     } finally { await f.close(); }
+  });
+
+  test(`${name}: cancelling a protected read stops cookie confirmation`, { timeout: 15000 }, async () => {
+    const f = await fixture({ cookies: false });
+    const resume = f.holdAdmissions();
+    try {
+      const page = await f.open('admin');
+      const checking = page.waitForRequest(request => request.url().endsWith('/browser-session'));
+      await page.evaluate(async () => {
+        const { contestApi } = await import('/src/services/api/contestApi.ts');
+        window.readController = new AbortController();
+        window.readOutcome = undefined;
+        void contestApi.getContestProblems('test', window.readController.signal).catch(error => { window.readOutcome = error.code; });
+      });
+      await checking;
+      await page.evaluate(() => window.readController.abort());
+      await page.waitForFunction(() => window.readOutcome === 'ERR_CANCELED');
+      resume();
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(f.starts, 1, 'cancellation does not dispatch the remaining confirmation attempts');
+    } finally { resume(); await f.close(); }
+  });
+
+  test(`${name}: a reset response cannot update another admin account's screen`, { timeout: 15000 }, async () => {
+    const f = await fixture();
+    const resume = f.holdReset();
+    try {
+      const participant = await f.open(); await f.enter(participant);
+      const admin = await f.open('admin'); admin.on('dialog', dialog => dialog.accept());
+      const dispatched = admin.waitForRequest(request => request.url().endsWith('/reset-browser-sessions'));
+      await admin.getByRole('button', { name: 'Reset Browser Sessions', exact: true }).click();
+      await dispatched;
+      await admin.evaluate(() => {
+        window.sebUser = { uid: 'another-admin', getIdToken: async () => 'another-token' };
+        window.dispatchEvent(new Event('seb-auth-change'));
+      });
+      const response = admin.waitForResponse(response => response.url().endsWith('/reset-browser-sessions'));
+      resume(); await response;
+      await admin.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(await admin.getByText('1 / 3 sessions', { exact: true }).isVisible(), true);
+      assert.equal(f.resets, 1, 'the already-dispatched reset is audited once');
+    } finally { resume(); await f.close(); }
   });
 
   test(`${name}: admins reset the session lock and the existing browser resumes as session 1`, { timeout: 25000 }, async () => {
@@ -261,7 +371,9 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       await admin.getByText('Not observed', { exact: true }).waitFor();
       await admin.getByText('0 / 3 sessions', { exact: true }).waitFor({ state: 'hidden' });
       assert.equal(f.resets, 1);
+      const resumed = page.waitForResponse(response => response.url().endsWith('/browser-session') && response.status() === 200);
       await page.evaluate(() => window.dispatchEvent(new Event('online')));
+      await resumed;
       await page.waitForFunction(() => !document.querySelector('.contest-screen [inert]'));
       assert.equal(f.count, 1);
       assert.equal(await page.locator('#option-0').isChecked(), true);

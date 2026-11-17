@@ -21,6 +21,24 @@ import { jitterDelay, parseRetryAfterMs, requestTimeout } from '@/lib/requestPol
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const TAB_SWITCH_REQUEST_TIMEOUT_MS = 10_000;
 const LEADERBOARD_PAGE_SIZE = 20;
+const BROWSER_SESSION_TIMEOUT_MS = 15_000;
+const browserSessionTimeout = () => new axios.AxiosError('Exam session verification timed out. Please retry.', 'ECONNABORTED');
+
+const waitForAbort = <T,>(promise: Promise<T>, signal?: AbortSignal): Promise<T> => {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const cancel = () => reject(axios.isAxiosError(signal.reason) ? signal.reason : new axios.CanceledError('Request aborted.'));
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', cancel));
+    if (signal.aborted) { cancel(); return; }
+    signal.addEventListener('abort', cancel, { once: true });
+  });
+};
+
+interface BrowserSessionStart {
+  controller: AbortController;
+  consumers: number;
+  promise: Promise<BrowserSession>;
+}
 
 interface IdentityScopedRequestConfig {
   _expectedUserId?: string;
@@ -95,7 +113,7 @@ interface MockSubmission {
 class ContestApiService {
   private axiosInstance: AxiosInstance;
   private mockSubmissions = new Map<string, MockSubmission>();
-  private browserSessionStarts = new Map<string, Promise<BrowserSession>>();
+  private browserSessionStarts = new Map<string, BrowserSessionStart>();
   private browserSessionGenerations = new Map<string, number>();
   // shortcut: unresolved payloads remain for this tab; reconcile saved history before adding eviction.
   private pendingCodeSubmissions = new Map<string, { payload: string; key: string }>();
@@ -128,7 +146,7 @@ class ContestApiService {
 
         if (user && config.headers) {
           try {
-            const token = await user.getIdToken();
+            const token = await waitForAbort(user.getIdToken(), config.signal as AbortSignal | undefined);
             if (config.signal?.aborted) {
               return Promise.reject(new axios.CanceledError('Request aborted during auth token fetch.'));
             }
@@ -139,6 +157,7 @@ class ContestApiService {
               config.headers.Authorization = `Bearer ${token}`;
             }
           } catch (error) {
+            if (config.signal?.aborted || axios.isCancel(error)) throw error;
             console.error('Error getting auth token:', error);
           }
         }
@@ -161,10 +180,21 @@ class ContestApiService {
         // An admin reset can invalidate the cookie while navigation rechecks it in the background.
         if (contestId && config && !config._browserSessionRetried && !config.signal?.aborted && config._authenticatedUserId &&
           error.response?.status === 428 && error.response.data?.code === 'BROWSER_SESSION_REQUIRED') {
-          await this.startBrowserSession(contestId, config._authenticatedUserId);
-          config._browserSessionRetried = true;
-          config._expectedUserId = config._authenticatedUserId;
-          return this.axiosInstance.request(config);
+          const controller = new AbortController();
+          const cancel = () => controller.abort();
+          config.signal?.addEventListener?.('abort', cancel, { once: true });
+          const deadline = performance.now() + BROWSER_SESSION_TIMEOUT_MS;
+          const timer = setTimeout(() => controller.abort(browserSessionTimeout()), BROWSER_SESSION_TIMEOUT_MS);
+          try {
+            await this.startBrowserSession(contestId, config._authenticatedUserId, controller.signal);
+            config._browserSessionRetried = true;
+            config._expectedUserId = config._authenticatedUserId;
+            config._deadline = deadline;
+            return await this.axiosInstance.request({ ...config, signal: controller.signal });
+          } finally {
+            clearTimeout(timer);
+            config.signal?.removeEventListener?.('abort', cancel);
+          }
         }
         // Surface the server's message (e.g. "user not registered") instead of axios' generic text.
         const serverMessage = error.response?.data?.error;
@@ -179,55 +209,70 @@ class ContestApiService {
     return response.data.map(c => new Contest(c));
   }
 
-  startBrowserSession(contestId: string, userId: string): Promise<BrowserSession> {
+  startBrowserSession(contestId: string, userId: string, signal?: AbortSignal): Promise<BrowserSession> {
+    if (signal?.aborted) return Promise.reject(new axios.CanceledError('Request aborted.'));
     const scope = `${contestId}:${userId}`;
-    const existing = this.browserSessionStarts.get(scope);
-    if (existing) return existing;
-    const detected = isSEBUserAgent(navigator.userAgent);
-    const start = async () => {
-      const key = `contest_browser_start_${scope}`;
-      let attemptId = detected ? localStorage.getItem(key) || crypto.randomUUID() : crypto.randomUUID();
-      let generation = this.browserSessionGenerations.get(scope) ?? 0;
-      if (detected) localStorage.setItem(key, attemptId);
-      for (let attempt = 0; attempt < 4; attempt++) {
-        let state: BrowserSession;
-        try {
-          const response = await this.axiosInstance.post<BrowserSession>(`/contests/${contestId}/browser-session`,
-            { attempt_id: attemptId, generation }, { timeout: 10000, _expectedUserId: userId } as Record<string, unknown>);
-          state = response.data;
-        } catch (error) {
-          if (axios.isAxiosError(error) && error.response?.status === 409) {
-            const data = error.response.data;
-            if (data?.code === 'BROWSER_SESSION_STALE' && Number.isInteger(data.generation) && data.generation > generation) {
-              generation = data.generation;
-              this.browserSessionGenerations.set(scope, generation);
-              attemptId = crypto.randomUUID();
-              if (detected) localStorage.setItem(key, attemptId);
-              continue;
+    let operation = this.browserSessionStarts.get(scope);
+    if (!operation || operation.controller.signal.aborted) {
+      const controller = new AbortController();
+      const deadline = performance.now() + BROWSER_SESSION_TIMEOUT_MS;
+      const timer = setTimeout(() => controller.abort(browserSessionTimeout()), BROWSER_SESSION_TIMEOUT_MS);
+      const detected = isSEBUserAgent(navigator.userAgent);
+      const start = async () => {
+        const key = `contest_browser_start_${scope}`;
+        let attemptId = detected ? localStorage.getItem(key) || crypto.randomUUID() : crypto.randomUUID();
+        let generation = this.browserSessionGenerations.get(scope) ?? 0;
+        if (detected) localStorage.setItem(key, attemptId);
+        for (let attempt = 0; attempt < 4; attempt++) {
+          if (controller.signal.aborted) throw controller.signal.reason;
+          let state: BrowserSession;
+          try {
+            const response = await this.axiosInstance.post<BrowserSession>(`/contests/${contestId}/browser-session`,
+              { attempt_id: attemptId, generation }, { signal: controller.signal, _deadline: deadline, _expectedUserId: userId } as Record<string, unknown>);
+            state = response.data;
+          } catch (error) {
+            if (axios.isAxiosError(error) && error.response?.status === 409) {
+              const data = error.response.data;
+              if (data?.code === 'BROWSER_SESSION_STALE' && Number.isInteger(data.generation) && data.generation > generation) {
+                generation = data.generation;
+                this.browserSessionGenerations.set(scope, generation);
+                attemptId = crypto.randomUUID();
+                if (detected) localStorage.setItem(key, attemptId);
+                continue;
+              }
+              if (detected) localStorage.removeItem(key);
             }
-            if (detected) localStorage.removeItem(key);
+            throw error;
           }
-          throw error;
+          if (!state || typeof state.is_seb !== 'boolean' || !Number.isInteger(state.session_count) || state.session_count < 0 || state.session_count > 3 ||
+            state.generation !== generation || typeof state.is_terminated !== 'boolean' || typeof state.cookie_confirmed !== 'boolean' ||
+            typeof state.seb_not_detected !== 'boolean' || (state.is_seb && state.cookie_confirmed && state.session_count < 1)) {
+            throw new Error('The backend did not confirm the exam session. Please retry.');
+          }
+          this.browserSessionGenerations.set(scope, state.generation);
+          if (!state.is_seb || state.is_terminated || state.cookie_confirmed) {
+            if (detected) localStorage.removeItem(key);
+            return state;
+          }
         }
-        if (!state || typeof state.is_seb !== 'boolean' || !Number.isInteger(state.session_count) || state.session_count < 0 || state.session_count > 3 ||
-          state.generation !== generation || typeof state.is_terminated !== 'boolean' || typeof state.cookie_confirmed !== 'boolean' ||
-          typeof state.seb_not_detected !== 'boolean' || (state.is_seb && state.cookie_confirmed && state.session_count < 1)) {
-          throw new Error('The backend did not confirm the exam session. Please retry.');
-        }
-        this.browserSessionGenerations.set(scope, state.generation);
-        if (!state.is_seb || state.is_terminated || state.cookie_confirmed) {
-          if (detected) localStorage.removeItem(key);
-          return state;
-        }
-      }
-      throw new Error('The exam session cookie could not be confirmed. Allow cookies for the API and retry.');
-    };
-    const pending = (detected
-      ? navigator.locks ? navigator.locks.request(`pb-exam-session:${scope}`, start)
-        : Promise.reject(new Error('This SEB version does not support exam session coordination. Update SEB and retry.'))
-      : start()).finally(() => this.browserSessionStarts.delete(scope));
-    this.browserSessionStarts.set(scope, pending);
-    return pending;
+        throw new Error('The exam session cookie could not be confirmed. Allow cookies for the API and retry.');
+      };
+      const pending = Promise.resolve().then(() => detected
+        ? navigator.locks ? navigator.locks.request(`pb-exam-session:${scope}`, { signal: controller.signal }, start)
+          : Promise.reject(new Error('This SEB version does not support exam session coordination. Update SEB and retry.'))
+        : start());
+      const created: BrowserSessionStart = { controller, consumers: 0, promise: waitForAbort(pending, controller.signal).finally(() => {
+        clearTimeout(timer);
+        if (this.browserSessionStarts.get(scope) === created) this.browserSessionStarts.delete(scope);
+      }) };
+      operation = created;
+      this.browserSessionStarts.set(scope, operation);
+    }
+    const shared = operation;
+    shared.consumers++;
+    return waitForAbort(shared.promise, signal).finally(() => {
+      if (--shared.consumers === 0) shared.controller.abort();
+    });
   }
 
   async getContestProblems(contestId: string, signal?: AbortSignal): Promise<Problem[]> {
@@ -235,8 +280,8 @@ class ContestApiService {
     return response.data.map((problem) => toProblemOverview(problem, contestId));
   }
 
-  async getProblemById(contestId: string, problemId: string): Promise<Problem> {
-    const response = await this.axiosInstance.get<ProblemDetailsResponse>(`/contests/${contestId}/problems/${problemId}`);
+  async getProblemById(contestId: string, problemId: string, signal?: AbortSignal): Promise<Problem> {
+    const response = await this.axiosInstance.get<ProblemDetailsResponse>(`/contests/${contestId}/problems/${problemId}`, { signal });
     return toProblemDetails(response.data);
   }
 

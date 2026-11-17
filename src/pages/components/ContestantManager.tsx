@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Code2, RotateCcw } from "lucide-react";
 import { toast } from "react-toastify";
+import { useAuth } from '@/lib/AuthContext';
+import { auth } from '@/lib/firebase';
 import { MAX_TAB_SWITCHES } from "@/lib/contestStorage";
 
 export interface Contestant {
@@ -30,6 +32,7 @@ interface ContestantManagerProps {
 
 const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contestants, setContestants }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [updatingMap, setUpdatingMap] = useState<Record<string, boolean>>({});
@@ -44,8 +47,15 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
     };
   }, [contestId]);
 
+  React.useEffect(() => {
+    setResettingSessions({});
+    setResettingMap({});
+  }, [contestId, user?.uid]);
+
   const handleResetTabSwitches = async (id: string) => {
     const targetContestId = contestId;
+    const targetAdminId = user?.uid;
+    if (!targetAdminId) return;
     const current = contestants.find((c) => c.id === id);
     if (!current) return;
 
@@ -56,9 +66,9 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
     setResettingMap((prev) => ({ ...prev, [id]: true }));
 
     try {
-      const response = await adminApi.resetContestantTabSwitches(targetContestId, id);
+      const response = await adminApi.resetContestantTabSwitches(targetContestId, id, targetAdminId);
 
-      if (contestIdRef.current === targetContestId) {
+      if (contestIdRef.current === targetContestId && auth.currentUser?.uid === targetAdminId) {
         setContestants((prev) =>
           prev.map((c) =>
             c.id === id
@@ -75,11 +85,11 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
       }
     } catch (err: unknown) {
       console.error("Failed to reset tab switches:", err);
-      if (contestIdRef.current === targetContestId) {
+      if (contestIdRef.current === targetContestId && auth.currentUser?.uid === targetAdminId) {
         alert("Failed to reset tab switches. Please try again.");
       }
     } finally {
-      if (contestIdRef.current === targetContestId) {
+      if (contestIdRef.current === targetContestId && auth.currentUser?.uid === targetAdminId) {
         setResettingMap((prev) => {
           const next = { ...prev };
           delete next[id];
@@ -91,20 +101,22 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
 
   const handleResetSessions = async (id: string) => {
     const targetContestId = contestId;
+    const targetAdminId = user?.uid;
+    if (!targetAdminId) return;
     const current = contestants.find(contestant => contestant.id === id);
     if (!current || !window.confirm(`Reset browser sessions for ${current.name}? The next SEB session will be 1 of 3. Drafts, submissions, and browser flags are preserved.`)) return;
     setResettingSessions(previous => ({ ...previous, [id]: true }));
     try {
-      const response = await adminApi.resetBrowserSessions(targetContestId, id);
-      if (contestIdRef.current === targetContestId) {
+      const response = await adminApi.resetBrowserSessions(targetContestId, id, targetAdminId);
+      if (contestIdRef.current === targetContestId && auth.currentUser?.uid === targetAdminId) {
         setContestants(previous => previous.map(contestant => contestant.id === id
           ? { ...contestant, browserSessionCount: 0, browserSessionGeneration: response.generation, isBrowserSessionTerminated: false } : contestant));
         toast.success(`Browser sessions reset for ${current.name}.`);
       }
     } catch (error) {
-      if (contestIdRef.current === targetContestId) toast.error(error instanceof Error ? error.message : 'Unable to reset browser sessions.');
+      if (contestIdRef.current === targetContestId && auth.currentUser?.uid === targetAdminId) toast.error(error instanceof Error ? error.message : 'Unable to reset browser sessions.');
     } finally {
-      if (contestIdRef.current === targetContestId) setResettingSessions(previous => ({ ...previous, [id]: false }));
+      if (contestIdRef.current === targetContestId && auth.currentUser?.uid === targetAdminId) setResettingSessions(previous => ({ ...previous, [id]: false }));
     }
   };
 

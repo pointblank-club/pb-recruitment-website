@@ -10,7 +10,8 @@ import {
   writeLocalTabSwitchSnapshot,
   writePendingTabSwitchObservation,
 } from '@/lib/contestStorage';
-import { contestApi } from '@/services/api/contestApi';
+import { contestApi, type ContestSessionStatus } from '@/services/api/contestApi';
+import { useBrowserSession } from './useBrowserSession';
 import {
   type TabSwitchApiStatus,
   dropStalePendingEvents,
@@ -28,10 +29,12 @@ interface UseTabSwitchTrackerOptions {
   userId?: string;
   isSessionActive?: boolean;
   isCountingEnabled?: boolean;
+  isBrowserSessionEnabled?: boolean;
   maxSwitches?: number;
 }
 
 export interface UseTabSwitchTrackerResult {
+  browser: ReturnType<typeof useBrowserSession>;
   tabSwitchCount: number;
   maxSwitches: number;
   isWarningModalOpen: boolean;
@@ -67,6 +70,7 @@ export const useTabSwitchTracker = ({
   userId,
   isSessionActive = true,
   isCountingEnabled = true,
+  isBrowserSessionEnabled = false,
   maxSwitches = MAX_TAB_SWITCHES,
 }: UseTabSwitchTrackerOptions): UseTabSwitchTrackerResult => {
   const [tabSwitchCount, setTabSwitchCount] = useState<number>(0);
@@ -81,8 +85,11 @@ export const useTabSwitchTracker = ({
   );
 
   const activeScopeRef = useRef<TrackerScope | null>(null);
-  const isCountingEnabledRef = useRef<boolean>(isCountingEnabled);
-  isCountingEnabledRef.current = isCountingEnabled;
+  const [serverSession, setServerSession] = useState<{ scope: TrackerScope; status: ContestSessionStatus } | null>(null);
+  const snapshot = serverSession?.scope === activeScopeRef.current && serverSession?.scope.contestId === contestId && serverSession?.scope.userId === userId ? serverSession.status : undefined;
+  const browser = useBrowserSession(contestId, userId, isSessionActive && isBrowserSessionEnabled, snapshot);
+  const isCountingEnabledRef = useRef<boolean>(false);
+  isCountingEnabledRef.current = isCountingEnabled && browser.ready && !browser.locked;
 
   const isScopeActive = useCallback((scope: TrackerScope): boolean => (
     activeScopeRef.current === scope && !scope.controller.signal.aborted
@@ -164,6 +171,7 @@ export const useTabSwitchTracker = ({
       });
 
       if (!isScopeActive(scope) || outcome.aborted) return;
+      if (outcome.sessionStatus) setServerSession({ scope, status: outcome.sessionStatus });
 
       if (outcome.isSessionEnded && isScopeActive(scope)) {
         setEndedScope({ contestId: scope.contestId, userId: scope.userId });
@@ -530,9 +538,14 @@ export const useTabSwitchTracker = ({
     };
   }, [contestId, userId, isSessionActive, maxSwitches, flushQueue, isScopeActive, publishScopeState, reconcileScope, scheduleTimer]);
 
-  // If the candidate stays on the locked workspace view, periodically check whether an admin reset their session.
   useEffect(() => {
-    if (!isTerminated || !isSessionActive) return;
+    const scope = activeScopeRef.current;
+    if (isBrowserSessionEnabled && scope) void reconcileScope(scope);
+  }, [isBrowserSessionEnabled, reconcileScope]);
+
+  // Reuse status reads for browser locks/resets; cookie startup only runs when needed.
+  useEffect(() => {
+    if ((!isTerminated && !isBrowserSessionEnabled) || !isSessionActive) return;
     const scope = activeScopeRef.current;
     if (!scope || !isScopeActive(scope)) return;
 
@@ -540,10 +553,10 @@ export const useTabSwitchTracker = ({
       if (document.visibilityState === 'visible' && navigator.onLine !== false && isScopeActive(scope)) {
         void reconcileScope(scope);
       }
-    }, 15_000);
+    }, isTerminated || browser.locked ? 15_000 : 30_000);
 
     return () => clearInterval(interval);
-  }, [isTerminated, isSessionActive, isScopeActive, reconcileScope]);
+  }, [isTerminated, isSessionActive, isBrowserSessionEnabled, browser.locked, isScopeActive, reconcileScope]);
 
   // Lifecycle & visibility transition tracking: counts genuine visible->hidden->visible transitions,
   // stays exempt on real reloads/closes, and recovers immediately if a beforeunload prompt is dismissed.
@@ -710,6 +723,7 @@ export const useTabSwitchTracker = ({
   }, [isScopeActive, publishScopeState, reconcileScope]);
 
   return {
+    browser,
     tabSwitchCount,
     maxSwitches,
     isWarningModalOpen,
