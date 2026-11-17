@@ -29,6 +29,7 @@ const origin = 'http://localhost:5173';
           export const useTabSwitchTracker = options => {
             window.trackerOptions = options;
             return {
+              browser: { ready: true, locked: false },
               tabSwitchCount: window.terminated ? 5 : 0, pendingSyncCount: 0, maxSwitches: 5,
               isWarningModalOpen: false, isTerminated: window.terminated, isServerConfirmedTermination: true,
               apiStatus: 'supported', closeWarningModal() {}, openWarningModal() {}, notifyServerTermination() {},
