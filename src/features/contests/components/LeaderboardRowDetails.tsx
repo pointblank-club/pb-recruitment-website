@@ -8,7 +8,6 @@ interface LeaderboardRowDetailsProps {
   userId?: string;
   contestId?: string;
   isAdmin?: boolean;
-  problemTypesMap?: Record<string, string>;
 }
 
 export const LeaderboardRowDetails = ({
@@ -16,7 +15,6 @@ export const LeaderboardRowDetails = ({
   userId,
   contestId,
   isAdmin = false,
-  problemTypesMap,
 }: LeaderboardRowDetailsProps) => {
   const navigate = useNavigate();
   return (
@@ -25,7 +23,7 @@ export const LeaderboardRowDetails = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {problemScores.map((problemScore) => {
           const scorePercentage = (problemScore.score / problemScore.max_score) * 100;
-          const type = problemScore.type || problemTypesMap?.[problemScore.problem_id];
+          const type = problemScore.type;
           const isMcq = type === 'mcq';
 
           return (
@@ -92,7 +90,7 @@ export const LeaderboardRowDetails = ({
                           ? 'text-purple-400 hover:text-purple-300 border-purple-800 bg-purple-950/60 hover:border-purple-600'
                           : 'text-emerald-400 hover:text-emerald-300 border-emerald-800 bg-emerald-950/60 hover:border-emerald-600'
                       }`}
-                      title={isMcq ? 'View all submissions for this problem' : 'View all submissions for this problem'}
+                      title="View all submissions for this problem"
                     >
                       {isMcq ? <HelpCircle size={12} /> : <Code2 size={12} />}
                       {isMcq ? 'View Submission' : 'View Code'}

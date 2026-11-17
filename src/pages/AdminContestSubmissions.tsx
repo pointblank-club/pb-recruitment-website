@@ -73,8 +73,14 @@ export default function AdminContestSubmissions() {
   const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(false);
   const [detailsError, setDetailsError] = useState<string>("");
   const [metaError, setMetaError] = useState<string>("");
+  const [problemDetailsErrorMap, setProblemDetailsErrorMap] = useState<Record<string, string>>({});
   const [retryCount, setRetryCount] = useState<number>(0);
   const [metaRetryCount, setMetaRetryCount] = useState<number>(0);
+  const [problemDetailsRetryCount, setProblemDetailsRetryCount] = useState<number>(0);
+
+  const handleRetryProblemDetails = () => {
+    setProblemDetailsRetryCount((c) => c + 1);
+  };
 
   // Handlers to update URL search parameters
   const handleUserChange = (userId: string) => {
@@ -307,9 +313,12 @@ export default function AdminContestSubmissions() {
   );
 
   const displaySubmission = selectedSubmission || selectedSubmissionSummary;
-  const activeProblemId = selectedSubmission?.problem_id || selectedSubmissionSummary?.problem_id || "";
-  const isMcqSubmission = selectedSubmission?.type === "mcq" || selectedSubmissionSummary?.type === "mcq";
+  const activeProblemId = displaySubmission?.problem_id || "";
+  const isMcqSubmission = displaySubmission?.type === "mcq";
   const currentProblem = activeProblemId ? problemDetailsMap[activeProblemId] : null;
+  const currentProblemError = activeProblemId ? problemDetailsErrorMap[activeProblemId] : "";
+  const recordedChoices = displaySubmission?.option ?? [];
+  const hasRecordedChoices = recordedChoices.length > 0;
 
   useEffect(() => {
     if (!contestId || !activeProblemId || !isMcqSubmission) return;
@@ -317,6 +326,13 @@ export default function AdminContestSubmissions() {
 
     let cancelled = false;
     setIsLoadingProblemDetails(true);
+    setProblemDetailsErrorMap((prev) => {
+      if (!prev[activeProblemId]) return prev;
+      const copy = { ...prev };
+      delete copy[activeProblemId];
+      return copy;
+    });
+
     adminApi
       .getProblemById(contestId, activeProblemId)
       .then((prob) => {
@@ -327,13 +343,17 @@ export default function AdminContestSubmissions() {
       .catch((err) => {
         if (cancelled) return;
         console.error("Failed to load problem details:", err);
+        setProblemDetailsErrorMap((prev) => ({
+          ...prev,
+          [activeProblemId]: err instanceof Error ? err.message : "Failed to load question details.",
+        }));
         setIsLoadingProblemDetails(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [contestId, activeProblemId, isMcqSubmission, problemDetailsMap]);
+  }, [contestId, activeProblemId, isMcqSubmission, problemDetailsMap, problemDetailsRetryCount]);
 
   if (!contestId) {
     return (
@@ -677,6 +697,18 @@ export default function AdminContestSubmissions() {
                           >
                             {formatVerdict(displaySubmission.status)}
                           </span>
+                          {(displaySubmission.status === "pending" || displaySubmission.status === "processing") && (
+                            <button
+                              type="button"
+                              onClick={handleRetryDetails}
+                              disabled={isLoadingDetails}
+                              className="text-xs text-gray-300 hover:text-white flex items-center gap-1 bg-gray-900 hover:bg-gray-800 border border-gray-700 px-2 py-0.5 rounded disabled:opacity-50 transition-colors"
+                              title="Check for updated verdict"
+                            >
+                              <RefreshCw size={12} className={isLoadingDetails ? "animate-spin text-purple-400" : ""} />
+                              Check Status
+                            </button>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 mt-1.5">
                           <span>
@@ -754,27 +786,71 @@ export default function AdminContestSubmissions() {
                             <RefreshCw size={16} className="animate-spin text-purple-400" />
                             <span>Loading question details...</span>
                           </div>
+                        ) : currentProblemError ? (
+                          <div className="bg-gray-900 border border-red-800/60 rounded-lg p-4 text-sm text-gray-300 flex items-center justify-between gap-4">
+                            <div>
+                              <p className="text-red-400 font-semibold mb-1">Could not load question details</p>
+                              <p className="text-xs text-gray-400">{currentProblemError}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleRetryProblemDetails}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 transition-colors flex-shrink-0"
+                            >
+                              <RefreshCw size={12} />
+                              Retry
+                            </button>
+                          </div>
                         ) : currentProblem?.description ? (
                           <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-gray-200">
                             <QuestionDescription isAdmin={true}>
                               {currentProblem.description}
                             </QuestionDescription>
                           </div>
-                        ) : (
+                        ) : currentProblem ? (
                           <p className="text-sm text-gray-500 italic">No description provided for this question.</p>
-                        )}
+                        ) : null}
                       </div>
 
                       {/* Options and Selected Answer */}
                       <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
-                          Options & Participant Response
-                        </h4>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                            Options & Participant Response
+                          </h4>
+                          <div className="text-xs flex flex-wrap items-center gap-1.5">
+                            <span className="text-gray-400 font-medium">Recorded Choices:</span>
+                            {!hasRecordedChoices ? (
+                              <span className="text-gray-500 italic font-mono">None recorded</span>
+                            ) : (
+                              recordedChoices.map((choiceIdx) => {
+                                const hasOptions = Boolean(currentProblem?.options && currentProblem.options.length > 0);
+                                const isInvalid = !Number.isInteger(choiceIdx) || choiceIdx < 0 || (hasOptions && choiceIdx >= currentProblem!.options.length);
+                                const isValid = hasOptions && !isInvalid;
+                                return (
+                                  <span
+                                    key={choiceIdx}
+                                    className={`px-2 py-0.5 rounded font-mono font-medium ${
+                                      isInvalid
+                                        ? "bg-red-950/60 text-red-300 border border-red-800/60"
+                                        : "bg-purple-950/60 text-purple-300 border border-purple-800/60"
+                                    }`}
+                                  >
+                                    {isValid
+                                      ? `Option ${String.fromCharCode(65 + choiceIdx)} (Index ${choiceIdx})`
+                                      : isInvalid
+                                      ? `Index ${choiceIdx} (Invalid)`
+                                      : `Index ${choiceIdx}`}
+                                  </span>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
                         {currentProblem && currentProblem.options && currentProblem.options.length > 0 ? (
                           <div className="space-y-3">
                             {currentProblem.options.map((optionText, idx) => {
-                              const chosenOptions = selectedSubmission?.option ?? selectedSubmissionSummary?.option ?? [];
-                              const isChosen = chosenOptions.includes(idx);
+                              const isChosen = recordedChoices.includes(idx);
                               const isCorrect = (currentProblem.answer ?? []).includes(idx);
 
                               let borderClass = "border-gray-800 bg-gray-900/40 text-gray-300";
@@ -816,7 +892,7 @@ export default function AdminContestSubmissions() {
                                     {isCorrect && (
                                       <span className="px-2 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20 flex items-center gap-1">
                                         <Check size={12} />
-                                        Correct Answer
+                                        Current Answer Key
                                       </span>
                                     )}
                                   </div>
@@ -827,10 +903,10 @@ export default function AdminContestSubmissions() {
                         ) : (
                           <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-sm text-gray-300">
                             <p>
-                              Participant chose option:{" "}
+                              Participant chose:{" "}
                               <span className="font-mono font-bold text-white">
-                                {(selectedSubmission?.option ?? selectedSubmissionSummary?.option ?? []).length > 0
-                                  ? (selectedSubmission?.option ?? selectedSubmissionSummary?.option ?? []).map((i) => `Option ${String.fromCharCode(65 + i)} (Index ${i})`).join(", ")
+                                {hasRecordedChoices
+                                  ? recordedChoices.map((i) => `Index ${i}`).join(", ")
                                   : "None recorded"}
                               </span>
                             </p>
