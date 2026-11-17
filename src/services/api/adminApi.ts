@@ -87,6 +87,7 @@ export interface AdminSubmissionItem {
   created_at: number;
   runtime: number;
   memory: number;
+  option?: number[];
 }
 
 export interface AdminSubmissionDetails extends AdminSubmissionItem {
@@ -269,25 +270,10 @@ class AdminApiService {
       };
     }
 
-    if (!problem.options || problem.options.length < 2) {
-      throw new Error('This MCQ cannot be edited safely because its options were not returned.');
-    }
-    if (!problem.answer || problem.answer.length === 0) {
-      throw new Error('This MCQ cannot be edited safely because its correct answer was not returned.');
-    }
-    if (problem.answer.length !== 1) {
-      throw new Error('This editor cannot safely modify an MCQ with multiple correct answers.');
-    }
-    if (!Number.isInteger(problem.answer[0])
-      || problem.answer[0] < 0
-      || problem.answer[0] >= problem.options.length) {
-      throw new Error('This MCQ cannot be edited because its stored answer is invalid.');
-    }
-
     return {
       ...baseProblem,
-      answer: problem.answer,
-      options: problem.options,
+      answer: Array.isArray(problem.answer) ? problem.answer : [],
+      options: Array.isArray(problem.options) ? problem.options : [],
       testcases: [],
     };
   }
@@ -398,7 +384,7 @@ class AdminApiService {
 
   async getContestSubmissions(
     contestId: string,
-    params?: { user_id?: string; problem_id?: string; verdict?: string; page?: number; page_size?: number }
+    params?: { user_id?: string; problem_id?: string; verdict?: string; type?: string; page?: number; page_size?: number }
   ): Promise<{ submissions: AdminSubmissionItem[]; totalCount: number }> {
     const response = await this.axiosInstance.get<AdminSubmissionItem[]>(
       `/admin/contests/${contestId}/submissions`,

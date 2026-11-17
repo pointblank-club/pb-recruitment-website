@@ -29,7 +29,7 @@ export const ContestLeaderboardPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, user?.uid]);
+  }, [authLoading, user]);
 
   const {
     leaderboard,
