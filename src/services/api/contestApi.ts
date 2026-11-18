@@ -326,7 +326,7 @@ class ContestApiService {
     code: string,
     language: string,
     stdin: string,
-    contestId?: string,
+    contestId: string,
   ): Promise<RunCodeResponse> {
     if (MOCK_SUBMISSION_JUDGING) {
       await new Promise((r) => setTimeout(r, 600));
@@ -343,7 +343,7 @@ class ContestApiService {
     const response = await this.axiosInstance.post<RunCodeResponse>(
       '/submission/run',
       {
-        ...(contestId ? { contest_id: contestId } : {}),
+        contest_id: contestId,
         code,
         language,
         stdin,
