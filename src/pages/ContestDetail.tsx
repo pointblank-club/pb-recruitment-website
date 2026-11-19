@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -15,10 +15,11 @@ import { useAuth } from "@/lib/AuthContext";
 const ContestDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { loading: authLoading, user } = useAuth();
+  const { loading: authLoading } = useAuth();
 
-  const [isLoading, setIsLoading] = React.useState<boolean>(true);
-  const [contest, setContest] = React.useState<Contest | null | undefined>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [contest, setContest] = useState<Contest | null | undefined>(null);
+
   useEffect(() => {
     if (authLoading) return;
     let isMounted = true;
@@ -27,7 +28,9 @@ const ContestDetail: React.FC = () => {
         setIsLoading(true);
         setContest(null);
         const data = await contestApi.getContestById(id!);
-        if (isMounted) setContest(data ?? undefined);
+        if (isMounted) {
+          setContest(data ?? undefined);
+        }
       } catch (error) {
         if (!isMounted) return;
         console.error("Error fetching contest:", error);
@@ -42,7 +45,7 @@ const ContestDetail: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [id, authLoading, user]);
+  }, [id, authLoading]);
 
   if (contest === undefined) {
     return (
@@ -105,6 +108,7 @@ const ContestDetail: React.FC = () => {
           <ContestDetails contest={contest!} />
         </>
       )}
+
       <Footer />
     </div>
   );

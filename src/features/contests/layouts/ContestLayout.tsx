@@ -151,7 +151,7 @@ export const ContestLayout = () => {
             document.exitFullscreen().catch(() => {});
           }
           toast.info("This contest session has ended.");
-          navigate(`/contest/${contestId}`, { replace: true });
+          navigate(`/contest/${contestId}/feedback`, { replace: true });
         }
       }
     };
@@ -166,7 +166,7 @@ export const ContestLayout = () => {
         document.exitFullscreen().catch(() => {});
       }
       toast.info("This contest session has ended.");
-      navigate(`/contest/${contestId}`, { replace: true });
+      navigate(`/contest/${contestId}/feedback`, { replace: true });
     }
   }, [isSessionEnded, isLeaderboardPage, contest, contestId, navigate, clockReady]);
 
@@ -219,7 +219,7 @@ export const ContestLayout = () => {
         document.exitFullscreen().catch(() => {});
       }
       toast.info("This contest session has ended.");
-      navigate(`/contest/${contestId}`, { replace: true });
+      navigate(`/contest/${contestId}/feedback`, { replace: true });
       return;
     }
 
@@ -268,7 +268,7 @@ export const ContestLayout = () => {
             document.exitFullscreen().catch(() => {});
           }
           toast.info("Time is up! The contest has ended.");
-          navigate(`/contest/${contestId}`, { replace: true });
+          navigate(`/contest/${contestId}/feedback`, { replace: true });
           return true;
         }
 
@@ -319,12 +319,13 @@ export const ContestLayout = () => {
     setIsEndModalOpen(true);
   };
 
-  const handleLeaveContest = () => {
+  const handleLeaveContest = (withFeedback: boolean | unknown = false) => {
+    const shouldFeedback = withFeedback === true;
     hasExitedRef.current = true;
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
-    navigate(`/contest/${contestId}`, { replace: true });
+    navigate(shouldFeedback ? `/contest/${contestId}/feedback` : `/contest/${contestId}`, { replace: true });
   };
 
   const handleConfirmEndContest = async () => {
@@ -358,7 +359,7 @@ export const ContestLayout = () => {
       setContestSubmitted(targetContestId, targetUserId);
       setIsEndModalOpen(false);
       toast.info("Contest ended. Only your submitted solutions will be scored.");
-      handleLeaveContest();
+      handleLeaveContest(true);
     } catch (err: unknown) {
       if (controller.signal.aborted || !isCurrent()) return;
 
@@ -369,7 +370,7 @@ export const ContestLayout = () => {
           setContestSubmitted(targetContestId, targetUserId);
           setIsEndModalOpen(false);
           toast.info("Contest ended. Only your submitted solutions will be scored.");
-          handleLeaveContest();
+          handleLeaveContest(true);
           return;
         }
       } catch {
@@ -511,7 +512,7 @@ export const ContestLayout = () => {
             </button>
             <button
               type="button"
-              onClick={handleLeaveContest}
+              onClick={() => handleLeaveContest(true)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-semibold transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />

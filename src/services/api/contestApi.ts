@@ -717,6 +717,57 @@ class ContestApiService {
       };
     }
   }
+
+  async getFeedbackStatus(contestId: string, options?: { signal?: AbortSignal; timeoutMs?: number }): Promise<FeedbackStatusResponse> {
+    try {
+      const res = await this.axiosInstance.get<FeedbackStatusResponse>(
+        `/contests/${contestId}/feedback/status`,
+        {
+          signal: options?.signal,
+          timeout: options?.timeoutMs ?? 10_000,
+        }
+      );
+      return res.data;
+    } catch {
+      return { can_submit: false, has_submitted: false };
+    }
+  }
+
+  async submitFeedback(contestId: string, payload: SubmitFeedbackPayload, options?: { signal?: AbortSignal; timeoutMs?: number }): Promise<void> {
+    await this.axiosInstance.post(
+      `/contests/${contestId}/feedback`,
+      payload,
+      {
+        signal: options?.signal,
+        timeout: options?.timeoutMs ?? 15_000,
+      }
+    );
+  }
+}
+
+export interface SubmitFeedbackPayload {
+  platform_smoothness: number;
+  atmosphere_rating?: number;
+  difficulty_rating?: number;
+  responsiveness_rating?: number;
+  time_rating?: number;
+  thoughts_during_event?: string;
+  thoughts_other?: string;
+  final_feedback?: string;
+  logistics_clarity?: string;
+  logistics_punctuality?: string;
+  logistics_venue?: string;
+  best_thing?: string;
+  recommend_likelihood?: string;
+  convinced_reasons?: string[];
+  convinced_other?: string;
+  suggestions?: string;
+}
+
+export interface FeedbackStatusResponse {
+  can_submit: boolean;
+  has_submitted: boolean;
+  message?: string;
 }
 
 export interface TabSwitchRequestOptions {

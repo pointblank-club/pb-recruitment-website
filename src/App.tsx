@@ -5,6 +5,7 @@ import "./App.css";
 import TestPage from "./pages/test_page";
 import Home from "./pages/Home";
 import ContestDetail from "./pages/ContestDetail";
+import ContestFeedbackPage from "./pages/ContestFeedbackPage";
 import ContestList from "./pages/ContestList";
 import { ContestProblemsPage } from './features/contests/pages/ContestProblemsPage';
 import { ContestProblemPage } from './features/contests/pages/ContestProblemPage';
@@ -53,6 +54,14 @@ const App: React.FC = () => {
         <Route
           path="/contest/:id"
           element={<ContestDetail key={user?.uid || "guest"} />}
+        />
+        <Route
+          path="/contest/:id/feedback"
+          element={<ContestFeedbackPage key={user?.uid || "guest"} />}
+        />
+        <Route
+          path="/contests/:id/feedback"
+          element={<ContestFeedbackPage key={user?.uid || "guest"} />}
         />
         <Route
           path="/contests/:contestId"
