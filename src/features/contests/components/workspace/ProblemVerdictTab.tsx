@@ -2,7 +2,8 @@ import React from 'react';
 import { CheckCircle2, Clock3, XCircle } from 'lucide-react';
 import type { TestCaseResult } from '@/services/api/contestApi';
 import type { ActiveSubmission } from '../../hooks/useProblemSubmissions';
-import { formatVerdict, getVerdictClasses, PASSING_STATUSES, formatScore, isPartialCredit, hasFinalScore } from '../../submissionUtils';
+import { formatScore } from '@/lib/utils';
+import { formatVerdict, getVerdictClasses, PASSING_STATUSES, isPartialCredit, hasFinalScore } from '../../submissionUtils';
 
 interface ProblemVerdictTabProps {
   activeSubmission: ActiveSubmission;
@@ -47,16 +48,9 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
         <div className="flex items-center justify-between pb-2 border-b border-[#1e2636]">
           <h2 className="text-sm font-semibold text-white">Latest Result</h2>
           {activeSubmission.status && (
-            <div className="flex items-center gap-2">
-              {isPartial && (
-                <span className="px-2 py-0.5 rounded text-xs font-semibold border border-yellow-500/40 bg-yellow-500/10 text-yellow-300">
-                  Partial Credit
-                </span>
-              )}
-              <span className={`px-2.5 py-1 rounded text-xs font-semibold border ${getVerdictClasses(activeSubmission.status, score, activeSubmission.details?.type)}`}>
-                {formatVerdict(activeSubmission.status)}
-              </span>
-            </div>
+            <span className={`px-2.5 py-1 rounded text-xs font-semibold border ${getVerdictClasses(activeSubmission.status, score, activeSubmission.details?.type)}`}>
+              {formatVerdict(activeSubmission.status, score, activeSubmission.details?.type)}
+            </span>
           )}
         </div>
       )}
@@ -76,21 +70,14 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
         )}
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-semibold text-white">
+          <p className="text-sm font-semibold text-white">
               {activeSubmission.phase === 'submitting' && 'Sending submission…'}
               {activeSubmission.phase === 'received' && 'Submission received'}
               {activeSubmission.phase === 'polling' && 'Judging in progress…'}
-              {activeSubmission.phase === 'completed' && formatVerdict(activeSubmission.status)}
+              {activeSubmission.phase === 'completed' && formatVerdict(activeSubmission.status, score, activeSubmission.details?.type)}
               {activeSubmission.phase === 'timeout' && 'Verdict delayed'}
               {activeSubmission.phase === 'error' && (activeSubmission.id ? 'Could not verify verdict' : 'Submission failed')}
-            </p>
-            {compact && isPartial && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold border border-yellow-500/40 bg-yellow-500/10 text-yellow-300 uppercase">
-                Partial
-              </span>
-            )}
-          </div>
+          </p>
 
           {activeSubmission.message && (
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">

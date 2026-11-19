@@ -1,7 +1,8 @@
 import React from 'react';
 import { History, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { SubmissionDetailsResponse } from '@/services/api/contestApi';
-import { formatVerdict, getVerdictClasses, formatSubmittedAt, formatScore, isPartialCredit, hasFinalScore } from '../../submissionUtils';
+import { formatScore } from '@/lib/utils';
+import { formatVerdict, getVerdictClasses, formatSubmittedAt, hasFinalScore } from '../../submissionUtils';
 
 interface ProblemSubmissionsTabProps {
   history: SubmissionDetailsResponse[];
@@ -75,13 +76,11 @@ export const ProblemSubmissionsTab: React.FC<ProblemSubmissionsTabProps> = ({
             </thead>
             <tbody className="divide-y divide-[#1e2636]">
               {history.map((sub) => {
-                const isSubPartial = isPartialCredit(sub.status, sub.score, sub.type);
                 return (
                   <tr key={sub.id} className="hover:bg-[#141b29]/50 transition-colors">
                     <td className="py-2.5 px-3">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getVerdictClasses(sub.status, sub.score, sub.type)}`}>
-                        {formatVerdict(sub.status)}
-                        {isSubPartial ? ' (Partial)' : ''}
+                        {formatVerdict(sub.status, sub.score, sub.type)}
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-slate-300 font-mono">

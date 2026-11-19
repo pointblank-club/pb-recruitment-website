@@ -34,11 +34,11 @@ import {
   formatVerdict,
   getVerdictClasses,
   formatSubmittedAt,
-  formatScore,
   isPartialCredit,
   hasFinalScore,
   PASSING_STATUSES,
 } from "@/features/contests/submissionUtils";
+import { formatScore } from "@/lib/utils";
 import { QuestionDescription } from "@/features/contests/components/workspace/QuestionDescription";
 import { MathText } from "@/features/contests/components/workspace/MathText";
 import { toast } from "react-toastify";
@@ -603,18 +603,11 @@ export default function AdminContestSubmissions() {
                             </p>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          {isSubPartial && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold border border-yellow-500/40 bg-yellow-500/10 text-yellow-300">
-                              PARTIAL
-                            </span>
-                          )}
-                          <span
-                            className={`px-2 py-0.5 rounded text-[11px] font-semibold border whitespace-nowrap ${verdictBadgeClass}`}
-                          >
-                            {formatVerdict(sub.status)}
-                          </span>
-                        </div>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[11px] font-semibold border whitespace-nowrap ${verdictBadgeClass}`}
+                        >
+                          {formatVerdict(sub.status, sub.score, sub.type)}
+                        </span>
                       </div>
 
                       <div className="flex items-center justify-between text-xs text-gray-500 mt-2 pt-2 border-t border-gray-800/60 font-mono">

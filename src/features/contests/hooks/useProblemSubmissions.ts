@@ -159,7 +159,6 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
               test_cases_passed: response.test_cases_passed,
               total_test_cases: response.total_test_cases,
             };
-            detailsFailed = false;
           } catch (error) {
             detailsFailed = true;
             // Preserve supplied status scores directly, including zero.
@@ -271,7 +270,6 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
             const normalizedDetails: SubmissionDetailsResponse = {
               ...latest,
               ...details,
-              test_cases_passed: details.test_cases_passed,
             };
             setActiveSubmission((current) => (
               current.id === latest.id && current.phase === 'completed'

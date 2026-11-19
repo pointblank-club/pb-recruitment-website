@@ -140,8 +140,10 @@ assert.equal(formatScore(87.75), '87.75');
 assert.equal(formatScore(1.25), '1.25');
 assert.equal(formatScore(0), '0');
 assert.equal(formatScore(12.50000001), '12.50');
-assert.equal(formatScore(null), '0');
-assert.equal(formatScore(undefined), '0');
+assert.equal(formatScore(null), '—');
+assert.equal(formatScore(undefined), '—');
+assert.equal(formatScore(NaN), '—');
+assert.equal(formatScore(Infinity), '—');
 
 const submissionUtilsModule = { exports: {}, require: (name) => name.endsWith('utils') ? utilsModule.exports : {} };
 vm.runInNewContext(compile(read('src/features/contests/submissionUtils.ts')), submissionUtilsModule);

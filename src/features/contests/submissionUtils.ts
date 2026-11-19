@@ -1,7 +1,4 @@
 import type { SubmissionStatus } from '@/services/api/contestApi';
-import { formatScore } from '@/lib/utils';
-
-export { formatScore };
 
 export const VERDICT_LABELS: Record<SubmissionStatus, string> = {
   attempted: 'Attempted',
@@ -34,12 +31,13 @@ export const isPartialCredit = (
   type !== 'mcq' && hasFinalScore(status) && !PASSING_STATUSES.has(status!) && score !== undefined && score > 0
 );
 
-export const formatVerdict = (status?: string) => {
+export const formatVerdict = (status?: string, score?: number, type?: string) => {
   if (!status) return 'Unknown';
-  return (
+  const label = (
     VERDICT_LABELS[status as SubmissionStatus] ||
     status.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase())
   );
+  return isPartialCredit(status, score, type) ? `${label} · Partial` : label;
 };
 
 export const getVerdictClasses = (status?: string, score?: number, type?: string) => {
