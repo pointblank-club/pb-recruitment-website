@@ -17,17 +17,21 @@ const COPY: Record<Variant, { text: string; action: string }> = {
   change: { text: 'Connect a different Yandex account.', action: 'Connect another account' },
 };
 
+const AGREEMENT =
+  'I agree that Point Blank may submit my solutions to the backup contest on Yandex Contest from my Yandex account';
+
 export const YandexConnectCard = ({ contestId, variant, onCancel }: YandexConnectCardProps) => {
+  const [agreed, setAgreed] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { text, action } = COPY[variant];
+  const checkboxId = `yandex-consent-${variant}-${contestId}`;
 
   const handleConnect = async () => {
-    if (starting) return;
+    if (!agreed || starting) return;
     setStarting(true);
     setError(null);
     try {
-      // Clicking Connect is the candidate's go-ahead; the server records it with the connection.
       const authorizeUrl = await yandexApi.startConnection(true, contestId);
       rememberYandexReturn(contestId);
       window.location.assign(authorizeUrl);
@@ -44,6 +48,16 @@ export const YandexConnectCard = ({ contestId, variant, onCancel }: YandexConnec
       }`}
     >
       <p className="text-sm text-gray-200">{text}</p>
+      <label htmlFor={checkboxId} className="mt-3 flex items-start gap-3 cursor-pointer text-sm text-gray-300">
+        <input
+          id={checkboxId}
+          type="checkbox"
+          checked={agreed}
+          onChange={(event) => setAgreed(event.target.checked)}
+          className="mt-0.5 h-4 w-4 flex-shrink-0 accent-green-500"
+        />
+        <span>{AGREEMENT}</span>
+      </label>
       {error && (
         <p role="alert" className="mt-2 text-sm text-red-400">
           {error}
@@ -53,8 +67,10 @@ export const YandexConnectCard = ({ contestId, variant, onCancel }: YandexConnec
         <button
           type="button"
           onClick={handleConnect}
-          disabled={starting}
-          className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 font-semibold bg-white text-black hover:bg-gray-200 transition-colors disabled:opacity-60 disabled:cursor-wait"
+          disabled={!agreed || starting}
+          className={`flex-1 inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 font-semibold transition-colors ${
+            agreed && !starting ? 'bg-white text-black hover:bg-gray-200' : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+          }`}
         >
           {starting ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <ExternalLink className="w-4 h-4" aria-hidden />}
           {starting ? 'Opening Yandex…' : action}
