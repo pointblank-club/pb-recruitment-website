@@ -6,16 +6,11 @@ import { LeaderboardTable } from '../components/LeaderboardTable';
 import { adminApi } from '@/services/api/adminApi';
 import { useAuth } from '@/lib/AuthContext';
 
-const getLeaderboardFailureMessage = (error: string | null) => {
-  const message = error?.trim();
-  if (!message) return 'We couldn’t load the rankings right now. Please try again.';
-
-  const isMissingContest = /contest\s+(?:was\s+)?not\s+found/i.test(message);
-  const isAuthenticationError = /(?:invalid|expired|missing|malformed).{0,40}(?:id\s+)?token|(?:id\s+)?token.{0,40}(?:invalid|expired|missing|malformed)|unauthori[sz]ed|authentication required|sign\s?in/i.test(message);
-  return isMissingContest || isAuthenticationError
-    ? message
+// Missing-contest and auth messages are actionable; anything else gets generic retry guidance.
+const getLeaderboardFailureMessage = (error: string | null) =>
+  error && /not found|token|unauthori[sz]ed|authentication required/i.test(error)
+    ? error
     : 'We couldn’t load the rankings right now. Please try again.';
-};
 
 export const ContestLeaderboardPage = () => {
   const { contestId } = useParams<{ contestId: string }>();

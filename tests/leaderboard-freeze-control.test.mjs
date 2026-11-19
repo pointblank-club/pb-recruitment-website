@@ -217,7 +217,7 @@ const toastCalls = () => {
   assert.doesNotMatch(textOf(tree), /Loading/);
 }
 
-// Focus and returning to the visible tab revalidate even after a successful read.
+// Focus (which also fires on tab return) revalidates even after a successful read.
 {
   const reads = [];
   const adminApi = { getLeaderboardFreezeStatus: () => {
@@ -239,12 +239,6 @@ const toastCalls = () => {
   reads[1].resolve({ frozen: true });
   await flushPromises();
   assert.match(textOf(control.render()), /FROZEN/);
-
-  document.dispatch('visibilitychange');
-  assert.equal(reads.length, 3);
-  reads[2].resolve({ frozen: false });
-  await flushPromises();
-  assert.match(textOf(control.render()), /LIVE/);
 }
 
 // Reads already in flight are invalidated when a mutation starts.
@@ -387,4 +381,4 @@ const toastCalls = () => {
   })), /Contest Not Started/);
 }
 
-console.log('Leaderboard freeze control checks passed: stale reads, focus/visibility refresh, uncertain PUT reconciliation, scoped notifications, and actionable page errors.');
+console.log('Leaderboard freeze control checks passed: stale reads, focus refresh, uncertain PUT reconciliation, scoped notifications, and actionable page errors.');

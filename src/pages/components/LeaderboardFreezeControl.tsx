@@ -16,14 +16,9 @@ const LeaderboardFreezeControl = ({ contestId }: LeaderboardFreezeControlProps) 
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState("");
-  const scopeRef = useRef({ contestId, userId });
-  scopeRef.current = { contestId, userId };
   const statusRequestGenerationRef = useRef(0);
   const mutationGenerationRef = useRef(0);
   const mutationInFlightRef = useRef(false);
-
-  const isCurrentScope = (targetContestId: string, targetUserId: string | undefined) =>
-    scopeRef.current.contestId === targetContestId && scopeRef.current.userId === targetUserId;
 
   const getErrorMessage = (err: unknown, fallback: string) => {
     if (axios.isAxiosError<{ error?: string }>(err)) {
@@ -33,24 +28,23 @@ const LeaderboardFreezeControl = ({ contestId }: LeaderboardFreezeControlProps) 
   };
 
   const loadStatus = useCallback(async (options: { preserveError?: boolean; quiet?: boolean } = {}) => {
+    // ponytail: contest/account changes bump the generation in effect cleanup.
     const generation = ++statusRequestGenerationRef.current;
-    const targetContestId = contestId;
-    const targetUserId = userId;
     if (!options.quiet) setLoading(true);
     if (!options.preserveError) setError("");
     try {
-      const status = await adminApi.getLeaderboardFreezeStatus(targetContestId);
-      if (generation !== statusRequestGenerationRef.current || !isCurrentScope(targetContestId, targetUserId)) return;
+      const status = await adminApi.getLeaderboardFreezeStatus(contestId);
+      if (generation !== statusRequestGenerationRef.current) return;
       setIsFrozen(status.frozen);
     } catch (err: unknown) {
-      if (generation !== statusRequestGenerationRef.current || !isCurrentScope(targetContestId, targetUserId)) return;
+      if (generation !== statusRequestGenerationRef.current) return;
       setError(getErrorMessage(err, "Failed to load leaderboard status."));
     } finally {
-      if (generation === statusRequestGenerationRef.current && isCurrentScope(targetContestId, targetUserId)) {
+      if (generation === statusRequestGenerationRef.current) {
         setLoading(false);
       }
     }
-  }, [contestId, userId]);
+  }, [contestId]);
 
   useEffect(() => {
     setIsFrozen(null);
@@ -71,31 +65,20 @@ const LeaderboardFreezeControl = ({ contestId }: LeaderboardFreezeControlProps) 
   }, [contestId, loadStatus, userId]);
 
   useEffect(() => {
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible" && !mutationInFlightRef.current) {
-        void loadStatus({ quiet: true });
-      }
-    };
+    // ponytail: focus also fires on tab return; add visibilitychange if a browser misses it.
     const refreshOnFocus = () => {
       if (!mutationInFlightRef.current) void loadStatus({ quiet: true });
     };
 
     window.addEventListener("focus", refreshOnFocus);
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-    return () => {
-      window.removeEventListener("focus", refreshOnFocus);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-    };
+    return () => window.removeEventListener("focus", refreshOnFocus);
   }, [loadStatus]);
 
   const handleToggle = async () => {
     if (isFrozen === null || updating || mutationInFlightRef.current) return;
     const nextFrozen = !isFrozen;
     const operation = ++mutationGenerationRef.current;
-    const targetContestId = contestId;
-    const targetUserId = userId;
-    const isCurrentMutation = () => operation === mutationGenerationRef.current &&
-      isCurrentScope(targetContestId, targetUserId);
+    const isCurrentMutation = () => operation === mutationGenerationRef.current;
 
     // A read started before this mutation could report the old server state.
     statusRequestGenerationRef.current++;
@@ -103,7 +86,7 @@ const LeaderboardFreezeControl = ({ contestId }: LeaderboardFreezeControlProps) 
     setUpdating(true);
     setError("");
     try {
-      const status = await adminApi.setLeaderboardFrozen(targetContestId, nextFrozen);
+      const status = await adminApi.setLeaderboardFrozen(contestId, nextFrozen);
       if (!isCurrentMutation()) return;
       setIsFrozen(status.frozen);
       toast.success(status.frozen
