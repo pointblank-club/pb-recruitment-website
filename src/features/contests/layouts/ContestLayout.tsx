@@ -21,7 +21,6 @@ import {
   setContestSubmitted,
   getContestEntered,
   setContestEntered,
-  setPendingFeedback,
 } from '@/lib/contestStorage';
 import { contestApi } from '@/services/api/contestApi';
 
@@ -41,7 +40,7 @@ export const ContestLayout = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, userProfile, refreshProfile } = useAuth();
+  const { user, userProfile } = useAuth();
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [progress, setProgress] = useState(0);
   const [hasElapsedDeadline, setHasElapsedDeadline] = useState(false);
@@ -134,12 +133,6 @@ export const ContestLayout = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (user && !userProfile) {
-      refreshProfile().catch(() => {});
-    }
-  }, [user, userProfile, refreshProfile]);
-
   const handleEnteredChange = useCallback((entered: boolean) => {
     setHasEnteredContest(entered);
     if (entered && contestId && user?.uid) {
@@ -152,11 +145,8 @@ export const ContestLayout = () => {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
-    if (contestId && user?.uid) {
-      setPendingFeedback(contestId, user.uid);
-    }
     navigate(`/contest/${contestId}/feedback`, { replace: true });
-  }, [contestId, user?.uid, navigate]);
+  }, [contestId, navigate]);
 
   useEffect(() => {
     if (!contestId || !user?.uid) return;
@@ -446,7 +436,7 @@ export const ContestLayout = () => {
   );
 
   const participantName = (userProfile?.name || user?.displayName) || undefined;
-  const participantUsn = (userProfile?.usn || userProfile?.id) || undefined;
+  const participantUsn = userProfile?.id || undefined;
 
   if (isContestLoading || (contest && workspaceBlocked && admittedScopeRef.current !== workspaceScope)) {
     return (

@@ -34,30 +34,6 @@ export const clearContestSubmitted = (contestId: string, userId: string): void =
   }
 };
 
-export const getPendingFeedback = (userId: string): string | null => {
-  try {
-    return localStorage.getItem(`pending_feedback_${userId}`);
-  } catch {
-    return null;
-  }
-};
-
-export const setPendingFeedback = (contestId: string, userId: string): void => {
-  try {
-    localStorage.setItem(`pending_feedback_${userId}`, contestId);
-  } catch {
-    // Ignore storage failure
-  }
-};
-
-export const clearPendingFeedback = (userId: string): void => {
-  try {
-    localStorage.removeItem(`pending_feedback_${userId}`);
-  } catch {
-    // Ignore storage failure
-  }
-};
-
 export const getContestEntered = (contestId: string, userId: string): boolean => {
   try {
     return localStorage.getItem(`contest_entered_${contestId}_${userId}`) === 'true';

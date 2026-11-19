@@ -6,7 +6,6 @@ import { getBranchFromDepartment } from "@/constants";
 export interface UserProfile {
   name: string;
   id: string; 
-  usn?: string;
   email: string;
   mobile: string;
   joiningYear: number;
@@ -19,7 +18,6 @@ const mapApiToProfile = (apiData: any): UserProfile => {
   return {
     name: apiData.name || '',
     id: apiData.usn || '',
-    usn: apiData.usn || '',
     email: apiData.email || '',
     mobile: apiData.mobile_number || '',
     joiningYear,

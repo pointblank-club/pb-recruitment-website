@@ -6,30 +6,29 @@ import Footer from "./components/footer";
 import { contestApi, type SubmitFeedbackPayload } from "@/services/api/contestApi";
 import { Contest } from "@/models/contest";
 import { useAuth } from "@/lib/AuthContext";
-import { getContestSubmitted, clearPendingFeedback } from "@/lib/contestStorage";
 import { toast } from "react-toastify";
 import axios from "axios";
 
-const setFeedbackDone = (contestId: string) => {
-  try {
-    localStorage.setItem(`pb_contest_feedback_${contestId}`, "true");
-  } catch {}
-};
-
-const isFeedbackDoneLocally = (contestId: string): boolean => {
-  try {
-    return localStorage.getItem(`pb_contest_feedback_${contestId}`) === "true";
-  } catch {
-    return false;
-  }
-};
-
-const RatingButtons: React.FC<{ value: number | null; onChange: (v: number) => void }> = ({ value, onChange }) => (
-  <div className="grid grid-cols-5 gap-3 sm:gap-5">
+const RatingButtons: React.FC<{
+  id?: string;
+  name: string;
+  value: number | null;
+  onChange: (v: number) => void;
+}> = ({ id, name, value, onChange }) => (
+  <div
+    id={id}
+    tabIndex={-1}
+    role="radiogroup"
+    aria-label={name}
+    className="grid grid-cols-5 gap-3 sm:gap-5 focus:outline-none"
+  >
     {[1, 2, 3, 4, 5].map((val) => (
       <button
         key={val}
         type="button"
+        role="radio"
+        aria-checked={value === val}
+        aria-label={`${name}: ${val} of 5`}
         onClick={() => onChange(val)}
         className={`py-3.5 sm:py-4 rounded-xl border text-base sm:text-xl font-bold transition-all ${
           value === val
@@ -53,6 +52,7 @@ const ContestFeedbackPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Status checks
   const [hasSubmitted, setHasSubmitted] = useState<boolean>(false);
@@ -86,35 +86,41 @@ const ContestFeedbackPage: React.FC = () => {
 
   useEffect(() => {
     if (!id) return;
-    if (isFeedbackDoneLocally(id)) {
-      setHasSubmitted(true);
-    }
+    const currentUserId = user?.uid;
+    const currentContestId = id;
 
     let isMounted = true;
+    const isCurrent = () => isMounted && id === currentContestId && user?.uid === currentUserId;
 
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const contestData = await contestApi.getContestById(id);
-        if (isMounted) {
-          setContest(contestData);
-        }
+        setFetchError(null);
+        const contestData = await contestApi.getContestById(currentContestId);
+        if (!isCurrent()) return;
+        setContest(contestData);
 
         if (user) {
-          const status = await contestApi.getFeedbackStatus(id);
-          if (isMounted) {
-            const done = status.has_submitted || isFeedbackDoneLocally(id);
-            setHasSubmitted(done);
-            setCanSubmit(status.can_submit);
-            if (done && user?.uid) {
-              clearPendingFeedback(user.uid);
-            }
-          }
+          const status = await contestApi.getFeedbackStatus(currentContestId);
+          if (!isCurrent()) return;
+          setHasSubmitted(Boolean(status.has_submitted));
+          setCanSubmit(Boolean(status.can_submit));
         }
-      } catch (err) {
-        console.warn("Error loading contest or feedback status:", err);
+      } catch (err: unknown) {
+        if (!isCurrent()) return;
+        if (axios.isAxiosError(err)) {
+          if (err.response?.status === 404) {
+            setFetchError("Contest not found. It may have been removed.");
+          } else if (err.response?.status === 403) {
+            setFetchError("You do not have permission to view feedback for this contest.");
+          } else {
+            setFetchError("Failed to load contest feedback status. Please retry.");
+          }
+        } else {
+          setFetchError("Failed to load contest feedback status. Please retry.");
+        }
       } finally {
-        if (isMounted) {
+        if (isCurrent()) {
           setIsLoading(false);
         }
       }
@@ -129,24 +135,22 @@ const ContestFeedbackPage: React.FC = () => {
     };
   }, [id, user, authLoading]);
 
+  const isDirty = Boolean(
+    platformSmoothness || atmosphereRating || difficultyRating || responsivenessRating ||
+    timeRating || thoughtsDuringEvent.length > 0 || thoughtsOther || finalFeedback ||
+    logisticsClarity || logisticsPunctuality || logisticsVenue || bestThing ||
+    recommendLikelihood || convincedReasons.length > 0 || convincedOther || suggestions
+  );
+
   useEffect(() => {
-    if (hasSubmitted || isSuccess) return;
-    window.history.pushState(null, "", window.location.href);
-    const handlePopState = () => {
-      window.history.pushState(null, "", window.location.href);
-      toast.warning("Please submit your feedback before leaving.");
-    };
+    if (hasSubmitted || isSuccess || !canSubmit || !isDirty) return;
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
-    window.addEventListener("popstate", handlePopState);
     window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, [hasSubmitted, isSuccess]);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasSubmitted, isSuccess, canSubmit, isDirty]);
 
   const toggleThought = (thought: string) => {
     setThoughtsDuringEvent((prev) =>
@@ -164,41 +168,57 @@ const ContestFeedbackPage: React.FC = () => {
     e.preventDefault();
     if (!id) return;
 
-    const fail = (msg: string) => {
+    const fail = (msg: string, elementId?: string) => {
       setErrorMessage(msg);
+      if (elementId) {
+        const el = document.getElementById(elementId);
+        if (el) {
+          el.focus();
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          return false;
+        }
+      }
       window.scrollTo({ top: 0, behavior: "smooth" });
       return false;
     };
 
     // Validate ALL questions as compulsory
     if (!platformSmoothness || platformSmoothness < 1 || platformSmoothness > 5)
-      return fail("Question 1 is required: Please rate how smooth the platform was (1 to 5).");
+      return fail("Question 1 is required: Please rate how smooth the platform was (1 to 5).", "q1-platform-smoothness");
     if (!atmosphereRating)
-      return fail("Question 2 is required: Please rate the overall atmosphere of the recruitment test.");
+      return fail("Question 2 is required: Please rate the overall atmosphere of the recruitment test.", "q2-atmosphere");
     if (!difficultyRating)
-      return fail("Question 3 is required: Please rate the overall test difficulty.");
+      return fail("Question 3 is required: Please rate the overall test difficulty.", "q3-difficulty");
     if (!responsivenessRating)
-      return fail("Question 4 is required: Please rate the platform responsiveness.");
+      return fail("Question 4 is required: Please rate the platform responsiveness.", "q4-responsiveness");
     if (!timeRating)
-      return fail("Question 5 is required: Please rate whether the test time was enough.");
+      return fail("Question 5 is required: Please rate whether the test time was enough.", "q5-time");
     if (thoughtsDuringEvent.length === 0 && (!isThoughtsOtherSelected || !thoughtsOther.trim()))
-      return fail("Question 6 is required: Please select what your thoughts were during the event.");
+      return fail("Question 6 is required: Please select what your thoughts were during the event.", "q6-thoughts");
     if (isThoughtsOtherSelected && !thoughtsOther.trim())
-      return fail("Question 6 is required: Please specify your thoughts in the other text field.");
-    if (!logisticsClarity || !logisticsPunctuality || !logisticsVenue)
-      return fail("Question 7 is required: Please answer all three logistics questions.");
+      return fail("Question 6 is required: Please specify your thoughts in the other text field.", "q6-thoughts-other");
+    if (!logisticsClarity)
+      return fail("Question 7 is required: Please rate the clarity of recruitment instructions.", "q7-logistics-clarity");
+    if (!logisticsPunctuality)
+      return fail("Question 7 is required: Please rate the punctuality of rounds.", "q7-logistics-punctuality");
+    if (!logisticsVenue)
+      return fail("Question 7 is required: Please rate venue comfort and setup.", "q7-logistics-venue");
     if (!bestThing.trim())
-      return fail("Question 8 is required: Please tell us what Pointblank absolutely got right.");
+      return fail("Question 8 is required: Please tell us what Pointblank absolutely got right.", "q8-best-thing");
     if (!recommendLikelihood)
-      return fail("Question 9 is required: Please select how likely you are to recommend joining Pointblank.");
+      return fail("Question 9 is required: Please select how likely you are to recommend joining Pointblank.", "q9-recommend");
     if (convincedReasons.length === 0 && (!isConvincedOtherSelected || !convincedOther.trim()))
-      return fail("Question 10 is required: Please select what convinced you the most to consider joining.");
+      return fail("Question 10 is required: Please select what convinced you the most to consider joining.", "q10-convinced");
     if (isConvincedOtherSelected && !convincedOther.trim())
-      return fail("Question 10 is required: Please specify what convinced you in the other text field.");
+      return fail("Question 10 is required: Please specify what convinced you in the other text field.", "q10-convinced-other");
     if (!suggestions.trim())
-      return fail("Question 11 is required: Please provide suggestions for how we can make the next test better.");
+      return fail("Question 11 is required: Please provide suggestions for how we can make the next test better.", "q11-suggestions");
     if (!finalFeedback.trim())
-      return fail("Question 12 is required: Please share any final feedback about the test.");
+      return fail("Question 12 is required: Please share any final feedback about the test.", "q12-final-feedback");
+
+    if (!user) return;
+    const targetContestId = id;
+    const targetUserId = user.uid;
 
     setIsSubmitting(true);
     setErrorMessage(null);
@@ -231,21 +251,19 @@ const ContestFeedbackPage: React.FC = () => {
     };
 
     try {
-      await contestApi.submitFeedback(id, payload);
-      setFeedbackDone(id);
-      if (user?.uid) clearPendingFeedback(user.uid);
+      await contestApi.submitFeedback(targetContestId, payload);
+      if (id !== targetContestId || user?.uid !== targetUserId) return;
       setIsSuccess(true);
       setHasSubmitted(true);
       toast.success("Thank you! Your feedback has been recorded.");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {
+      if (id !== targetContestId || user?.uid !== targetUserId) return;
       let msg = "Failed to submit feedback. Please try again.";
       if (axios.isAxiosError(err)) {
         const data = err.response?.data as { error?: string; message?: string } | undefined;
         msg = data?.error || data?.message || err.message || msg;
         if (err.response?.status === 409) {
-          setFeedbackDone(id);
-          if (user?.uid) clearPendingFeedback(user.uid);
           setIsSuccess(true);
           setHasSubmitted(true);
           toast.info("You have already submitted feedback for this contest.");
@@ -258,19 +276,18 @@ const ContestFeedbackPage: React.FC = () => {
       setErrorMessage(msg);
       toast.error(msg);
     } finally {
-      setIsSubmitting(false);
+      if (id === targetContestId && user?.uid === targetUserId) {
+        setIsSubmitting(false);
+      }
     }
   };
 
-  const isSessionEndedLocally = Boolean(id && user?.uid && getContestSubmitted(id, user.uid));
-  const isContestPastDeadline = Boolean(contest && contest.end_time <= Date.now());
-  const isEligibleToSubmit = canSubmit || isSessionEndedLocally || isContestPastDeadline;
+  const isEligibleToSubmit = canSubmit && !hasSubmitted;
+  const isFormActive = Boolean(user && isEligibleToSubmit && !hasSubmitted && !isSuccess && !fetchError && !isLoading && !authLoading);
 
   return (
     <div className="bg-black text-white min-h-screen flex flex-col font-['DM_Sans']">
-      {hasSubmitted || isSuccess ? (
-        <Navbar />
-      ) : (
+      {isFormActive ? (
         <header className="border-b border-gray-800 bg-black/95 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
           <div className="flex items-center gap-3">
             <span className="font-anton text-xl tracking-wider text-green">POINT BLANK</span>
@@ -284,6 +301,8 @@ const ContestFeedbackPage: React.FC = () => {
             Feedback Required
           </span>
         </header>
+      ) : (
+        <Navbar />
       )}
 
       <main className="flex-1 max-w-5xl lg:max-w-6xl w-full mx-auto px-4 sm:px-8 py-12">
@@ -291,6 +310,34 @@ const ContestFeedbackPage: React.FC = () => {
           <div className="py-24 flex flex-col items-center justify-center text-center space-y-4">
             <Loader2 className="w-10 h-10 animate-spin text-green" />
             <p className="text-gray-300 text-base">Loading contest feedback...</p>
+          </div>
+        ) : fetchError ? (
+          <div className="bg-gradient-to-b from-white/[0.04] to-black border border-red-500/30 rounded-2xl p-8 sm:p-14 text-center max-w-2xl mx-auto shadow-2xl">
+            <div className="w-20 h-20 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto mb-6">
+              <AlertCircle size={46} />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-anton text-white mb-4 tracking-wide">
+              Unable to Load Feedback
+            </h1>
+            <p className="text-gray-300 text-base sm:text-lg leading-relaxed mb-8">
+              {fetchError}
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => navigate(0)}
+                className="w-full sm:w-auto px-7 py-3 rounded-xl bg-green text-black font-bold text-sm hover:bg-green-600 transition-colors shadow-lg shadow-green/20"
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/contests")}
+                className="w-full sm:w-auto px-7 py-3 rounded-xl border border-gray-700 bg-gray-800 text-white font-semibold text-sm hover:bg-gray-700 transition-colors"
+              >
+                View Contests
+              </button>
+            </div>
           </div>
         ) : isSuccess || hasSubmitted ? (
           <div className="bg-gradient-to-b from-white/[0.04] to-black border border-white/10 rounded-2xl p-8 sm:p-14 text-center max-w-2xl mx-auto shadow-2xl">
@@ -333,29 +380,29 @@ const ContestFeedbackPage: React.FC = () => {
             </p>
             <button
               type="button"
-              onClick={() => navigate(`/login?redirect=/contest/${id}/feedback`)}
+              onClick={() => navigate("/login", { state: { from: `/contest/${id}/feedback` } })}
               className="w-full sm:w-auto px-9 py-3.5 rounded-xl bg-green text-black font-bold text-base hover:bg-green-600 transition-colors shadow-lg shadow-green/20"
             >
               Sign In to Continue
             </button>
           </div>
-        ) : !isEligibleToSubmit && contest ? (
+        ) : !isEligibleToSubmit ? (
           <div className="bg-gradient-to-b from-white/[0.04] to-black border border-white/10 rounded-2xl p-8 sm:p-14 text-center max-w-2xl mx-auto shadow-2xl">
             <div className="w-20 h-20 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto mb-6">
               <AlertCircle size={46} />
             </div>
             <h1 className="text-2xl sm:text-3xl font-anton text-white mb-4 tracking-wide">
-              Contest Still In Progress
+              Feedback Not Available
             </h1>
             <p className="text-gray-300 text-base sm:text-lg leading-relaxed mb-8">
-              Feedback can only be submitted after your contest session has ended. Please finish your test before filling out this feedback form.
+              Feedback can only be submitted after your contest session has ended.
             </p>
             <button
               type="button"
-              onClick={() => navigate(`/contests/${id}/problems`)}
+              onClick={() => navigate(`/contest/${id}`)}
               className="w-full sm:w-auto px-9 py-3.5 rounded-xl bg-green text-black font-bold text-base hover:bg-green-600 transition-colors shadow-lg shadow-green/20"
             >
-              Return to Contest
+              Contest Overview
             </button>
           </div>
         ) : (
@@ -406,7 +453,7 @@ const ContestFeedbackPage: React.FC = () => {
                 </div>
 
                 <div className="pt-2 space-y-3">
-                  <RatingButtons value={platformSmoothness} onChange={setPlatformSmoothness} />
+                  <RatingButtons id="q1-platform-smoothness" name="Platform smoothness" value={platformSmoothness} onChange={setPlatformSmoothness} />
                   <div className="flex justify-between text-sm font-medium text-gray-400 px-1 pt-1">
                     <span>1 — Very Laggy</span>
                     <span>5 — Extremely Smooth</span>
@@ -431,7 +478,7 @@ const ContestFeedbackPage: React.FC = () => {
                 </div>
 
                 <div className="pt-2 space-y-3">
-                  <RatingButtons value={atmosphereRating} onChange={setAtmosphereRating} />
+                  <RatingButtons id="q2-atmosphere" name="Atmosphere rating" value={atmosphereRating} onChange={setAtmosphereRating} />
                   <div className="flex flex-col sm:flex-row justify-between text-sm sm:text-base font-medium text-gray-300 px-1 pt-1 gap-1">
                     <span>1 — Nap-Inducing (Needed coffee ASAP)</span>
                     <span className="sm:text-right">5 — Total Vibe (Felt like a party)</span>
@@ -456,7 +503,7 @@ const ContestFeedbackPage: React.FC = () => {
                 </div>
 
                 <div className="pt-2 space-y-3">
-                  <RatingButtons value={difficultyRating} onChange={setDifficultyRating} />
+                  <RatingButtons id="q3-difficulty" name="Difficulty rating" value={difficultyRating} onChange={setDifficultyRating} />
                 </div>
               </div>
 
@@ -477,7 +524,7 @@ const ContestFeedbackPage: React.FC = () => {
                 </div>
 
                 <div className="pt-2 space-y-3">
-                  <RatingButtons value={responsivenessRating} onChange={setResponsivenessRating} />
+                  <RatingButtons id="q4-responsiveness" name="Platform responsiveness" value={responsivenessRating} onChange={setResponsivenessRating} />
                 </div>
               </div>
 
@@ -498,7 +545,7 @@ const ContestFeedbackPage: React.FC = () => {
                 </div>
 
                 <div className="pt-2 space-y-3">
-                  <RatingButtons value={timeRating} onChange={setTimeRating} />
+                  <RatingButtons id="q5-time" name="Time rating" value={timeRating} onChange={setTimeRating} />
                 </div>
               </div>
 
@@ -514,7 +561,7 @@ const ContestFeedbackPage: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="pt-2 space-y-3">
+                <div id="q6-thoughts" tabIndex={-1} className="pt-2 space-y-3 focus:outline-none">
                   {[
                     "Cry but don't disturb others",
                     "Can I peep and find answers?",
@@ -556,6 +603,7 @@ const ContestFeedbackPage: React.FC = () => {
                       <span className="text-base sm:text-lg font-medium">Other</span>
                       {isThoughtsOtherSelected && (
                         <input
+                          id="q6-thoughts-other"
                           type="text"
                           placeholder="Your answer..."
                           value={thoughtsOther}
@@ -580,19 +628,22 @@ const ContestFeedbackPage: React.FC = () => {
 
                 <div className="pt-2 space-y-6">
                   {[
-                    { key: "clarity", title: "a. Clarity of Communication (Instructions):", val: logisticsClarity, set: setLogisticsClarity },
-                    { key: "punctuality", title: "b. Punctuality of the Event:", val: logisticsPunctuality, set: setLogisticsPunctuality },
-                    { key: "venue", title: "c. Comfort/Suitability of the Venue:", val: logisticsVenue, set: setLogisticsVenue },
+                    { key: "q7-logistics-clarity", title: "a. Clarity of Communication (Instructions):", val: logisticsClarity, set: setLogisticsClarity },
+                    { key: "q7-logistics-punctuality", title: "b. Punctuality of the Event:", val: logisticsPunctuality, set: setLogisticsPunctuality },
+                    { key: "q7-logistics-venue", title: "c. Comfort/Suitability of the Venue:", val: logisticsVenue, set: setLogisticsVenue },
                   ].map((row) => (
                     <div key={row.key} className="space-y-3 pt-2">
                       <p className="text-sm sm:text-base font-semibold text-gray-200">
                         {row.title}
                       </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div id={row.key} tabIndex={-1} role="radiogroup" aria-label={row.title} className="grid grid-cols-2 sm:grid-cols-4 gap-3 focus:outline-none">
                         {["Needs Major Work", "Could Be Better", "Just Right", "Excellent"].map((opt) => (
                           <button
                             key={opt}
                             type="button"
+                            role="radio"
+                            aria-checked={row.val === opt}
+                            aria-label={`${row.title}: ${opt}`}
                             onClick={() => row.set(opt)}
                             className={`py-3 px-3 rounded-xl border text-sm sm:text-base font-semibold transition-all text-center ${
                               row.val === opt
@@ -612,13 +663,14 @@ const ContestFeedbackPage: React.FC = () => {
               {/* Question 8: One thing Pointblank got right (Google Form Item 6) */}
               <div className="p-6 sm:p-8 rounded-2xl bg-white/[0.02] border border-green/30 space-y-6 shadow-lg">
                 <div className="space-y-2">
-                  <label className="text-lg sm:text-xl font-bold text-white flex items-center gap-1.5">
+                  <label htmlFor="q8-best-thing" className="text-lg sm:text-xl font-bold text-white flex items-center gap-1.5 cursor-pointer">
                     <span>8. What's the one thing Pointblank absolutely got right during the recruitment?</span>
                     <span className="text-red-500 font-bold">*</span>
                   </label>
                 </div>
                 <div className="pt-2">
                   <textarea
+                    id="q8-best-thing"
                     rows={4}
                     value={bestThing}
                     onChange={(e) => setBestThing(e.target.value)}
@@ -631,12 +683,12 @@ const ContestFeedbackPage: React.FC = () => {
               {/* Question 9: Recommend Likelihood (Google Form Item 7) */}
               <div className="p-6 sm:p-8 rounded-2xl bg-white/[0.02] border border-green/30 space-y-6 shadow-lg">
                 <div className="space-y-2">
-                  <label className="text-lg sm:text-xl font-bold text-white flex items-center gap-1.5">
+                  <label id="q9-recommend-label" className="text-lg sm:text-xl font-bold text-white flex items-center gap-1.5">
                     <span>9. How likely are you to recommend joining Pointblank to your first-year buddies?</span>
                     <span className="text-red-500 font-bold">*</span>
                   </label>
                 </div>
-                <div className="pt-2 space-y-3">
+                <div id="q9-recommend" tabIndex={-1} role="radiogroup" aria-labelledby="q9-recommend-label" className="pt-2 space-y-3 focus:outline-none">
                   {[
                     "Not at all likely (I want the secrets for myself!)",
                     "Maybe (If they promise to bring snacks)",
@@ -646,6 +698,9 @@ const ContestFeedbackPage: React.FC = () => {
                     <button
                       key={opt}
                       type="button"
+                      role="radio"
+                      aria-checked={recommendLikelihood === opt}
+                      aria-label={opt}
                       onClick={() => setRecommendLikelihood(opt)}
                       className={`w-full p-4 rounded-xl border text-left text-base sm:text-lg font-medium transition-all ${
                         recommendLikelihood === opt
@@ -670,7 +725,7 @@ const ContestFeedbackPage: React.FC = () => {
                     Select all that apply:
                   </p>
                 </div>
-                <div className="pt-2 space-y-3">
+                <div id="q10-convinced" tabIndex={-1} className="pt-2 space-y-3 focus:outline-none">
                   {[
                     "I heard it's where all the cool kids hang out",
                     "The enthusiasm of the team members",
@@ -711,6 +766,7 @@ const ContestFeedbackPage: React.FC = () => {
                       <span className="text-base sm:text-lg font-medium">Other</span>
                       {isConvincedOtherSelected && (
                         <input
+                          id="q10-convinced-other"
                           type="text"
                           placeholder="Your answer..."
                           value={convincedOther}
@@ -727,13 +783,14 @@ const ContestFeedbackPage: React.FC = () => {
               {/* Question 11: Suggestions (Google Form Item 9) */}
               <div className="p-6 sm:p-8 rounded-2xl bg-white/[0.02] border border-green/30 space-y-6 shadow-lg">
                 <div className="space-y-2">
-                  <label className="text-lg sm:text-xl font-bold text-white flex items-center gap-1.5">
+                  <label htmlFor="q11-suggestions" className="text-lg sm:text-xl font-bold text-white flex items-center gap-1.5 cursor-pointer">
                     <span>11. Any suggestions for how we can make the next recruitment test even better?</span>
                     <span className="text-red-500 font-bold">*</span>
                   </label>
                 </div>
                 <div className="pt-2">
                   <textarea
+                    id="q11-suggestions"
                     rows={4}
                     value={suggestions}
                     onChange={(e) => setSuggestions(e.target.value)}
@@ -746,13 +803,14 @@ const ContestFeedbackPage: React.FC = () => {
               {/* Question 12: Final Feedback (Google Form Item 4) */}
               <div className="p-6 sm:p-8 rounded-2xl bg-white/[0.02] border border-green/30 space-y-6 shadow-lg">
                 <div className="space-y-2">
-                  <label className="text-lg sm:text-xl font-bold text-white flex items-center gap-1.5">
+                  <label htmlFor="q12-final-feedback" className="text-lg sm:text-xl font-bold text-white flex items-center gap-1.5 cursor-pointer">
                     <span>12. Any final feedback about the test?</span>
                     <span className="text-red-500 font-bold">*</span>
                   </label>
                 </div>
                 <div className="pt-2">
                   <textarea
+                    id="q12-final-feedback"
                     rows={4}
                     value={finalFeedback}
                     onChange={(e) => setFinalFeedback(e.target.value)}
@@ -790,7 +848,7 @@ const ContestFeedbackPage: React.FC = () => {
         )}
       </main>
 
-      {(hasSubmitted || isSuccess) && <Footer />}
+      {!isFormActive && <Footer />}
     </div>
   );
 };
