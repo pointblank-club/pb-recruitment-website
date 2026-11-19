@@ -192,7 +192,7 @@ for (const failure of [error(429), error(500), error(502), error(503), error(504
   assert.equal(requests.length - requestStart, 3, 'transient failures stop after three attempts');
   assert.equal(new Set(requests.slice(requestStart).map(request => request.key)).size, 1);
 }
-for (const failure of [error(400), error(401), error(403), error(408), error(409), error(422), new axios.CanceledError('cancelled')]) {
+for (const failure of [error(400), error(401), error(403), error(408), error(409), error(422), error(428), new axios.CanceledError('cancelled')]) {
   outcome = failure;
   requestStart = requests.length;
   await assert.rejects(submit(`permanent-${requestStart}`));
@@ -220,11 +220,12 @@ for (const nextAccount of [null, user('another-user')]) {
 }
 duringRetryWait = undefined;
 auth.currentUser = user('synthetic-user');
-for (const action of [() => api.runCodeSolution('code', 'cpp', ''), () => api.submitMCQAnswer('contest', 'problem', 0), () => api.registerForContest('contest')]) {
+for (const action of [() => api.runCodeSolution('code', 'cpp', '', 'contest'), () => api.submitMCQAnswer('contest', 'problem', 0), () => api.registerForContest('contest')]) {
   requestStart = requests.length;
   await assert.rejects(action());
   assert.equal(requests.length - requestStart, 1, 'other POST classes never gain automatic retries');
 }
+assert.equal(requests.find(request => request.path === '/submission/run')?.payload.contest_id, 'contest', 'Run always supplies its required contest ID');
 const signupModule = { exports: {}, require(name) {
   if (name === './serverClock') return apiClock;
   if (name === 'axios') return { default: axiosWithAdapter };
