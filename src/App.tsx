@@ -20,6 +20,7 @@ import AdminContestProblems from "./pages/AdminContestProblems";
 import AdminContestContestants from "./pages/AdminContestContestants";
 import AdminContestPlagiarism from "./pages/AdminContestPlagiarism";
 import AdminContestSubmissions from "./pages/AdminContestSubmissions";
+import YandexCallback from "./pages/YandexCallback";
 import { AdminRoute } from "./components/AdminRoute";
 import { AuthenticatedRoute } from "./components/AuthenticatedRoute";
 import { useAuth } from "./lib/AuthContext";
@@ -66,6 +67,7 @@ const App: React.FC = () => {
         <Route path="/signup" element={<Signup />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/profile" element={<AuthenticatedRoute><Profile /></AuthenticatedRoute>} />
+        <Route path="/yandex/callback" element={<AuthenticatedRoute><YandexCallback /></AuthenticatedRoute>} />
         <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
         <Route path="/admin/contest/create" element={<AdminRoute><AddContest /></AdminRoute>} />
         <Route path="/admin/contest/:contestId/edit" element={<AdminRoute><AddContest /></AdminRoute>} />

@@ -21,6 +21,9 @@ import {
   isEffectivelyTerminated,
   reconcileContestSessionStatus,
 } from "@/features/contests/tabSwitchSync";
+import { useYandexConnection } from "@/features/yandex/useYandexConnection";
+import { YandexConnectCard, YandexConnectedNote } from "@/features/yandex/YandexConnectCard";
+import { needsYandexReconnect } from "@/lib/yandexConnect";
 
 interface ContestTimelineProps {
   contest: Contest;
@@ -55,6 +58,13 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
 
   const now = useServerTime();
   const clockReady = Number.isFinite(now);
+  const yandex = useYandexConnection(user?.uid);
+  const yandexConnection = yandex.connection;
+  const [isChangingYandex, setIsChangingYandex] = useState(false);
+  // The server enforces this too (428 yandex_not_connected); the button just says so first.
+  const yandexBlocksRegistration = Boolean(
+    yandexConnection?.enabled && yandexConnection.required && !yandexConnection.connected
+  );
 
   const contestStarted = now >= contest.start_time;
   const contestEnded = now > contest.end_time;
@@ -156,6 +166,11 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
             onRegistered?.(targetContestId);
             break;
 
+          case 428:
+            message = "Connect your Yandex account for the backup contest before registering.";
+            yandex.refresh();
+            break;
+
           case 500:
             message = "Server error. Please try again later.";
             break;
@@ -252,7 +267,29 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
   }, [contest.id, user?.uid]);
 
   const canStart = contestStarted && isRegistered && !isTerminatedByTabSwitch && !isSubmittedEarly;
-  const canRegister = !isRegistered && contest.isRegistrationOpen(now);
+  const canRegister = !isRegistered && contest.isRegistrationOpen(now) && !yandexBlocksRegistration;
+  const showYandex = Boolean(
+    user && yandexConnection?.enabled && clockReady && !contestEnded && !isSubmittedEarly &&
+    !isTerminatedByTabSwitch && (isRegistered || contest.isRegistrationOpen(now))
+  );
+
+  const yandexSection = !showYandex || !yandexConnection ? null : !yandexConnection.connected ? (
+    <YandexConnectCard contestId={contest.id} connection={yandexConnection} variant="connect" />
+  ) : needsYandexReconnect(yandexConnection) ? (
+    <YandexConnectCard contestId={contest.id} connection={yandexConnection} variant="reconnect" />
+  ) : isChangingYandex && !contestStarted ? (
+    <YandexConnectCard
+      contestId={contest.id}
+      connection={yandexConnection}
+      variant="change"
+      onCancel={() => setIsChangingYandex(false)}
+    />
+  ) : (
+    <YandexConnectedNote
+      connection={yandexConnection}
+      onChange={contestStarted ? undefined : () => setIsChangingYandex(true)}
+    />
+  );
 
   const handleStartContest = () => {
     navigate(`/contests/${contest.id}/problems`);
@@ -359,6 +396,15 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
                 ? "Register now and secure your spot in this exciting contest!"
                 : "Registration for this contest has closed."}
             </p>
+            {yandexSection}
+            {user && !yandexConnection && yandex.error && !contestEnded && (
+              <p role="status" className="text-xs text-yellow-400 mb-4">
+                {yandex.error}{" "}
+                <button type="button" onClick={yandex.refresh} className="underline underline-offset-2 hover:text-yellow-200">
+                  Retry
+                </button>
+              </p>
+            )}
             {contestEnded ? (
               <div className="flex flex-col sm:flex-row gap-3">
                 <motion.button
@@ -428,6 +474,8 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
                   ? "Already Registered"
                   : canRegister
                   ? "Register"
+                  : yandexBlocksRegistration && contest.isRegistrationOpen(now)
+                  ? "Connect Yandex to Register"
                   : "Registration Closed"
                 }
                 {(canStart || canRegister) && <ChevronRight size={20} />}

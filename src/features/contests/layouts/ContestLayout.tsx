@@ -6,7 +6,7 @@ import { Navigate, Outlet, useParams, useNavigate, useLocation } from 'react-rou
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { ShieldAlert, LogOut } from 'lucide-react';
+import { ShieldAlert, LogOut, AlertTriangle } from 'lucide-react';
 import { ContestHeader } from '../components/ContestHeader';
 import { ContestParticipationGate } from '../components/ContestParticipationGate';
 import { EndContestModal } from '../components/EndContestModal';
@@ -23,6 +23,8 @@ import {
   setContestEntered,
 } from '@/lib/contestStorage';
 import { contestApi } from '@/services/api/contestApi';
+import { useYandexConnection } from '@/features/yandex/useYandexConnection';
+import { needsYandexReconnect } from '@/lib/yandexConnect';
 
 export interface ContestOutletContext {
   isLive: boolean;
@@ -117,6 +119,13 @@ export const ContestLayout = () => {
   );
   const isEventRestrictionsActive = isTrackingActive && !isTabSwitchTerminated;
   useContestEventBlocker({ enabled: isEventRestrictionsActive });
+  // Re-checked every few minutes, so a token Yandex rejects mid-contest is noticed.
+  const { connection: yandexConnection } = useYandexConnection(user?.uid, {
+    enabled: isEventRestrictionsActive,
+    pollMs: 5 * 60_000,
+  });
+  const showYandexNotice = isEventRestrictionsActive && Boolean(yandexConnection?.enabled) &&
+    (!yandexConnection?.connected || needsYandexReconnect(yandexConnection));
 
   useEffect(() => {
     endAbortRef.current?.abort();
@@ -479,6 +488,28 @@ export const ContestLayout = () => {
         pendingTabSwitchCount={isTrackingActive && tabSwitchApiStatus !== 'unsupported' ? pendingSyncCount : 0}
         maxTabSwitches={maxSwitches}
       />
+
+      {showYandexNotice && (
+        <div
+          role="status"
+          className="bg-yellow-950/70 border-b border-yellow-800/70 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs font-['DM_Sans']"
+        >
+          <div className="flex items-center gap-2 text-yellow-100">
+            <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+            <span>
+              <strong>{yandexConnection?.connected ? 'Yandex backup needs reconnecting.' : 'Yandex backup not connected.'}</strong>{' '}
+              Your work here is safe. Connect from the contest page so your solutions are also copied to the backup contest.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleLeaveContest}
+            className="px-2.5 py-1 rounded bg-yellow-900/60 hover:bg-yellow-800/70 border border-yellow-700 text-yellow-100 font-medium transition-colors"
+          >
+            Go to contest page
+          </button>
+        </div>
+      )}
 
       {isTrackingActive && isTabSwitchTerminated && (
         <div
