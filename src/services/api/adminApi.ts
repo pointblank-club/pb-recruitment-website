@@ -182,6 +182,10 @@ export interface ResetTabSwitchesResponse {
   generation: number;
 }
 
+export interface LeaderboardFreezeStatus {
+  frozen: boolean;
+}
+
 class AdminApiService {
   private axiosInstance: AxiosInstance;
   constructor() {
@@ -370,6 +374,21 @@ class AdminApiService {
       disqualified: status === "Banned",
     };
     await this.axiosInstance.put(`/admin/${contestId}/leaderboard/${userId}`, payload);
+  }
+
+  async getLeaderboardFreezeStatus(contestId: string): Promise<LeaderboardFreezeStatus> {
+    const response = await this.axiosInstance.get<LeaderboardFreezeStatus>(
+      `/admin/contest/${contestId}/leaderboard-freeze`,
+    );
+    return response.data;
+  }
+
+  async setLeaderboardFrozen(contestId: string, frozen: boolean): Promise<LeaderboardFreezeStatus> {
+    const response = await this.axiosInstance.put<LeaderboardFreezeStatus>(
+      `/admin/contest/${contestId}/leaderboard-freeze`,
+      { frozen },
+    );
+    return response.data;
   }
 
   async consolidateContest(

@@ -185,7 +185,7 @@ const ContestantManager: React.FC<ContestantManagerProps> = ({ contestId, contes
   return (
     <div className="space-y-6">
       <div className="bg-gray-800/60 border border-gray-700/80 rounded-lg p-3 text-xs text-gray-400">
-        💡 <span className="font-semibold text-gray-300">Note:</span> If this contest has already been consolidated, updating a contestant's moderation status requires re-running contest consolidation to recalculate and freeze the updated ranking snapshot.
+        💡 <span className="font-semibold text-gray-300">Note:</span> If this contest has already been consolidated, updating a contestant's moderation status requires re-running contest consolidation to recalculate the official ranks.
       </div>
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
