@@ -6,7 +6,7 @@ import Footer from "./components/footer";
 import { contestApi, type SubmitFeedbackPayload } from "@/services/api/contestApi";
 import { Contest } from "@/models/contest";
 import { useAuth } from "@/lib/AuthContext";
-import { getContestSubmitted } from "@/lib/contestStorage";
+import { getContestSubmitted, clearPendingFeedback } from "@/lib/contestStorage";
 import { toast } from "react-toastify";
 import axios from "axios";
 
@@ -103,8 +103,12 @@ const ContestFeedbackPage: React.FC = () => {
         if (user) {
           const status = await contestApi.getFeedbackStatus(id);
           if (isMounted) {
-            setHasSubmitted(status.has_submitted || isFeedbackDoneLocally(id));
+            const done = status.has_submitted || isFeedbackDoneLocally(id);
+            setHasSubmitted(done);
             setCanSubmit(status.can_submit);
+            if (done && user?.uid) {
+              clearPendingFeedback(user.uid);
+            }
           }
         }
       } catch (err) {
@@ -124,6 +128,25 @@ const ContestFeedbackPage: React.FC = () => {
       isMounted = false;
     };
   }, [id, user, authLoading]);
+
+  useEffect(() => {
+    if (hasSubmitted || isSuccess) return;
+    window.history.pushState(null, "", window.location.href);
+    const handlePopState = () => {
+      window.history.pushState(null, "", window.location.href);
+      toast.warning("Please submit your feedback before leaving.");
+    };
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [hasSubmitted, isSuccess]);
 
   const toggleThought = (thought: string) => {
     setThoughtsDuringEvent((prev) =>
@@ -210,6 +233,7 @@ const ContestFeedbackPage: React.FC = () => {
     try {
       await contestApi.submitFeedback(id, payload);
       setFeedbackDone(id);
+      if (user?.uid) clearPendingFeedback(user.uid);
       setIsSuccess(true);
       setHasSubmitted(true);
       toast.success("Thank you! Your feedback has been recorded.");
@@ -221,6 +245,7 @@ const ContestFeedbackPage: React.FC = () => {
         msg = data?.error || data?.message || err.message || msg;
         if (err.response?.status === 409) {
           setFeedbackDone(id);
+          if (user?.uid) clearPendingFeedback(user.uid);
           setIsSuccess(true);
           setHasSubmitted(true);
           toast.info("You have already submitted feedback for this contest.");
@@ -243,7 +268,23 @@ const ContestFeedbackPage: React.FC = () => {
 
   return (
     <div className="bg-black text-white min-h-screen flex flex-col font-['DM_Sans']">
-      <Navbar />
+      {hasSubmitted || isSuccess ? (
+        <Navbar />
+      ) : (
+        <header className="border-b border-gray-800 bg-black/95 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+          <div className="flex items-center gap-3">
+            <span className="font-anton text-xl tracking-wider text-green">POINT BLANK</span>
+            {contest?.name && (
+              <span className="text-sm text-gray-400 font-['DM_Sans'] hidden sm:inline">
+                · {contest.name}
+              </span>
+            )}
+          </div>
+          <span className="text-xs font-mono font-medium uppercase bg-red-950/80 border border-red-700/60 text-red-300 px-3 py-1 rounded-full">
+            Feedback Required
+          </span>
+        </header>
+      )}
 
       <main className="flex-1 max-w-5xl lg:max-w-6xl w-full mx-auto px-4 sm:px-8 py-12">
         {isLoading || authLoading ? (
@@ -262,13 +303,22 @@ const ContestFeedbackPage: React.FC = () => {
             <p className="text-gray-300 text-base sm:text-lg leading-relaxed mb-8">
               Thank you for sharing your thoughts with Pointblank. Your feedback directly helps us improve the recruitment round experience for future batches!
             </p>
-            <button
-              type="button"
-              onClick={() => navigate(`/contest/${id}`)}
-              className="w-full sm:w-auto px-9 py-3.5 rounded-xl bg-green text-black font-bold text-base hover:bg-green-600 transition-colors shadow-lg shadow-green/20"
-            >
-              Continue to Contest Overview
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => navigate("/")}
+                className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-green text-black font-bold text-base hover:bg-green-600 transition-colors shadow-lg shadow-green/20"
+              >
+                Return to Home
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/contest/${id}`)}
+                className="w-full sm:w-auto px-7 py-3.5 rounded-xl border border-gray-700 bg-gray-800 text-white font-semibold text-base hover:bg-gray-700 transition-colors"
+              >
+                Contest Overview
+              </button>
+            </div>
           </div>
         ) : !user ? (
           <div className="bg-gradient-to-b from-white/[0.04] to-black border border-white/10 rounded-2xl p-8 sm:p-14 text-center max-w-2xl mx-auto shadow-2xl">
@@ -740,7 +790,7 @@ const ContestFeedbackPage: React.FC = () => {
         )}
       </main>
 
-      <Footer />
+      {(hasSubmitted || isSuccess) && <Footer />}
     </div>
   );
 };

@@ -21,6 +21,7 @@ import {
   setContestSubmitted,
   getContestEntered,
   setContestEntered,
+  setPendingFeedback,
 } from '@/lib/contestStorage';
 import { contestApi } from '@/services/api/contestApi';
 
@@ -40,7 +41,7 @@ export const ContestLayout = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, userProfile, refreshProfile } = useAuth();
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [progress, setProgress] = useState(0);
   const [hasElapsedDeadline, setHasElapsedDeadline] = useState(false);
@@ -133,6 +134,12 @@ export const ContestLayout = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (user && !userProfile) {
+      refreshProfile().catch(() => {});
+    }
+  }, [user, userProfile, refreshProfile]);
+
   const handleEnteredChange = useCallback((entered: boolean) => {
     setHasEnteredContest(entered);
     if (entered && contestId && user?.uid) {
@@ -140,35 +147,38 @@ export const ContestLayout = () => {
     }
   }, [contestId, user?.uid]);
 
+  const redirectToFeedback = useCallback(() => {
+    hasExitedRef.current = true;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    if (contestId && user?.uid) {
+      setPendingFeedback(contestId, user.uid);
+    }
+    navigate(`/contest/${contestId}/feedback`, { replace: true });
+  }, [contestId, user?.uid, navigate]);
+
   useEffect(() => {
     if (!contestId || !user?.uid) return;
     const key = `contest_submitted_${contestId}_${user.uid}`;
     const handleStorage = (event: StorageEvent) => {
       if (event.key === null || event.key === key) {
         if (getContestSubmitted(contestId, user.uid) && !hasExitedRef.current && !isLeaderboardPage) {
-          hasExitedRef.current = true;
-          if (document.fullscreenElement) {
-            document.exitFullscreen().catch(() => {});
-          }
           toast.info("This contest session has ended.");
-          navigate(`/contest/${contestId}/feedback`, { replace: true });
+          redirectToFeedback();
         }
       }
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, [contestId, user?.uid, isLeaderboardPage, navigate]);
+  }, [contestId, user?.uid, isLeaderboardPage, redirectToFeedback]);
 
   useEffect(() => {
     if (isSessionEnded && !hasExitedRef.current && !isLeaderboardPage && contest && getServerTime() < contest.end_time) {
-      hasExitedRef.current = true;
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
       toast.info("This contest session has ended.");
-      navigate(`/contest/${contestId}/feedback`, { replace: true });
+      redirectToFeedback();
     }
-  }, [isSessionEnded, isLeaderboardPage, contest, contestId, navigate, clockReady]);
+  }, [isSessionEnded, isLeaderboardPage, contest, redirectToFeedback, clockReady]);
 
   useEffect(() => {
     if (isTabSwitchTerminated && document.fullscreenElement) {
@@ -214,12 +224,8 @@ export const ContestLayout = () => {
     );
 
     if (isSubmittedEarly && !hasExitedRef.current && !isLeaderboardPage && getServerTime() < contest.end_time) {
-      hasExitedRef.current = true;
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
       toast.info("This contest session has ended.");
-      navigate(`/contest/${contestId}/feedback`, { replace: true });
+      redirectToFeedback();
       return;
     }
 
@@ -263,12 +269,8 @@ export const ContestLayout = () => {
           // The user may have left (e.g. to the leaderboard) while the refetch was in flight
           if (cancelled) return true;
 
-          hasExitedRef.current = true;
-          if (document.fullscreenElement) {
-            document.exitFullscreen().catch(() => {});
-          }
           toast.info("Time is up! The contest has ended.");
-          navigate(`/contest/${contestId}/feedback`, { replace: true });
+          redirectToFeedback();
           return true;
         }
 
@@ -312,7 +314,7 @@ export const ContestLayout = () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [contest, contestId, isLeaderboardPage, navigate, refetch, user?.uid, clockReady]);
+  }, [contest, contestId, isLeaderboardPage, navigate, refetch, user?.uid, clockReady, redirectToFeedback]);
 
   const handleOpenEndModal = () => {
     setEndContestError(null);
@@ -320,12 +322,15 @@ export const ContestLayout = () => {
   };
 
   const handleLeaveContest = (withFeedback: boolean | unknown = false) => {
-    const shouldFeedback = withFeedback === true;
+    if (withFeedback === true) {
+      redirectToFeedback();
+      return;
+    }
     hasExitedRef.current = true;
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
-    navigate(shouldFeedback ? `/contest/${contestId}/feedback` : `/contest/${contestId}`, { replace: true });
+    navigate(`/contest/${contestId}`, { replace: true });
   };
 
   const handleConfirmEndContest = async () => {
@@ -440,6 +445,9 @@ export const ContestLayout = () => {
     </div>
   );
 
+  const participantName = (userProfile?.name || user?.displayName) || undefined;
+  const participantUsn = (userProfile?.usn || userProfile?.id) || undefined;
+
   if (isContestLoading || (contest && workspaceBlocked && admittedScopeRef.current !== workspaceScope)) {
     return (
       <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
@@ -448,6 +456,8 @@ export const ContestLayout = () => {
           progress={0}
           contestName="Loading..."
           contestId={contestId}
+          participantName={participantName}
+          participantUsn={participantUsn}
         />
         <div className="flex-1 flex items-center justify-center">
           {!clockReady ? clockNotice : !browser.ready || browser.locked ? browserNotice : <div className="text-gray-400">Loading contest...</div>}
@@ -479,6 +489,8 @@ export const ContestLayout = () => {
         tabSwitchCount={isTrackingActive && tabSwitchApiStatus !== 'unsupported' ? tabSwitchCount : undefined}
         pendingTabSwitchCount={isTrackingActive && tabSwitchApiStatus !== 'unsupported' ? pendingSyncCount : 0}
         maxTabSwitches={maxSwitches}
+        participantName={participantName}
+        participantUsn={participantUsn}
       />
 
       {isTrackingActive && isTabSwitchTerminated && (
