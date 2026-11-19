@@ -163,6 +163,60 @@ const toastCalls = () => {
   assert.match(textOf(tree), /FROZEN/);
 }
 
+// A quiet focus refresh settles the initial loading state when it supersedes the first GET.
+{
+  const reads = [];
+  const adminApi = { getLeaderboardFreezeStatus: () => {
+    const request = deferred();
+    reads.push(request);
+    return request.promise;
+  } };
+  const window = makeEvents();
+  const harness = createHookHarness();
+  const control = makeControl({ adminApi, toast: toastCalls(), harness, window, document: makeEvents(), auth: { user: { uid: 'admin-a' } } });
+  let tree = control.render();
+  assert.match(textOf(tree), /Loading/);
+
+  window.dispatch('focus');
+  assert.equal(reads.length, 2);
+  reads[1].resolve({ frozen: true });
+  await flushPromises();
+  tree = control.render();
+  assert.match(textOf(tree), /Unfreeze rankings/);
+  assert.doesNotMatch(textOf(tree), /Loading/);
+
+  reads[0].resolve({ frozen: false });
+  await flushPromises();
+  assert.match(textOf(control.render()), /FROZEN/);
+}
+
+// A failed quiet refresh also clears loading and leaves Retry available while the initial GET is stale.
+{
+  const reads = [];
+  const adminApi = { getLeaderboardFreezeStatus: () => {
+    const request = deferred();
+    reads.push(request);
+    return request.promise;
+  } };
+  const window = makeEvents();
+  const harness = createHookHarness();
+  const control = makeControl({ adminApi, toast: toastCalls(), harness, window, document: makeEvents(), auth: { user: { uid: 'admin-a' } } });
+  control.render();
+  window.dispatch('focus');
+  assert.equal(reads.length, 2);
+  reads[1].reject(Object.assign(new Error('Status refresh failed'), { isAxiosError: true }));
+  await flushPromises();
+  let tree = control.render();
+  assert.match(textOf(tree), /Retry/);
+  assert.doesNotMatch(textOf(tree), /Loading/);
+
+  reads[0].resolve({ frozen: true });
+  await flushPromises();
+  tree = control.render();
+  assert.match(textOf(tree), /Retry/);
+  assert.doesNotMatch(textOf(tree), /Loading/);
+}
+
 // Focus and returning to the visible tab revalidate even after a successful read.
 {
   const reads = [];

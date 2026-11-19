@@ -46,7 +46,7 @@ const LeaderboardFreezeControl = ({ contestId }: LeaderboardFreezeControlProps) 
       if (generation !== statusRequestGenerationRef.current || !isCurrentScope(targetContestId, targetUserId)) return;
       setError(getErrorMessage(err, "Failed to load leaderboard status."));
     } finally {
-      if (!options.quiet && generation === statusRequestGenerationRef.current && isCurrentScope(targetContestId, targetUserId)) {
+      if (generation === statusRequestGenerationRef.current && isCurrentScope(targetContestId, targetUserId)) {
         setLoading(false);
       }
     }
