@@ -2,7 +2,8 @@ import React from 'react';
 import { CheckCircle2, Clock3, XCircle } from 'lucide-react';
 import type { TestCaseResult } from '@/services/api/contestApi';
 import type { ActiveSubmission } from '../../hooks/useProblemSubmissions';
-import { formatVerdict, getVerdictClasses, PASSING_STATUSES } from '../../submissionUtils';
+import { formatScore } from '@/lib/utils';
+import { formatVerdict, getVerdictClasses, PASSING_STATUSES, isPartialCredit, hasFinalScore } from '../../submissionUtils';
 
 interface ProblemVerdictTabProps {
   activeSubmission: ActiveSubmission;
@@ -23,14 +24,32 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
     );
   }
 
+  const isCompleted = activeSubmission.phase === 'completed';
+  const showScores = hasFinalScore(activeSubmission.status);
+  const score = showScores ? activeSubmission.details?.score : undefined;
+  const maxScore = activeSubmission.details?.max_score;
+  const isPassing = Boolean(activeSubmission.status && PASSING_STATUSES.has(activeSubmission.status));
+  const isPartial = Boolean(isCompleted && isPartialCredit(activeSubmission.status, score, activeSubmission.details?.type));
+
+  const testCaseResults = activeSubmission.details?.test_case_results;
+  const isMcq = activeSubmission.details?.type === 'mcq';
+  const passedCasesCount = isMcq
+    ? undefined
+    : (activeSubmission.details?.test_cases_passed ??
+       (testCaseResults ? testCaseResults.filter((tc: TestCaseResult) => PASSING_STATUSES.has(tc.status)).length : undefined));
+  const totalCasesCount = isMcq
+    ? undefined
+    : (activeSubmission.details?.total_test_cases ?? (testCaseResults ? testCaseResults.length : undefined));
+  const hasTestCaseCounts = showScores && passedCasesCount !== undefined && totalCasesCount !== undefined && totalCasesCount > 0;
+
   return (
     <div className={`space-y-4 font-['DM_Sans'] ${compact ? 'text-xs' : ''}`}>
       {!compact && (
         <div className="flex items-center justify-between pb-2 border-b border-[#1e2636]">
           <h2 className="text-sm font-semibold text-white">Latest Result</h2>
           {activeSubmission.status && (
-            <span className={`px-2.5 py-1 rounded text-xs font-semibold border ${getVerdictClasses(activeSubmission.status)}`}>
-              {formatVerdict(activeSubmission.status)}
+            <span className={`px-2.5 py-1 rounded text-xs font-semibold border ${getVerdictClasses(activeSubmission.status, score, activeSubmission.details?.type)}`}>
+              {formatVerdict(activeSubmission.status, score, activeSubmission.details?.type)}
             </span>
           )}
         </div>
@@ -40,6 +59,8 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
       <div className="flex items-start gap-3 p-4 rounded-lg bg-[#0b1018] border border-[#192233]">
         {activeSubmission.status && PASSING_STATUSES.has(activeSubmission.status) ? (
           <CheckCircle2 className="w-5 h-5 text-[#10b981] shrink-0 mt-0.5" />
+        ) : isPartial ? (
+          <CheckCircle2 className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
         ) : activeSubmission.phase === 'polling' || activeSubmission.phase === 'submitting' || activeSubmission.phase === 'received' ? (
           <div className="w-5 h-5 rounded-full border-2 border-[#10b981] border-t-transparent animate-spin shrink-0 mt-0.5" />
         ) : activeSubmission.phase === 'timeout' ? (
@@ -53,10 +74,11 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
             {activeSubmission.phase === 'submitting' && 'Sending submission…'}
             {activeSubmission.phase === 'received' && 'Submission received'}
             {activeSubmission.phase === 'polling' && 'Judging in progress…'}
-            {activeSubmission.phase === 'completed' && formatVerdict(activeSubmission.status)}
+            {activeSubmission.phase === 'completed' && formatVerdict(activeSubmission.status, score, activeSubmission.details?.type)}
             {activeSubmission.phase === 'timeout' && 'Verdict delayed'}
             {activeSubmission.phase === 'error' && (activeSubmission.id ? 'Could not verify verdict' : 'Submission failed')}
           </p>
+
           {activeSubmission.message && (
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
               {activeSubmission.message}
@@ -64,20 +86,39 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
           )}
         </div>
 
-        {onRetryPolling && Boolean(activeSubmission.id) && (activeSubmission.phase === 'timeout' || activeSubmission.phase === 'error') && (
+        {onRetryPolling && Boolean(activeSubmission.id) && (activeSubmission.phase === 'timeout' || activeSubmission.phase === 'error' || activeSubmission.detailsFailed) && (
           <button
             type="button"
             onClick={onRetryPolling}
             className="px-2.5 py-1 text-xs rounded bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white transition-colors"
           >
-            Check again
+            {activeSubmission.detailsFailed ? 'Retry details' : 'Check again'}
           </button>
         )}
       </div>
 
       {/* Execution stats: only show once judging is completed */}
-      {activeSubmission.phase === 'completed' && activeSubmission.details && (
-        <div className="grid grid-cols-2 gap-2">
+      {isCompleted && activeSubmission.details && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {score !== undefined && (
+            <div className="p-3 rounded bg-[#0b1018] border border-[#192233]">
+              <span className="text-[10px] text-slate-500 uppercase font-semibold">Submission Score</span>
+              <p className={`text-sm font-mono mt-0.5 font-semibold ${
+                isPartial ? 'text-yellow-400' : isPassing ? 'text-emerald-400' : 'text-slate-200'
+              }`}>
+                {formatScore(score)}
+                {maxScore !== undefined && maxScore > 0 ? ` / ${formatScore(maxScore)} pts` : ' pts'}
+              </p>
+            </div>
+          )}
+          {hasTestCaseCounts && (
+            <div className="p-3 rounded bg-[#0b1018] border border-[#192233]">
+              <span className="text-[10px] text-slate-500 uppercase font-semibold">Test Cases</span>
+              <p className="text-sm font-mono text-slate-200 mt-0.5">
+                {passedCasesCount} / {totalCasesCount} passed
+              </p>
+            </div>
+          )}
           <div className="p-3 rounded bg-[#0b1018] border border-[#192233]">
             <span className="text-[10px] text-slate-500 uppercase font-semibold">Runtime</span>
             <p className="text-sm font-mono text-slate-200 mt-0.5">
@@ -94,10 +135,13 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
       )}
 
       {/* Test cases list */}
-      {activeSubmission.details?.test_case_results && activeSubmission.details.test_case_results.length > 0 && (
+      {!isMcq && activeSubmission.details?.test_case_results && activeSubmission.details.test_case_results.length > 0 && (
         <div className="rounded border border-[#192233] bg-[#0b1018] overflow-hidden">
-          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-2 bg-[#0e1422] text-[10px] text-slate-400 uppercase font-semibold border-b border-[#192233]">
-            <span>Test Case</span>
+          <div className="px-3 py-2 bg-[#0e1422] text-[10px] text-slate-400 uppercase font-semibold border-b border-[#192233]">
+            <span>Test Cases Breakdown</span>
+          </div>
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-1.5 bg-[#0e1422]/60 text-[10px] text-slate-500 uppercase font-semibold border-b border-[#192233]">
+            <span>Case</span>
             <span>Verdict</span>
             <span>Time</span>
             <span>Memory</span>

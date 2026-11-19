@@ -13,3 +13,9 @@ export function formatTimestamp(timestamp: number): string {
   
   return `${minutes}m ago`;
 }
+
+export function formatScore(score: number | null | undefined): string {
+  if (score == null || !Number.isFinite(score)) return '—';
+  // Integers print bare; fractions use 2 decimals.
+  return Number.isInteger(score) ? score.toString() : score.toFixed(2);
+}

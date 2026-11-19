@@ -34,7 +34,11 @@ import {
   formatVerdict,
   getVerdictClasses,
   formatSubmittedAt,
+  isPartialCredit,
+  hasFinalScore,
+  PASSING_STATUSES,
 } from "@/features/contests/submissionUtils";
+import { formatScore } from "@/lib/utils";
 import { QuestionDescription } from "@/features/contests/components/workspace/QuestionDescription";
 import { MathText } from "@/features/contests/components/workspace/MathText";
 import { toast } from "react-toastify";
@@ -249,7 +253,14 @@ export default function AdminContestSubmissions() {
       .then((details) => {
         if (cancelled) return;
         setSubmissionDetails(details);
-        setSubmissions((current) => current.map((item) => item.id === details.id ? { ...item, status: details.status, runtime: details.runtime, memory: details.memory } : item));
+        setSubmissions((current) => current.map((item) => item.id === details.id ? {
+          ...item,
+          status: details.status,
+          runtime: details.runtime,
+          memory: details.memory,
+          score: details.score !== undefined ? details.score : item.score,
+          max_score: details.max_score !== undefined ? details.max_score : item.max_score,
+        } : item));
         setDetailsError("");
         setIsLoadingDetails(false);
       })
@@ -567,7 +578,8 @@ export default function AdminContestSubmissions() {
               <div className="space-y-2 max-h-[750px] overflow-y-auto pr-1">
                 {filteredSubmissions.map((sub) => {
                   const isSelected = sub.id === selectedSubmissionId;
-                  const verdictBadgeClass = getVerdictClasses(sub.status);
+                  const isSubPartial = isPartialCredit(sub.status, sub.score, sub.type);
+                  const verdictBadgeClass = getVerdictClasses(sub.status, sub.score, sub.type);
                   return (
                     <button
                       type="button"
@@ -594,7 +606,7 @@ export default function AdminContestSubmissions() {
                         <span
                           className={`px-2 py-0.5 rounded text-[11px] font-semibold border whitespace-nowrap ${verdictBadgeClass}`}
                         >
-                          {formatVerdict(sub.status)}
+                          {formatVerdict(sub.status, sub.score, sub.type)}
                         </span>
                       </div>
 
@@ -609,6 +621,11 @@ export default function AdminContestSubmissions() {
                           >
                             {sub.type === "mcq" ? "MCQ" : (sub.language || "code")}
                           </span>
+                          {sub.type !== "mcq" && sub.score !== undefined && hasFinalScore(sub.status) && (
+                            <span className={`font-semibold ${isSubPartial ? "text-yellow-300" : PASSING_STATUSES.has(sub.status) ? "text-emerald-400" : "text-gray-400"}`}>
+                              {formatScore(sub.score)} pts
+                            </span>
+                          )}
                           {sub.type !== "mcq" && sub.runtime > 0 && (
                             <span className="text-gray-400 flex items-center gap-0.5">
                               <Cpu size={12} />
@@ -692,10 +709,12 @@ export default function AdminContestSubmissions() {
                           </h3>
                           <span
                             className={`px-2.5 py-0.5 rounded text-xs font-semibold border ${getVerdictClasses(
-                              displaySubmission.status
+                              displaySubmission.status,
+                              displaySubmission.score,
+                              displaySubmission.type,
                             )}`}
                           >
-                            {formatVerdict(displaySubmission.status)}
+                            {formatVerdict(displaySubmission.status, displaySubmission.score, displaySubmission.type)}
                           </span>
                           {(displaySubmission.status === "pending" || displaySubmission.status === "processing") && (
                             <button

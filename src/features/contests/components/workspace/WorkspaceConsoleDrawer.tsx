@@ -133,10 +133,12 @@ export const WorkspaceConsoleDrawer: React.FC<WorkspaceConsoleDrawerProps> = ({
               <span
                 className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border max-w-[100px] truncate shrink-0 ${getVerdictClasses(
                   activeSubmission.status,
+                  activeSubmission.details?.score,
+                  activeSubmission.details?.type,
                 )}`}
-                title={formatVerdict(activeSubmission.status)}
+                title={formatVerdict(activeSubmission.status, activeSubmission.details?.score, activeSubmission.details?.type)}
               >
-                {activeSubmission.status === 'judge_error' ? 'Judge Error' : formatVerdict(activeSubmission.status)}
+                {activeSubmission.status === 'judge_error' ? 'Judge Error' : formatVerdict(activeSubmission.status, activeSubmission.details?.score, activeSubmission.details?.type)}
               </span>
             )}
             {consoleTab === 'latest_result' && !isConsoleCollapsed && (

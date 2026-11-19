@@ -460,9 +460,11 @@ export const CodeProblemView: React.FC<CodeProblemViewProps> = ({
                     <span
                       className={`px-1.5 py-0.2 rounded text-[10px] font-semibold border ${getVerdictClasses(
                         activeSubmission.status,
+                        activeSubmission.details?.score,
+                        activeSubmission.details?.type,
                       )}`}
                     >
-                      {formatVerdict(activeSubmission.status)}
+                      {formatVerdict(activeSubmission.status, activeSubmission.details?.score, activeSubmission.details?.type)}
                     </span>
                   )}
                   {leftTab === 'latest_result' && (

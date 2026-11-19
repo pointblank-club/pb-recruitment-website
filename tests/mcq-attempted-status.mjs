@@ -7,7 +7,13 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 const compile = (source) => ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-const utils = { exports: {} };
+const utils = {
+  exports: {},
+  require: (name) => {
+    if (name.endsWith('utils')) return { formatScore: (s) => String(s ?? 0) };
+    return {};
+  },
+};
 vm.runInNewContext(compile(read('src/features/contests/submissionUtils.ts')), utils);
 const { formatVerdict, getVerdictClasses, PASSING_STATUSES, JUDGING_STATUSES } = utils.exports;
 assert.equal(formatVerdict('attempted'), 'Attempted');
@@ -58,14 +64,377 @@ for (const [type, status, kind, message] of [
 
 const hook = ts.createSourceFile('hook.ts', read('src/features/contests/hooks/useProblemSubmissions.ts'), ts.ScriptTarget.Latest, true);
 let isJudging;
-const findJudging = (node) => {
-  if (ts.isVariableDeclaration(node) && node.name.getText(hook) === 'isJudging') {
-    isJudging = vm.runInNewContext(compile(`(${node.initializer.getText(hook)})`));
+let mergeSubmissions;
+const findDeclarations = (node) => {
+  if (ts.isVariableDeclaration(node)) {
+    if (node.name.getText(hook) === 'isJudging') {
+      isJudging = vm.runInNewContext(compile(`(${node.initializer.getText(hook)})`));
+    }
+    if (node.name.getText(hook) === 'mergeSubmissions') {
+      mergeSubmissions = vm.runInNewContext(compile(`(${node.initializer.getText(hook)})`), { isJudging });
+    }
   }
-  ts.forEachChild(node, findJudging);
+  ts.forEachChild(node, findDeclarations);
 };
-findJudging(hook);
+findDeclarations(hook);
 assert.equal(typeof isJudging, 'function');
+assert.equal(typeof mergeSubmissions, 'function');
 for (const status of ['attempted', undefined, 'accepted', 'wrong_answer']) assert.equal(isJudging(status), false);
 for (const status of ['pending', 'processing']) assert.equal(isJudging(status), true);
-console.log('Neutral status, optional judging status, silent MCQs, and code notification unit checks passed.');
+
+// 1. mergeSubmissions: pending submission with score 0 finalized with unknown score keeps score undefined (no false zero)
+const pendingHistory = [{ id: 'sub-1', status: 'pending', score: 0, created_at: 1000 }];
+const finalizedUnknownScore = [{ id: 'sub-1', status: 'accepted', score: undefined, created_at: 1000 }];
+const mergedUnknown = mergeSubmissions(finalizedUnknownScore, pendingHistory);
+assert.equal(mergedUnknown[0].score, undefined, 'finalizing pending submission without details must not retain false zero');
+
+// 2. mergeSubmissions: pending submission finalized with authoritative score updates score
+const finalizedWithScore = [{ id: 'sub-1', status: 'accepted', score: 100, created_at: 1000 }];
+const mergedWithScore = mergeSubmissions(finalizedWithScore, pendingHistory);
+assert.equal(mergedWithScore[0].score, 100, 'finalizing pending submission with authoritative score must update score');
+
+// 3. mergeSubmissions: preserves test_cases_passed directly
+const submissionWithCases = [{ id: 'sub-2', status: 'wrong_answer', test_cases_passed: 6, total_test_cases: 10, created_at: 1001 }];
+const mergedCases = mergeSubmissions(submissionWithCases, []);
+assert.equal(mergedCases[0].test_cases_passed, 6);
+
+// 4. ProblemVerdictTab: MCQ submissions never expose test case counts even if returned by backend
+const evaluateVerdictTabCounts = (submission) => {
+  const isMcq = submission.details?.type === 'mcq';
+  const testCaseResults = submission.details?.test_case_results;
+  const passedCasesCount = isMcq
+    ? undefined
+    : (submission.details?.test_cases_passed ??
+       (testCaseResults ? testCaseResults.filter((tc) => PASSING_STATUSES.has(tc.status)).length : undefined));
+  const totalCasesCount = isMcq
+    ? undefined
+    : (submission.details?.total_test_cases ?? (testCaseResults ? testCaseResults.length : undefined));
+  const hasTestCaseCounts = passedCasesCount !== undefined && totalCasesCount !== undefined && totalCasesCount > 0;
+  return { isMcq, passedCasesCount, totalCasesCount, hasTestCaseCounts };
+};
+
+const mcqWithCounts = {
+  details: {
+    type: 'mcq',
+    status: 'attempted',
+    test_cases_passed: 1,
+    total_test_cases: 1,
+  },
+};
+const mcqResult = evaluateVerdictTabCounts(mcqWithCounts);
+assert.equal(mcqResult.passedCasesCount, undefined, 'MCQ must never expose passedCasesCount');
+assert.equal(mcqResult.totalCasesCount, undefined, 'MCQ must never expose totalCasesCount');
+assert.equal(mcqResult.hasTestCaseCounts, false, 'MCQ hasTestCaseCounts must be false');
+
+const codeWithCount = {
+  details: {
+    type: 'code',
+    status: 'wrong_answer',
+    test_cases_passed: 8,
+    total_test_cases: 10,
+  },
+};
+const codeResult = evaluateVerdictTabCounts(codeWithCount);
+assert.equal(codeResult.passedCasesCount, 8);
+assert.equal(codeResult.totalCasesCount, 10);
+assert.equal(codeResult.hasTestCaseCounts, true);
+
+// 5. Test useProblemSubmissions hook functions (pollSubmission, refreshHistory, retryDetails)
+let pollFunction;
+let refreshFunction;
+let retryFunction;
+const findHookFunctions = (node) => {
+  if (ts.isVariableDeclaration(node)) {
+    if (node.name.getText(hook) === 'pollSubmission') pollFunction = node.initializer.arguments[0].getText(hook);
+    if (node.name.getText(hook) === 'refreshHistory') refreshFunction = node.initializer.arguments[0].getText(hook);
+    if (node.name.getText(hook) === 'retryDetails') retryFunction = node.initializer.arguments[0].getText(hook);
+  }
+  ts.forEachChild(node, findHookFunctions);
+};
+findHookFunctions(hook);
+assert.ok(pollFunction, 'found pollSubmission');
+assert.ok(refreshFunction, 'found refreshHistory');
+assert.ok(retryFunction, 'found retryDetails');
+
+// Transition A1: Older backend without status score: absent score remains undefined on detail failure
+{
+  let active = { phase: 'polling', id: 'sub-resumed' };
+  let history = [{ id: 'sub-resumed', status: 'pending', score: 0, max_score: 100, created_at: 1000 }];
+  const context = {
+    pollTokenRef: { current: 0 },
+    performance: { now: () => 0 },
+    FIRST_POLL_DELAY_MS: 0,
+    MAX_POLL_DELAY_MS: 0,
+    POLL_TIMEOUT_MS: 60000,
+    jitterDelay: (d) => d,
+    retryAfterDelay: () => 0,
+    isPermanentRequestError: () => false,
+    wait: async () => {},
+    isJudging,
+    mergeSubmissions,
+    getErrorMessage: (e, fallback) => e?.message || fallback,
+    contestApi: {
+      getSubmissionStatus: async () => ({ status: 'accepted' }), // Absent score on older backend
+      getSubmissionDetails: async () => { throw new Error('Details lookup failed'); },
+    },
+    setActiveSubmission: (updater) => {
+      active = typeof updater === 'function' ? updater(active) : updater;
+    },
+    setHistory: (updater) => {
+      history = typeof updater === 'function' ? updater(history) : updater;
+    },
+  };
+
+  const poll = vm.runInNewContext(compile(`(${pollFunction})`), context);
+  await poll({ id: 'sub-resumed', status: 'pending', score: 0, max_score: 100, created_at: 1000 });
+
+  assert.equal(active.status, 'accepted');
+  assert.equal(active.detailsFailed, true);
+  assert.equal(active.details.score, undefined, 'absent status score on older backend must leave score undefined');
+  assert.match(active.message, /result details could not be loaded/);
+  assert.equal(history[0].score, undefined, 'history must not retain false zero');
+}
+
+// Transition A2: Server #118 supplies score: 0 -> authoritative zero credit must be preserved on detail failure
+{
+  let active = { phase: 'polling', id: 'sub-zero' };
+  let history = [{ id: 'sub-zero', status: 'pending', score: 0, max_score: 100, created_at: 1000 }];
+  const context = {
+    pollTokenRef: { current: 0 },
+    performance: { now: () => 0 },
+    FIRST_POLL_DELAY_MS: 0,
+    MAX_POLL_DELAY_MS: 0,
+    POLL_TIMEOUT_MS: 60000,
+    jitterDelay: (d) => d,
+    retryAfterDelay: () => 0,
+    isPermanentRequestError: () => false,
+    wait: async () => {},
+    isJudging,
+    mergeSubmissions,
+    getErrorMessage: (e, fallback) => e?.message || fallback,
+    contestApi: {
+      getSubmissionStatus: async () => ({ status: 'wrong_answer', score: 0, max_score: 100, test_cases_passed: 0 }),
+      getSubmissionDetails: async () => { throw new Error('Details lookup failed'); },
+    },
+    setActiveSubmission: (updater) => {
+      active = typeof updater === 'function' ? updater(active) : updater;
+    },
+    setHistory: (updater) => {
+      history = typeof updater === 'function' ? updater(history) : updater;
+    },
+  };
+
+  const poll = vm.runInNewContext(compile(`(${pollFunction})`), context);
+  await poll({ id: 'sub-zero', status: 'pending', score: 0, max_score: 100, created_at: 1000 });
+
+  assert.equal(active.status, 'wrong_answer');
+  assert.equal(active.detailsFailed, true);
+  assert.equal(active.details.score, 0, 'authoritative zero score from status must be preserved');
+  assert.equal(active.details.max_score, 100);
+  assert.equal(history[0].score, 0, 'history must record authoritative zero credit');
+}
+
+// Transition B1: Refresh history after detail failure repairs score but does NOT clear detailsFailed
+{
+  let active = {
+    id: 'sub-active',
+    phase: 'completed',
+    status: 'wrong_answer',
+    detailsFailed: true,
+    message: 'Verdict received, but result details could not be loaded: network error',
+    details: { id: 'sub-active', status: 'wrong_answer', score: undefined, created_at: 1000 },
+  };
+  const activeSubmissionRef = { current: active };
+  let history = [];
+  const context = {
+    problemId: 'p1',
+    historyRequestRef: { current: 0 },
+    scopeTokenRef: { current: 0 },
+    activeSubmissionRef,
+    setIsHistoryLoading: () => {},
+    setHistoryError: () => {},
+    setHistory: (h) => { history = h; },
+    setHistoryPage: () => {},
+    setHasMoreHistory: () => {},
+    HISTORY_PAGE_SIZE: 20,
+    isJudging,
+    getErrorMessage: (e, fallback) => e?.message || fallback,
+    contestApi: {
+      listUserSubmissions: async () => [
+        { id: 'sub-active', status: 'wrong_answer', score: 12.5, max_score: 100, created_at: 1000 }, // summary without test_case_results
+      ],
+      getSubmissionDetails: async () => { throw new Error('Not called'); },
+    },
+    setActiveSubmission: (updater) => {
+      active = typeof updater === 'function' ? updater(active) : updater;
+      activeSubmissionRef.current = active;
+    },
+    pollSubmission: async () => {},
+  };
+
+  const refresh = vm.runInNewContext(compile(`(${refreshFunction})`), context);
+  await refresh();
+
+  assert.equal(active.details.score, 12.5, 'score is reconciled from history summary');
+  assert.equal(active.detailsFailed, true, 'detailsFailed must NOT be cleared before test case details recover');
+  assert.equal(Boolean(active.message), true, 'error message must remain visible for retry');
+}
+
+// Transition B2: Stale history arriving while finalized: pending/0 summary must NOT overwrite finalized state
+{
+  let active = {
+    id: 'sub-finalized',
+    phase: 'completed',
+    status: 'wrong_answer',
+    detailsFailed: true,
+    message: 'Verdict received, but result details could not be loaded',
+    details: { id: 'sub-finalized', status: 'wrong_answer', score: 12.5, max_score: 100, test_cases_passed: 6, total_test_cases: 10, created_at: 1000 },
+  };
+  const activeSubmissionRef = { current: active };
+  let history = [];
+  const context = {
+    problemId: 'p1',
+    historyRequestRef: { current: 0 },
+    scopeTokenRef: { current: 0 },
+    activeSubmissionRef,
+    setIsHistoryLoading: () => {},
+    setHistoryError: () => {},
+    setHistory: (h) => { history = h; },
+    setHistoryPage: () => {},
+    setHasMoreHistory: () => {},
+    HISTORY_PAGE_SIZE: 20,
+    isJudging,
+    getErrorMessage: (e, fallback) => e?.message || fallback,
+    contestApi: {
+      listUserSubmissions: async () => [
+        { id: 'sub-finalized', status: 'pending', score: 0, max_score: 100, created_at: 1000 }, // Stale pending summary
+      ],
+      getSubmissionDetails: async () => { throw new Error('Not called'); },
+    },
+    setActiveSubmission: (updater) => {
+      active = typeof updater === 'function' ? updater(active) : updater;
+      activeSubmissionRef.current = active;
+    },
+    pollSubmission: async () => {},
+  };
+
+  const refresh = vm.runInNewContext(compile(`(${refreshFunction})`), context);
+  await refresh();
+
+  assert.equal(active.status, 'wrong_answer', 'stale pending summary must not overwrite finalized status');
+  assert.equal(active.details.score, 12.5, 'stale pending summary must not overwrite finalized score');
+  assert.equal(active.details.test_cases_passed, 6);
+}
+
+// Transition C: Restoring an already-finalized submission on initial load handles detail failure
+{
+  let active = { phase: 'idle' };
+  const activeSubmissionRef = { current: active };
+  let history = [];
+  const context = {
+    problemId: 'p1',
+    historyRequestRef: { current: 0 },
+    scopeTokenRef: { current: 0 },
+    activeSubmissionRef,
+    setIsHistoryLoading: () => {},
+    setHistoryError: () => {},
+    setHistory: (h) => { history = h; },
+    setHistoryPage: () => {},
+    setHasMoreHistory: () => {},
+    HISTORY_PAGE_SIZE: 20,
+    isJudging,
+    getErrorMessage: (e, fallback) => e?.message || fallback,
+    contestApi: {
+      listUserSubmissions: async () => [
+        { id: 'sub-latest', status: 'accepted', score: 100, max_score: 100, created_at: 1000 },
+      ],
+      getSubmissionDetails: async () => { throw new Error('Details 500 error'); },
+    },
+    setActiveSubmission: (updater) => {
+      active = typeof updater === 'function' ? updater(active) : updater;
+      activeSubmissionRef.current = active;
+    },
+    pollSubmission: async () => {},
+  };
+
+  const refresh = vm.runInNewContext(compile(`(${refreshFunction})`), context);
+  await refresh();
+
+  assert.equal(active.id, 'sub-latest');
+  assert.equal(active.detailsFailed, true, 'restoring finalized submission must set detailsFailed on detail error');
+  assert.match(active.message, /result details could not be loaded/);
+}
+
+// Transition D: retryDetails reconciles status and clears detailsFailed when details succeed
+{
+  let active = {
+    id: 'sub-retry',
+    phase: 'completed',
+    status: 'pending', // e.g. corrupted status
+    detailsFailed: true,
+    message: 'Could not load details',
+    details: { id: 'sub-retry', status: 'pending', score: 100, created_at: 1000 },
+  };
+  const activeSubmissionRef = { current: active };
+  let history = [{ id: 'sub-retry', status: 'pending', score: 100, created_at: 1000 }];
+  const context = {
+    activeSubmissionRef,
+    getErrorMessage: (e, fallback) => e?.message || fallback,
+    contestApi: {
+      getSubmissionDetails: async () => ({
+        id: 'sub-retry',
+        status: 'wrong_answer',
+        score: 12.5,
+        max_score: 100,
+        test_cases_passed: 6,
+        total_test_cases: 10,
+        test_case_results: [{ test_case_id: 'tc1', status: 'wrong_answer', runtime: 10, memory: 1000 }],
+      }),
+    },
+    setActiveSubmission: (updater) => {
+      active = typeof updater === 'function' ? updater(active) : updater;
+      activeSubmissionRef.current = active;
+    },
+    setHistory: (updater) => {
+      history = typeof updater === 'function' ? updater(history) : updater;
+    },
+  };
+
+  const retry = vm.runInNewContext(compile(`(${retryFunction})`), context);
+  await retry();
+
+  assert.equal(active.detailsFailed, false, 'retryDetails must clear detailsFailed on success');
+  assert.equal(active.status, 'wrong_answer', 'retryDetails must reconcile status from response');
+  assert.equal(active.details.status, 'wrong_answer');
+  assert.equal(active.details.score, 12.5);
+  assert.equal(active.details.test_cases_passed, 6);
+  assert.equal(active.message, undefined);
+  assert.equal(history[0].status, 'wrong_answer');
+}
+
+// 6. Admin contest submissions: details reconciliation updates score and max_score on card item
+{
+  const adminSource = ts.createSourceFile('Admin.tsx', read('src/pages/AdminContestSubmissions.tsx'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  assert.match(adminSource.text, /score:\s*details\.score !== undefined \? details\.score : item\.score/);
+  assert.match(adminSource.text, /max_score:\s*details\.max_score !== undefined \? details\.max_score : item\.max_score/);
+
+  // Functional test of the reconciliation mapping
+  const items = [
+    { id: 'sub-1', status: 'pending', score: 0, max_score: 100, runtime: 0, memory: 0 },
+    { id: 'sub-2', status: 'accepted', score: 100, max_score: 100, runtime: 10, memory: 50 },
+  ];
+  const details = { id: 'sub-1', status: 'accepted', score: 100, max_score: 100, runtime: 15, memory: 100 };
+  const updated = items.map((item) => item.id === details.id ? {
+    ...item,
+    status: details.status,
+    runtime: details.runtime,
+    memory: details.memory,
+    score: details.score !== undefined ? details.score : item.score,
+    max_score: details.max_score !== undefined ? details.max_score : item.max_score,
+  } : item);
+  assert.equal(updated[0].status, 'accepted');
+  assert.equal(updated[0].score, 100, 'admin card must reflect finalized score 100');
+  assert.equal(updated[0].runtime, 15);
+}
+
+console.log('Neutral status, optional judging status, silent MCQs, code notification, and detail recovery unit checks passed.');

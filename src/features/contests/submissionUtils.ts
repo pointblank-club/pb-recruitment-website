@@ -18,18 +18,33 @@ export const VERDICT_LABELS: Record<SubmissionStatus, string> = {
 export const PASSING_STATUSES = new Set(['accepted', 'completed', 'pass', 'passed']);
 export const JUDGING_STATUSES = new Set(['pending', 'processing']);
 
-export const formatVerdict = (status?: string) => {
+// A score is meaningful only for finalized, non-infrastructure verdicts.
+export const hasFinalScore = (status?: string): boolean => (
+  Boolean(status) && !JUDGING_STATUSES.has(status!) && status !== 'attempted' && status !== 'judge_error'
+);
+
+export const isPartialCredit = (
+  status?: string,
+  score?: number,
+  type?: string
+): boolean => (
+  type !== 'mcq' && hasFinalScore(status) && !PASSING_STATUSES.has(status!) && score !== undefined && score > 0
+);
+
+export const formatVerdict = (status?: string, score?: number, type?: string) => {
   if (!status) return 'Unknown';
-  return (
+  const label = (
     VERDICT_LABELS[status as SubmissionStatus] ||
     status.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase())
   );
+  return isPartialCredit(status, score, type) ? `${label} · Partial` : label;
 };
 
-export const getVerdictClasses = (status?: string) => {
+export const getVerdictClasses = (status?: string, score?: number, type?: string) => {
   if (status === 'attempted') return 'border-slate-500/40 bg-slate-500/10 text-slate-300';
   if (status && PASSING_STATUSES.has(status)) return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400';
   if (status && JUDGING_STATUSES.has(status)) return 'border-amber-500/40 bg-amber-500/10 text-amber-300';
+  if (isPartialCredit(status, score, type)) return 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300';
   return 'border-rose-500/40 bg-rose-500/10 text-rose-300';
 };
 

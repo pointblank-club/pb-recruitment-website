@@ -1,6 +1,7 @@
 import { Code2, AlertCircle, RefreshCw } from 'lucide-react';
 import { decodeBase64 } from '@/lib/base64';
-import { formatVerdict, getVerdictClasses } from '../submissionUtils';
+import { formatScore } from '@/lib/utils';
+import { formatVerdict, getVerdictClasses, PASSING_STATUSES, isPartialCredit, hasFinalScore } from '../submissionUtils';
 import type { SubmissionDetailsResponse } from '@/services/api/contestApi';
 import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
 
@@ -73,7 +74,9 @@ export const SubmittedSolutionViewer = ({
     );
   }
 
-  const badgeClass = getVerdictClasses(submission.status);
+  const isPassing = Boolean(submission.status && PASSING_STATUSES.has(submission.status));
+  const isPartial = Boolean(isPartialCredit(submission.status, submission.score, submission.type));
+  const badgeClass = getVerdictClasses(submission.status, submission.score, submission.type);
 
   return (
     <div
@@ -85,8 +88,8 @@ export const SubmittedSolutionViewer = ({
       onContextMenu={isContestEnded ? undefined : preventContextMenu}
     >
       {/* Header bar matching CodeProblemView right pane */}
-      <div className="h-10 border-b border-gray-700 px-4 bg-gray-900/50 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0">
+      <div className="min-h-10 py-2 border-b border-gray-700 px-4 bg-gray-900/50 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
           <Code2 className="w-4 h-4 text-green-400 flex-shrink-0" />
           <span className="text-xs font-semibold text-gray-200 uppercase tracking-wider">
             Your Submitted Solution
@@ -96,7 +99,19 @@ export const SubmittedSolutionViewer = ({
           </span>
           {submission.status && (
             <span className={'px-2 py-0.5 rounded text-[11px] font-medium border ' + badgeClass}>
-              {formatVerdict(submission.status)}
+              {formatVerdict(submission.status, submission.score, submission.type)}
+            </span>
+          )}
+          {submission.score !== undefined && hasFinalScore(submission.status) && (
+            <span className={`px-2 py-0.5 rounded text-[11px] font-mono border ${
+              isPartial
+                ? 'bg-yellow-950/40 text-yellow-300 border-yellow-800/60'
+                : isPassing
+                ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
+                : 'bg-gray-800 text-gray-300 border-gray-700'
+            }`}>
+              Score: {formatScore(submission.score)}
+              {submission.max_score !== undefined && submission.max_score > 0 ? ` / ${formatScore(submission.max_score)}` : ' pts'}
             </span>
           )}
           {onRetry && (submission.status === 'pending' || submission.status === 'processing') && (

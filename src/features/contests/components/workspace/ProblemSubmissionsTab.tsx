@@ -1,7 +1,8 @@
 import React from 'react';
 import { History, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { SubmissionDetailsResponse } from '@/services/api/contestApi';
-import { formatVerdict, getVerdictClasses, formatSubmittedAt } from '../../submissionUtils';
+import { formatScore } from '@/lib/utils';
+import { formatVerdict, getVerdictClasses, formatSubmittedAt, hasFinalScore } from '../../submissionUtils';
 
 interface ProblemSubmissionsTabProps {
   history: SubmissionDetailsResponse[];
@@ -66,6 +67,7 @@ export const ProblemSubmissionsTab: React.FC<ProblemSubmissionsTabProps> = ({
             <thead className="bg-[#0e1422] text-slate-400 uppercase text-[10px] tracking-wider border-b border-[#1e2636]">
               <tr>
                 <th className="py-2.5 px-3">Status</th>
+                <th className="py-2.5 px-3">Score</th>
                 <th className="py-2.5 px-3">Time</th>
                 <th className="py-2.5 px-3">Memory</th>
                 <th className="py-2.5 px-3">Lang</th>
@@ -76,9 +78,12 @@ export const ProblemSubmissionsTab: React.FC<ProblemSubmissionsTabProps> = ({
               {history.map((sub) => (
                 <tr key={sub.id} className="hover:bg-[#141b29]/50 transition-colors">
                   <td className="py-2.5 px-3">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getVerdictClasses(sub.status)}`}>
-                      {formatVerdict(sub.status)}
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getVerdictClasses(sub.status, sub.score, sub.type)}`}>
+                      {formatVerdict(sub.status, sub.score, sub.type)}
                     </span>
+                  </td>
+                  <td className="py-2.5 px-3 text-slate-300 font-mono">
+                    {sub.score !== undefined && hasFinalScore(sub.status) ? formatScore(sub.score) : '—'}
                   </td>
                   <td className="py-2.5 px-3 text-slate-300 font-mono">
                     {sub.runtime !== undefined ? `${sub.runtime} ms` : '—'}

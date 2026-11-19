@@ -36,8 +36,8 @@ export interface LeaderboardEntry {
   user_id: string;
   username: string;
   usn: string;
-  total_score: number;
-  problems_solved: number;
+  total_score: number; // Supports decimal scores with up to 2 decimal places (e.g. 142.75)
+  problems_solved: number; // Note: Only problems with 100% full solve count here
   last_submission_time?: number | null;
   problem_scores?: ProblemScore[];
 }
@@ -46,10 +46,10 @@ export interface ProblemScore {
   problem_id: string;
   problem_name: string;
   type?: ProblemType;
-  score: number;
+  score: number; // Supports decimal scores with up to 2 decimal places (e.g. 37.5)
   max_score: number;
   attempts: number; // Total submissions, including judge errors; not the ranking penalty.
-  solved_at?: number;
+  solved_at?: number | null;
 }
 
 export interface Contest {
