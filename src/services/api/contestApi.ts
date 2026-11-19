@@ -3,6 +3,7 @@ import { isSEBUserAgent } from '@/lib/seb';
 export interface PaginatedLeaderboard {
   entries: LeaderboardEntry[];
   hasNextPage: boolean;
+  frozen: boolean;
 }
 
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
@@ -300,6 +301,7 @@ class ContestApiService {
       entries: rawData,
       // shortcut: full final pages need one extra Next request; use a body cursor if the API adds one.
       hasNextPage: rawData.length >= LEADERBOARD_PAGE_SIZE,
+      frozen: response.headers?.['x-leaderboard-frozen'] === 'true',
     };
   }
 

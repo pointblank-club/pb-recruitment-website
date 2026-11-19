@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/footer";
 import ContestantManager, { type Contestant } from "./components/ContestantManager";
+import LeaderboardFreezeControl from "./components/LeaderboardFreezeControl";
 import { adminApi } from "@/services/api/adminApi";
 
 const AdminContestContestants: React.FC = () => {
@@ -117,6 +118,8 @@ const AdminContestContestants: React.FC = () => {
             Contest: <span className="text-green-400">{contestName || contestId}</span>
           </p>
         </div>
+
+        <LeaderboardFreezeControl key={contestId} contestId={contestId} />
 
         {/* Contestant Manager */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">

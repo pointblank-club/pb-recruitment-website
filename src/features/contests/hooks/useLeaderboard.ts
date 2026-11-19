@@ -11,6 +11,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
   const [refreshCycle, setRefreshCycle] = useState(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [hasNextPage, setHasNextPage] = useState(false);
+  const [isFrozen, setIsFrozen] = useState(false);
   const [contest, setContest] = useState<Contest | null>(null);
   const [isContestLoading, setIsContestLoading] = useState(true);
   const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(true);
@@ -82,6 +83,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
       if (!contestId) {
         setLeaderboard([]);
         setHasNextPage(false);
+        setIsFrozen(false);
         setIsLeaderboardLoading(false);
         setLeaderboardError(null);
         hasLoadedDataRef.current = false;
@@ -109,6 +111,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
 
         setLeaderboard(res.entries);
         setHasNextPage(res.hasNextPage);
+        setIsFrozen(res.frozen);
         setLeaderboardError(null);
         setHasStarted(true);
         hasLoadedDataRef.current = true;
@@ -155,6 +158,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
       setContestError(null);
       setLeaderboard([]);
       setHasNextPage(false);
+      setIsFrozen(false);
       setLeaderboardError(null);
       if (page !== 0) {
         setPage(0);
@@ -204,6 +208,7 @@ export const useLeaderboard = (contestId: string, refreshIntervalMs: number = 30
     page,
     setPage,
     hasNextPage,
+    isFrozen,
     isLoading,
     error,
     hasStarted,

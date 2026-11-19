@@ -6,6 +6,12 @@ import { LeaderboardTable } from '../components/LeaderboardTable';
 import { adminApi } from '@/services/api/adminApi';
 import { useAuth } from '@/lib/AuthContext';
 
+// Missing-contest and auth messages are actionable; anything else gets generic retry guidance.
+const getLeaderboardFailureMessage = (error: string | null) =>
+  error && /not found|token|unauthori[sz]ed|authentication required/i.test(error)
+    ? error
+    : 'We couldn’t load the rankings right now. Please try again.';
+
 export const ContestLeaderboardPage = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
@@ -38,6 +44,7 @@ export const ContestLeaderboardPage = () => {
     page,
     setPage,
     hasNextPage,
+    isFrozen,
     isLoading,
     error,
     hasStarted,
@@ -73,8 +80,10 @@ export const ContestLeaderboardPage = () => {
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="max-w-md w-full">
           <div className="bg-red-950/40 border border-red-500/40 rounded-lg p-6 text-center">
-            <p className="text-red-400 font-medium mb-2 font-['DM_Sans']">Error loading leaderboard</p>
-            <p className="text-red-300 text-sm mb-4 font-['DM_Sans']">{error || 'Contest not found'}</p>
+            <p className="text-red-400 font-medium mb-2 font-['DM_Sans']">Leaderboard unavailable</p>
+            <p className="text-red-300 text-sm mb-4 font-['DM_Sans']">
+              {getLeaderboardFailureMessage(error)}
+            </p>
             <div className="flex justify-center gap-3">
               <button
                 type="button"
@@ -145,7 +154,9 @@ export const ContestLeaderboardPage = () => {
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2 font-['DM_Sans']">LEADERBOARD</h1>
-          <p className="text-gray-400 font-['DM_Sans']">Real-time rankings for {contest.name}</p>
+          <p className="text-gray-400 font-['DM_Sans']">
+            {isFrozen ? 'Rankings are paused' : `Real-time rankings for ${contest.name}`}
+          </p>
         </div>
         {isAdmin && (
           <button
@@ -157,6 +168,12 @@ export const ContestLeaderboardPage = () => {
           </button>
         )}
       </div>
+
+      {isFrozen && (
+        <div className="mb-6 border border-amber-500/40 bg-amber-950/30 rounded-lg px-4 py-3 text-amber-200 text-sm font-['DM_Sans']">
+          Rankings are frozen for suspense. Scores continue updating and the current ranking will appear when the leaderboard is unfrozen.
+        </div>
+      )}
 
       {/* Leaderboard Table */}
       {leaderboard.length === 0 && page > 0 ? (
