@@ -160,7 +160,7 @@ export const ContestLeaderboardPage = () => {
         <div>
           <h1 className="text-3xl font-bold text-white mb-2 font-['DM_Sans']">LEADERBOARD</h1>
           <p className="text-gray-400 font-['DM_Sans']">
-            {isFrozen && !isAdmin ? 'Rankings are paused' : `Real-time rankings for ${contest.name}`}
+            {isFrozen ? 'Rankings are paused' : `Real-time rankings for ${contest.name}`}
           </p>
         </div>
         {isAdmin && (
@@ -174,7 +174,7 @@ export const ContestLeaderboardPage = () => {
         )}
       </div>
 
-      {isFrozen && !isAdmin && (
+      {isFrozen && (
         <div className="mb-6 border border-amber-500/40 bg-amber-950/30 rounded-lg px-4 py-3 text-amber-200 text-sm font-['DM_Sans']">
           Rankings are frozen for suspense. Scores continue updating and the current ranking will appear when the leaderboard is unfrozen.
         </div>

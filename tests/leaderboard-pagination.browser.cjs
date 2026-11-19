@@ -14,7 +14,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
   before(async () => { browser = await engine.launch({ headless: true }); });
   after(async () => { await browser?.close(); });
 
-  async function mount(headers, pages = [entries(0, 20), entries(20, 3)]) {
+  async function mount(headers, pages = [entries(0, 20), entries(20, 3)], admin = false) {
     const page = await browser.newPage();
     const errors = [], requested = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -30,7 +30,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
           'export const auth = { get currentUser() { return window.leaderboardUser; } };' });
         return route.continue();
       }
-      if (url.pathname === '/admin/') return route.fulfill({ status: 403, json: { error: 'Not an admin' } });
+      if (url.pathname === '/admin/') return admin ? route.fulfill({ json: {} }) : route.fulfill({ status: 403, json: { error: 'Not an admin' } });
       if (url.pathname === '/contests/test') return route.fulfill({ json: {
         id: 'test', name: 'Leaderboard regression', description: '', eligible_to: [], is_registered: true,
         start_time: Date.now() - 60000, end_time: Date.now() + 3600000,
@@ -101,8 +101,19 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
     } finally { await fixture.close(); }
   });
 
+  // The header is only true when the server served the public snapshot, even if the admin probe succeeds.
+  test(`${name}: frozen header shows the public notice regardless of admin probe`, { timeout: 15000 }, async () => {
+    for (const admin of [false, true]) {
+      const fixture = await mount({ 'Access-Control-Expose-Headers': 'X-Leaderboard-Frozen', 'X-Leaderboard-Frozen': 'true' }, undefined, admin);
+      try {
+        await fixture.page.getByText(/Rankings are frozen/).waitFor();
+        assert.equal(await fixture.page.getByText('Rankings are paused', { exact: true }).count(), 1);
+      } finally { await fixture.close(); }
+    }
+  });
+
   test(`${name}: empty and malformed payloads have distinct states`, { timeout: 15000 }, async () => {
-    for (const [body, message] of [[[], 'No participants yet'], [{ error: 'wrong body' }, 'Error loading leaderboard']]) {
+    for (const [body, message] of [[[], 'No participants yet'], [{ error: 'wrong body' }, 'Leaderboard unavailable']]) {
       const fixture = await mount({}, [body]);
       try {
         await fixture.page.getByText(message, { exact: true }).waitFor();
