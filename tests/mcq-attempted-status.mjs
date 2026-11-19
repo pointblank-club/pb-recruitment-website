@@ -93,16 +93,10 @@ const finalizedWithScore = [{ id: 'sub-1', status: 'accepted', score: 100, creat
 const mergedWithScore = mergeSubmissions(finalizedWithScore, pendingHistory);
 assert.equal(mergedWithScore[0].score, 100, 'finalizing pending submission with authoritative score must update score');
 
-// 3. mergeSubmissions: contract normalization between passed_test_cases and test_cases_passed
-const backendSubmission = [{ id: 'sub-2', status: 'wrong_answer', passed_test_cases: 6, total_test_cases: 10, created_at: 1001 }];
-const mergedBackend = mergeSubmissions(backendSubmission, []);
-assert.equal(mergedBackend[0].passed_test_cases, 6);
-assert.equal(mergedBackend[0].test_cases_passed, 6);
-
-const frontendSubmission = [{ id: 'sub-3', status: 'wrong_answer', test_cases_passed: 4, total_test_cases: 10, created_at: 1002 }];
-const mergedFrontend = mergeSubmissions(frontendSubmission, []);
-assert.equal(mergedFrontend[0].passed_test_cases, 4);
-assert.equal(mergedFrontend[0].test_cases_passed, 4);
+// 3. mergeSubmissions: preserves test_cases_passed directly
+const submissionWithCases = [{ id: 'sub-2', status: 'wrong_answer', test_cases_passed: 6, total_test_cases: 10, created_at: 1001 }];
+const mergedCases = mergeSubmissions(submissionWithCases, []);
+assert.equal(mergedCases[0].test_cases_passed, 6);
 
 // 4. ProblemVerdictTab: MCQ submissions never expose test case counts even if returned by backend
 const evaluateVerdictTabCounts = (submission) => {
@@ -110,8 +104,7 @@ const evaluateVerdictTabCounts = (submission) => {
   const testCaseResults = submission.details?.test_case_results;
   const passedCasesCount = isMcq
     ? undefined
-    : (submission.details?.passed_test_cases ??
-       submission.details?.test_cases_passed ??
+    : (submission.details?.test_cases_passed ??
        (testCaseResults ? testCaseResults.filter((tc) => PASSING_STATUSES.has(tc.status)).length : undefined));
   const totalCasesCount = isMcq
     ? undefined
@@ -124,7 +117,6 @@ const mcqWithCounts = {
   details: {
     type: 'mcq',
     status: 'attempted',
-    passed_test_cases: 1,
     test_cases_passed: 1,
     total_test_cases: 1,
   },
@@ -134,15 +126,15 @@ assert.equal(mcqResult.passedCasesCount, undefined, 'MCQ must never expose passe
 assert.equal(mcqResult.totalCasesCount, undefined, 'MCQ must never expose totalCasesCount');
 assert.equal(mcqResult.hasTestCaseCounts, false, 'MCQ hasTestCaseCounts must be false');
 
-const codeWithBackendCount = {
+const codeWithCount = {
   details: {
     type: 'code',
     status: 'wrong_answer',
-    passed_test_cases: 8,
+    test_cases_passed: 8,
     total_test_cases: 10,
   },
 };
-const codeResult = evaluateVerdictTabCounts(codeWithBackendCount);
+const codeResult = evaluateVerdictTabCounts(codeWithCount);
 assert.equal(codeResult.passedCasesCount, 8);
 assert.equal(codeResult.totalCasesCount, 10);
 assert.equal(codeResult.hasTestCaseCounts, true);
@@ -164,7 +156,7 @@ assert.ok(pollFunction, 'found pollSubmission');
 assert.ok(refreshFunction, 'found refreshHistory');
 assert.ok(retryFunction, 'found retryDetails');
 
-// Transition A: Pending submission (score: 0) completes polling, details fail -> score is undefined (not 0), detailsFailed is true
+// Transition A1: Older backend without status score: absent score remains undefined on detail failure
 {
   let active = { phase: 'polling', id: 'sub-resumed' };
   let history = [{ id: 'sub-resumed', status: 'pending', score: 0, max_score: 100, created_at: 1000 }];
@@ -182,7 +174,7 @@ assert.ok(retryFunction, 'found retryDetails');
     mergeSubmissions,
     getErrorMessage: (e, fallback) => e?.message || fallback,
     contestApi: {
-      getSubmissionStatus: async () => ({ status: 'accepted', score: 0 }), // Unpopulated Go default 0
+      getSubmissionStatus: async () => ({ status: 'accepted' }), // Absent score on older backend
       getSubmissionDetails: async () => { throw new Error('Details lookup failed'); },
     },
     setActiveSubmission: (updater) => {
@@ -198,12 +190,51 @@ assert.ok(retryFunction, 'found retryDetails');
 
   assert.equal(active.status, 'accepted');
   assert.equal(active.detailsFailed, true);
-  assert.equal(active.details.score, undefined, 'pending score 0 must be discarded on detail failure');
+  assert.equal(active.details.score, undefined, 'absent status score on older backend must leave score undefined');
   assert.match(active.message, /result details could not be loaded/);
   assert.equal(history[0].score, undefined, 'history must not retain false zero');
 }
 
-// Transition B: Refresh history after detail failure repairs score but does NOT clear detailsFailed
+// Transition A2: Server #118 supplies score: 0 -> authoritative zero credit must be preserved on detail failure
+{
+  let active = { phase: 'polling', id: 'sub-zero' };
+  let history = [{ id: 'sub-zero', status: 'pending', score: 0, max_score: 100, created_at: 1000 }];
+  const context = {
+    pollTokenRef: { current: 0 },
+    performance: { now: () => 0 },
+    FIRST_POLL_DELAY_MS: 0,
+    MAX_POLL_DELAY_MS: 0,
+    POLL_TIMEOUT_MS: 60000,
+    jitterDelay: (d) => d,
+    retryAfterDelay: () => 0,
+    isPermanentRequestError: () => false,
+    wait: async () => {},
+    isJudging,
+    mergeSubmissions,
+    getErrorMessage: (e, fallback) => e?.message || fallback,
+    contestApi: {
+      getSubmissionStatus: async () => ({ status: 'wrong_answer', score: 0, max_score: 100, test_cases_passed: 0 }),
+      getSubmissionDetails: async () => { throw new Error('Details lookup failed'); },
+    },
+    setActiveSubmission: (updater) => {
+      active = typeof updater === 'function' ? updater(active) : updater;
+    },
+    setHistory: (updater) => {
+      history = typeof updater === 'function' ? updater(history) : updater;
+    },
+  };
+
+  const poll = vm.runInNewContext(compile(`(${pollFunction})`), context);
+  await poll({ id: 'sub-zero', status: 'pending', score: 0, max_score: 100, created_at: 1000 });
+
+  assert.equal(active.status, 'wrong_answer');
+  assert.equal(active.detailsFailed, true);
+  assert.equal(active.details.score, 0, 'authoritative zero score from status must be preserved');
+  assert.equal(active.details.max_score, 100);
+  assert.equal(history[0].score, 0, 'history must record authoritative zero credit');
+}
+
+// Transition B1: Refresh history after detail failure repairs score but does NOT clear detailsFailed
 {
   let active = {
     id: 'sub-active',
@@ -249,6 +280,52 @@ assert.ok(retryFunction, 'found retryDetails');
   assert.equal(Boolean(active.message), true, 'error message must remain visible for retry');
 }
 
+// Transition B2: Stale history arriving while finalized: pending/0 summary must NOT overwrite finalized state
+{
+  let active = {
+    id: 'sub-finalized',
+    phase: 'completed',
+    status: 'wrong_answer',
+    detailsFailed: true,
+    message: 'Verdict received, but result details could not be loaded',
+    details: { id: 'sub-finalized', status: 'wrong_answer', score: 12.5, max_score: 100, test_cases_passed: 6, total_test_cases: 10, created_at: 1000 },
+  };
+  const activeSubmissionRef = { current: active };
+  let history = [];
+  const context = {
+    problemId: 'p1',
+    historyRequestRef: { current: 0 },
+    scopeTokenRef: { current: 0 },
+    activeSubmissionRef,
+    setIsHistoryLoading: () => {},
+    setHistoryError: () => {},
+    setHistory: (h) => { history = h; },
+    setHistoryPage: () => {},
+    setHasMoreHistory: () => {},
+    HISTORY_PAGE_SIZE: 20,
+    isJudging,
+    getErrorMessage: (e, fallback) => e?.message || fallback,
+    contestApi: {
+      listUserSubmissions: async () => [
+        { id: 'sub-finalized', status: 'pending', score: 0, max_score: 100, created_at: 1000 }, // Stale pending summary
+      ],
+      getSubmissionDetails: async () => { throw new Error('Not called'); },
+    },
+    setActiveSubmission: (updater) => {
+      active = typeof updater === 'function' ? updater(active) : updater;
+      activeSubmissionRef.current = active;
+    },
+    pollSubmission: async () => {},
+  };
+
+  const refresh = vm.runInNewContext(compile(`(${refreshFunction})`), context);
+  await refresh();
+
+  assert.equal(active.status, 'wrong_answer', 'stale pending summary must not overwrite finalized status');
+  assert.equal(active.details.score, 12.5, 'stale pending summary must not overwrite finalized score');
+  assert.equal(active.details.test_cases_passed, 6);
+}
+
 // Transition C: Restoring an already-finalized submission on initial load handles detail failure
 {
   let active = { phase: 'idle' };
@@ -288,30 +365,30 @@ assert.ok(retryFunction, 'found retryDetails');
   assert.match(active.message, /result details could not be loaded/);
 }
 
-// Transition D: retryDetails clears detailsFailed when details succeed
+// Transition D: retryDetails reconciles status and clears detailsFailed when details succeed
 {
   let active = {
     id: 'sub-retry',
     phase: 'completed',
-    status: 'accepted',
+    status: 'pending', // e.g. corrupted status
     detailsFailed: true,
     message: 'Could not load details',
-    details: { id: 'sub-retry', status: 'accepted', score: 100, created_at: 1000 },
+    details: { id: 'sub-retry', status: 'pending', score: 100, created_at: 1000 },
   };
   const activeSubmissionRef = { current: active };
-  let history = [{ id: 'sub-retry', status: 'accepted', score: 100, created_at: 1000 }];
+  let history = [{ id: 'sub-retry', status: 'pending', score: 100, created_at: 1000 }];
   const context = {
     activeSubmissionRef,
     getErrorMessage: (e, fallback) => e?.message || fallback,
     contestApi: {
       getSubmissionDetails: async () => ({
         id: 'sub-retry',
-        status: 'accepted',
-        score: 100,
+        status: 'wrong_answer',
+        score: 12.5,
         max_score: 100,
-        passed_test_cases: 10,
+        test_cases_passed: 6,
         total_test_cases: 10,
-        test_case_results: [{ test_case_id: 'tc1', status: 'accepted', runtime: 10, memory: 1000 }],
+        test_case_results: [{ test_case_id: 'tc1', status: 'wrong_answer', runtime: 10, memory: 1000 }],
       }),
     },
     setActiveSubmission: (updater) => {
@@ -327,10 +404,37 @@ assert.ok(retryFunction, 'found retryDetails');
   await retry();
 
   assert.equal(active.detailsFailed, false, 'retryDetails must clear detailsFailed on success');
+  assert.equal(active.status, 'wrong_answer', 'retryDetails must reconcile status from response');
+  assert.equal(active.details.status, 'wrong_answer');
+  assert.equal(active.details.score, 12.5);
+  assert.equal(active.details.test_cases_passed, 6);
   assert.equal(active.message, undefined);
-  assert.equal(active.details.passed_test_cases, 10);
-  assert.equal(active.details.test_cases_passed, 10);
-  assert.equal(active.details.test_case_results.length, 1);
+  assert.equal(history[0].status, 'wrong_answer');
+}
+
+// 6. Admin contest submissions: details reconciliation updates score and max_score on card item
+{
+  const adminSource = ts.createSourceFile('Admin.tsx', read('src/pages/AdminContestSubmissions.tsx'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  assert.match(adminSource.text, /score:\s*details\.score !== undefined \? details\.score : item\.score/);
+  assert.match(adminSource.text, /max_score:\s*details\.max_score !== undefined \? details\.max_score : item\.max_score/);
+
+  // Functional test of the reconciliation mapping
+  const items = [
+    { id: 'sub-1', status: 'pending', score: 0, max_score: 100, runtime: 0, memory: 0 },
+    { id: 'sub-2', status: 'accepted', score: 100, max_score: 100, runtime: 10, memory: 50 },
+  ];
+  const details = { id: 'sub-1', status: 'accepted', score: 100, max_score: 100, runtime: 15, memory: 100 };
+  const updated = items.map((item) => item.id === details.id ? {
+    ...item,
+    status: details.status,
+    runtime: details.runtime,
+    memory: details.memory,
+    score: details.score !== undefined ? details.score : item.score,
+    max_score: details.max_score !== undefined ? details.max_score : item.max_score,
+  } : item);
+  assert.equal(updated[0].status, 'accepted');
+  assert.equal(updated[0].score, 100, 'admin card must reflect finalized score 100');
+  assert.equal(updated[0].runtime, 15);
 }
 
 console.log('Neutral status, optional judging status, silent MCQs, code notification, and detail recovery unit checks passed.');

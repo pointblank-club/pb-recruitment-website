@@ -63,7 +63,6 @@ const mergeSubmissions = (
 ) => {
   const byId = new Map(secondary.map((submission) => [submission.id, submission]));
   primary.forEach((submission) => {
-    const passedCount = submission.passed_test_cases ?? submission.test_cases_passed;
     const existing = byId.get(submission.id);
     if (existing) {
       const wasExistingPending = isJudging(existing.status) || existing.status === 'attempted';
@@ -80,15 +79,10 @@ const mergeSubmissions = (
         score: resolvedScore,
         max_score: submission.max_score !== undefined ? submission.max_score : existing.max_score,
         test_case_results: submission.test_case_results?.length ? submission.test_case_results : existing.test_case_results,
-        passed_test_cases: passedCount ?? existing.passed_test_cases ?? existing.test_cases_passed,
-        test_cases_passed: passedCount ?? existing.test_cases_passed ?? existing.passed_test_cases,
+        test_cases_passed: submission.test_cases_passed ?? existing.test_cases_passed,
       });
     } else {
-      byId.set(submission.id, {
-        ...submission,
-        passed_test_cases: passedCount,
-        test_cases_passed: passedCount,
-      });
+      byId.set(submission.id, submission);
     }
   });
   return Array.from(byId.values()).sort((left, right) => right.created_at - left.created_at);
@@ -155,7 +149,6 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
 
           try {
             const response = await contestApi.getSubmissionDetails(summary.id);
-            const passedCount = response.passed_test_cases ?? response.test_cases_passed;
             details = {
               ...response,
               id: response.id || summary.id,
@@ -163,31 +156,23 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
               option: response.option && response.option.length > 0 ? response.option : summary.option,
               score: response.score,
               max_score: response.max_score,
-              passed_test_cases: passedCount,
-              test_cases_passed: passedCount,
+              test_cases_passed: response.test_cases_passed,
               total_test_cases: response.total_test_cases,
             };
             detailsFailed = false;
           } catch (error) {
             detailsFailed = true;
-            // Discard pending-summary scores; keep missing scores unknown with older backends,
-            // or use updated backend's authoritative final status score if available (> 0 or non-default).
-            const authoritativeStatusScore =
-              statusResponse.score !== undefined && (statusResponse.score > 0 || (status === 'accepted' && statusResponse.score > 0))
-                ? statusResponse.score
-                : undefined;
-            const authoritativeStatusMaxScore =
-              statusResponse.max_score !== undefined && statusResponse.max_score > 0
-                ? statusResponse.max_score
-                : undefined;
-            const passedCount = statusResponse.passed_test_cases ?? statusResponse.test_cases_passed;
+            // Preserve supplied status scores directly, including zero.
+            // On older backends without status scores, absent scores remain undefined.
+            const authoritativeStatusScore = statusResponse.score;
+            const authoritativeStatusMaxScore = statusResponse.max_score;
+            const passedCount = statusResponse.test_cases_passed;
 
             details = {
               ...summary,
               status,
               score: authoritativeStatusScore,
               max_score: authoritativeStatusMaxScore,
-              passed_test_cases: passedCount,
               test_cases_passed: passedCount,
               total_test_cases: statusResponse.total_test_cases,
             };
@@ -283,12 +268,10 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
           try {
             const details = await contestApi.getSubmissionDetails(latest.id);
             if (scopeToken !== scopeTokenRef.current) return;
-            const passedCount = details.passed_test_cases ?? details.test_cases_passed;
             const normalizedDetails: SubmissionDetailsResponse = {
               ...latest,
               ...details,
-              passed_test_cases: passedCount,
-              test_cases_passed: passedCount,
+              test_cases_passed: details.test_cases_passed,
             };
             setActiveSubmission((current) => (
               current.id === latest.id && current.phase === 'completed'
@@ -318,6 +301,14 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
           setActiveSubmission((current) => {
             if (current.id !== currentActiveId) return current;
             const currentDetails = current.details;
+
+            // Prevent pending or stale summaries from overwriting a finalized state
+            const isCurrentFinal = !isJudging(current.status) && current.phase === 'completed';
+            const isRefreshedPending = isJudging(matchingRefreshed.status) || matchingRefreshed.status === 'attempted';
+            if (isCurrentFinal && isRefreshedPending) {
+              return current;
+            }
+
             const shouldReconcile =
               current.detailsFailed ||
               !currentDetails ||
@@ -327,11 +318,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
               const hasFullDetails = Boolean(
                 currentDetails?.test_case_results && currentDetails.test_case_results.length > 0,
               );
-              const passedCount =
-                matchingRefreshed.passed_test_cases ??
-                matchingRefreshed.test_cases_passed ??
-                currentDetails?.passed_test_cases ??
-                currentDetails?.test_cases_passed;
+              const passedCount = matchingRefreshed.test_cases_passed ?? currentDetails?.test_cases_passed;
 
               return {
                 ...current,
@@ -342,7 +329,6 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
                   score: matchingRefreshed.score ?? currentDetails?.score,
                   max_score: matchingRefreshed.max_score ?? currentDetails?.max_score,
                   test_case_results: currentDetails?.test_case_results,
-                  passed_test_cases: passedCount,
                   test_cases_passed: passedCount,
                 },
                 // Clear detailsFailed only after full details are retrieved, not after fetching a summary
@@ -487,22 +473,21 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
 
     try {
       const response = await contestApi.getSubmissionDetails(submissionId);
-      const passedCount = response.passed_test_cases ?? response.test_cases_passed;
       setActiveSubmission((current) => {
         if (current.id !== submissionId) return current;
         const details: SubmissionDetailsResponse = {
           ...current.details,
           ...response,
           id: response.id || submissionId,
-          status: current.status || response.status,
+          status: response.status || current.status,
           score: response.score,
           max_score: response.max_score,
-          passed_test_cases: passedCount,
-          test_cases_passed: passedCount,
+          test_cases_passed: response.test_cases_passed,
           total_test_cases: response.total_test_cases,
         };
         return {
           ...current,
+          status: response.status || current.status,
           details,
           detailsFailed: false,
           message: undefined,
@@ -513,8 +498,8 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
           ? {
               ...sub,
               ...response,
-              passed_test_cases: passedCount,
-              test_cases_passed: passedCount,
+              status: response.status || sub.status,
+              test_cases_passed: response.test_cases_passed,
             }
           : sub
       )));

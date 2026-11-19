@@ -807,7 +807,6 @@ export interface SubmissionStatusResponse {
   score?: number;
   max_score?: number;
   test_cases_passed?: number;
-  passed_test_cases?: number;
   total_test_cases?: number;
   error_message?: string;
 }
@@ -828,7 +827,6 @@ export interface SubmissionDetailsResponse {
   memory?: number;
   test_case_results?: TestCaseResult[];
   test_cases_passed?: number;
-  passed_test_cases?: number;
   total_test_cases?: number;
   code?: string;
   error_message?: string;

@@ -33,8 +33,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
   const isMcq = activeSubmission.details?.type === 'mcq';
   const passedCasesCount = isMcq
     ? undefined
-    : (activeSubmission.details?.passed_test_cases ??
-       activeSubmission.details?.test_cases_passed ??
+    : (activeSubmission.details?.test_cases_passed ??
        (testCaseResults ? testCaseResults.filter((tc: TestCaseResult) => PASSING_STATUSES.has(tc.status)).length : undefined));
   const totalCasesCount = isMcq
     ? undefined
@@ -85,7 +84,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
               {activeSubmission.phase === 'timeout' && 'Verdict delayed'}
               {activeSubmission.phase === 'error' && (activeSubmission.id ? 'Could not verify verdict' : 'Submission failed')}
             </p>
-            {isPartial && (
+            {compact && isPartial && (
               <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold border border-yellow-500/40 bg-yellow-500/10 text-yellow-300 uppercase">
                 Partial
               </span>
@@ -150,13 +149,8 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
       {/* Test cases list */}
       {!isMcq && activeSubmission.details?.test_case_results && activeSubmission.details.test_case_results.length > 0 && (
         <div className="rounded border border-[#192233] bg-[#0b1018] overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 bg-[#0e1422] text-[10px] text-slate-400 uppercase font-semibold border-b border-[#192233]">
+          <div className="px-3 py-2 bg-[#0e1422] text-[10px] text-slate-400 uppercase font-semibold border-b border-[#192233]">
             <span>Test Cases Breakdown</span>
-            {hasTestCaseCounts && (
-              <span className={passedCasesCount === totalCasesCount ? 'text-[#10b981]' : isPartial ? 'text-yellow-400' : 'text-slate-400'}>
-                {passedCasesCount} / {totalCasesCount} Passed
-              </span>
-            )}
           </div>
           <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-1.5 bg-[#0e1422]/60 text-[10px] text-slate-500 uppercase font-semibold border-b border-[#192233]">
             <span>Case</span>

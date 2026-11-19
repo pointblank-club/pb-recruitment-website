@@ -251,7 +251,14 @@ export default function AdminContestSubmissions() {
       .then((details) => {
         if (cancelled) return;
         setSubmissionDetails(details);
-        setSubmissions((current) => current.map((item) => item.id === details.id ? { ...item, status: details.status, runtime: details.runtime, memory: details.memory } : item));
+        setSubmissions((current) => current.map((item) => item.id === details.id ? {
+          ...item,
+          status: details.status,
+          runtime: details.runtime,
+          memory: details.memory,
+          score: details.score !== undefined ? details.score : item.score,
+          max_score: details.max_score !== undefined ? details.max_score : item.max_score,
+        } : item));
         setDetailsError("");
         setIsLoadingDetails(false);
       })
