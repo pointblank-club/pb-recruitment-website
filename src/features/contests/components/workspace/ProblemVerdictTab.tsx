@@ -30,10 +30,15 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
   const isPartial = Boolean(isCompleted && isPartialCredit(activeSubmission.status, score, activeSubmission.details?.type));
 
   const testCaseResults = activeSubmission.details?.test_case_results;
-  const passedCasesCount = activeSubmission.details?.test_cases_passed ?? (
-    testCaseResults ? testCaseResults.filter((tc: TestCaseResult) => PASSING_STATUSES.has(tc.status)).length : undefined
-  );
-  const totalCasesCount = activeSubmission.details?.total_test_cases ?? (testCaseResults ? testCaseResults.length : undefined);
+  const isMcq = activeSubmission.details?.type === 'mcq';
+  const passedCasesCount = isMcq
+    ? undefined
+    : (activeSubmission.details?.passed_test_cases ??
+       activeSubmission.details?.test_cases_passed ??
+       (testCaseResults ? testCaseResults.filter((tc: TestCaseResult) => PASSING_STATUSES.has(tc.status)).length : undefined));
+  const totalCasesCount = isMcq
+    ? undefined
+    : (activeSubmission.details?.total_test_cases ?? (testCaseResults ? testCaseResults.length : undefined));
   const hasTestCaseCounts = passedCasesCount !== undefined && totalCasesCount !== undefined && totalCasesCount > 0;
 
   return (
@@ -143,7 +148,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
       )}
 
       {/* Test cases list */}
-      {activeSubmission.details?.test_case_results && activeSubmission.details.test_case_results.length > 0 && (
+      {!isMcq && activeSubmission.details?.test_case_results && activeSubmission.details.test_case_results.length > 0 && (
         <div className="rounded border border-[#192233] bg-[#0b1018] overflow-hidden">
           <div className="flex items-center justify-between px-3 py-2 bg-[#0e1422] text-[10px] text-slate-400 uppercase font-semibold border-b border-[#192233]">
             <span>Test Cases Breakdown</span>

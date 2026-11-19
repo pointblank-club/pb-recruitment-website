@@ -62,7 +62,35 @@ const mergeSubmissions = (
   secondary: SubmissionDetailsResponse[],
 ) => {
   const byId = new Map(secondary.map((submission) => [submission.id, submission]));
-  primary.forEach((submission) => byId.set(submission.id, submission));
+  primary.forEach((submission) => {
+    const passedCount = submission.passed_test_cases ?? submission.test_cases_passed;
+    const existing = byId.get(submission.id);
+    if (existing) {
+      const wasExistingPending = isJudging(existing.status) || existing.status === 'attempted';
+      const isNowFinal = !isJudging(submission.status);
+      const resolvedScore = submission.score !== undefined
+        ? submission.score
+        : wasExistingPending && isNowFinal
+        ? undefined
+        : existing.score;
+
+      byId.set(submission.id, {
+        ...existing,
+        ...submission,
+        score: resolvedScore,
+        max_score: submission.max_score !== undefined ? submission.max_score : existing.max_score,
+        test_case_results: submission.test_case_results?.length ? submission.test_case_results : existing.test_case_results,
+        passed_test_cases: passedCount ?? existing.passed_test_cases ?? existing.test_cases_passed,
+        test_cases_passed: passedCount ?? existing.test_cases_passed ?? existing.passed_test_cases,
+      });
+    } else {
+      byId.set(submission.id, {
+        ...submission,
+        passed_test_cases: passedCount,
+        test_cases_passed: passedCount,
+      });
+    }
+  });
   return Array.from(byId.values()).sort((left, right) => right.created_at - left.created_at);
 };
 
@@ -101,29 +129,33 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
         consecutiveErrors = 0;
         const status = statusResponse.status;
 
-        setActiveSubmission((current) => current.id === summary.id
-          ? {
-              ...current,
-              phase: isJudging(status) ? 'polling' : 'completed',
-              status,
-              message: isJudging(status) ? 'Judging your submission…' : undefined,
-              details: current.details ? { ...current.details, status } : summary,
-            }
-          : current);
-        setHistory((current) => current.map((submission) => (
-          submission.id === summary.id ? { ...submission, status } : submission
-        )));
-
-        if (!isJudging(status)) {
+        if (isJudging(status)) {
+          setActiveSubmission((current) => current.id === summary.id
+            ? {
+                ...current,
+                phase: 'polling',
+                status,
+                message: 'Judging your submission…',
+                details: current.details ? { ...current.details, status } : summary,
+              }
+            : current);
+          setHistory((current) => current.map((submission) => (
+            submission.id === summary.id ? { ...submission, status } : submission
+          )));
+        } else {
+          const isPendingSummary = isJudging(summary.status) || summary.status === 'attempted' || summary.status === undefined;
           let details: SubmissionDetailsResponse = {
             ...summary,
             status,
+            score: isPendingSummary ? undefined : summary.score,
+            max_score: isPendingSummary ? undefined : summary.max_score,
           };
           let detailsMessage: string | undefined;
           let detailsFailed = false;
 
           try {
             const response = await contestApi.getSubmissionDetails(summary.id);
+            const passedCount = response.passed_test_cases ?? response.test_cases_passed;
             details = {
               ...response,
               id: response.id || summary.id,
@@ -131,11 +163,34 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
               option: response.option && response.option.length > 0 ? response.option : summary.option,
               score: response.score,
               max_score: response.max_score,
-              test_cases_passed: response.test_cases_passed,
+              passed_test_cases: passedCount,
+              test_cases_passed: passedCount,
               total_test_cases: response.total_test_cases,
             };
+            detailsFailed = false;
           } catch (error) {
             detailsFailed = true;
+            // Discard pending-summary scores; keep missing scores unknown with older backends,
+            // or use updated backend's authoritative final status score if available (> 0 or non-default).
+            const authoritativeStatusScore =
+              statusResponse.score !== undefined && (statusResponse.score > 0 || (status === 'accepted' && statusResponse.score > 0))
+                ? statusResponse.score
+                : undefined;
+            const authoritativeStatusMaxScore =
+              statusResponse.max_score !== undefined && statusResponse.max_score > 0
+                ? statusResponse.max_score
+                : undefined;
+            const passedCount = statusResponse.passed_test_cases ?? statusResponse.test_cases_passed;
+
+            details = {
+              ...summary,
+              status,
+              score: authoritativeStatusScore,
+              max_score: authoritativeStatusMaxScore,
+              passed_test_cases: passedCount,
+              test_cases_passed: passedCount,
+              total_test_cases: statusResponse.total_test_cases,
+            };
             detailsMessage = `Verdict received, but result details could not be loaded: ${getErrorMessage(
               error,
               'unknown error',
@@ -228,13 +283,32 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
           try {
             const details = await contestApi.getSubmissionDetails(latest.id);
             if (scopeToken !== scopeTokenRef.current) return;
+            const passedCount = details.passed_test_cases ?? details.test_cases_passed;
+            const normalizedDetails: SubmissionDetailsResponse = {
+              ...latest,
+              ...details,
+              passed_test_cases: passedCount,
+              test_cases_passed: passedCount,
+            };
             setActiveSubmission((current) => (
               current.id === latest.id && current.phase === 'completed'
-                ? { ...current, details, detailsFailed: false }
+                ? { ...current, details: normalizedDetails, detailsFailed: false, message: undefined }
                 : current
             ));
-          } catch {
-            // Keep summary details if detailed fetch fails
+          } catch (error) {
+            if (scopeToken !== scopeTokenRef.current) return;
+            setActiveSubmission((current) => (
+              current.id === latest.id && current.phase === 'completed'
+                ? {
+                    ...current,
+                    detailsFailed: true,
+                    message: `Verdict received, but result details could not be loaded: ${getErrorMessage(
+                      error,
+                      'unknown error',
+                    )}`,
+                  }
+                : current
+            ));
           }
         }
       } else if (activeSubmissionRef.current.id) {
@@ -250,6 +324,15 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
               (currentDetails.score === undefined && matchingRefreshed.score !== undefined);
 
             if (shouldReconcile) {
+              const hasFullDetails = Boolean(
+                currentDetails?.test_case_results && currentDetails.test_case_results.length > 0,
+              );
+              const passedCount =
+                matchingRefreshed.passed_test_cases ??
+                matchingRefreshed.test_cases_passed ??
+                currentDetails?.passed_test_cases ??
+                currentDetails?.test_cases_passed;
+
               return {
                 ...current,
                 status: matchingRefreshed.status || current.status,
@@ -258,9 +341,13 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
                   ...matchingRefreshed,
                   score: matchingRefreshed.score ?? currentDetails?.score,
                   max_score: matchingRefreshed.max_score ?? currentDetails?.max_score,
+                  test_case_results: currentDetails?.test_case_results,
+                  passed_test_cases: passedCount,
+                  test_cases_passed: passedCount,
                 },
-                detailsFailed: false,
-                message: current.detailsFailed ? undefined : current.message,
+                // Clear detailsFailed only after full details are retrieved, not after fetching a summary
+                detailsFailed: current.detailsFailed && !hasFullDetails,
+                message: current.detailsFailed && !hasFullDetails ? current.message : undefined,
               };
             }
             return current;
@@ -400,6 +487,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
 
     try {
       const response = await contestApi.getSubmissionDetails(submissionId);
+      const passedCount = response.passed_test_cases ?? response.test_cases_passed;
       setActiveSubmission((current) => {
         if (current.id !== submissionId) return current;
         const details: SubmissionDetailsResponse = {
@@ -409,7 +497,8 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
           status: current.status || response.status,
           score: response.score,
           max_score: response.max_score,
-          test_cases_passed: response.test_cases_passed,
+          passed_test_cases: passedCount,
+          test_cases_passed: passedCount,
           total_test_cases: response.total_test_cases,
         };
         return {
@@ -420,7 +509,14 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
         };
       });
       setHistory((current) => current.map((sub) => (
-        sub.id === submissionId ? { ...sub, ...response } : sub
+        sub.id === submissionId
+          ? {
+              ...sub,
+              ...response,
+              passed_test_cases: passedCount,
+              test_cases_passed: passedCount,
+            }
+          : sub
       )));
     } catch (error) {
       setActiveSubmission((current) => (
