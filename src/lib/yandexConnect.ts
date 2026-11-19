@@ -48,34 +48,6 @@ export const needsYandexReconnect = (connection: YandexConnection | null | undef
 export const isSafeContestId = (value: unknown): value is string =>
   typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
 
-/**
- * Google refuses its sign-in inside embedded app browsers, so candidates who sign in to
- * Yandex with Google must open the page in a real browser. Returns the app's name when the
- * page appears to be running inside one, or null.
- */
-export const detectInAppBrowser = (userAgent: string): string | null => {
-  const ua = userAgent || '';
-  const apps: Array<[RegExp, string]> = [
-    [/WhatsApp/i, 'WhatsApp'],
-    [/Instagram/i, 'Instagram'],
-    [/FBAN|FBAV|FB_IAB|FBIOS|FB4A/i, 'Facebook'],
-    [/LinkedInApp/i, 'LinkedIn'],
-    [/Snapchat/i, 'Snapchat'],
-    [/Telegram/i, 'Telegram'],
-    [/MicroMessenger/i, 'WeChat'],
-    [/\bLine\//, 'LINE'],
-    [/Twitter/i, 'X'],
-  ];
-  for (const [pattern, name] of apps) {
-    if (pattern.test(ua)) return name;
-  }
-  // Android WebView marks itself with "; wv)".
-  if (/Android/i.test(ua) && /;\s*wv\)/.test(ua)) return 'an app';
-  // iOS web views lack the "Safari/" token that Safari and the other iOS browsers send.
-  if (/\b(iPhone|iPad|iPod)\b/.test(ua) && /AppleWebKit/.test(ua) && !/Safari\//.test(ua)) return 'an app';
-  return null;
-};
-
 const RETURN_KEY = 'pb_yandex_connect_return';
 
 /** Remembers the contest to return to if Yandex sends the candidate back with an error. */

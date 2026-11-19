@@ -497,8 +497,7 @@ export const ContestLayout = () => {
           <div className="flex items-center gap-2 text-yellow-100">
             <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
             <span>
-              <strong>{yandexConnection?.connected ? 'Yandex backup needs reconnecting.' : 'Yandex backup not connected.'}</strong>{' '}
-              Your work here is safe. Connect from the contest page so your solutions are also copied to the backup contest.
+              {yandexConnection?.connected ? 'Reconnect your Yandex account from the contest page.' : 'Connect your Yandex account from the contest page.'}
             </span>
           </div>
           <button

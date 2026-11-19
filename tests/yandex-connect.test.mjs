@@ -17,27 +17,9 @@ const sessionStorage = {
 const lib = { exports: {}, sessionStorage };
 vm.runInNewContext(compile('src/lib/yandexConnect.ts'), lib);
 const {
-  detectInAppBrowser, toYandexConnection, yandexAccountLabel, needsYandexReconnect, isSafeContestId,
+  toYandexConnection, yandexAccountLabel, needsYandexReconnect, isSafeContestId,
   rememberYandexReturn, readYandexReturn, forgetYandexReturn,
 } = lib.exports;
-
-// Google blocks sign-in in embedded app browsers; real browsers must pass.
-for (const [agent, expected] of [
-  ['Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36', null],
-  ['Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.0.0 Mobile Safari/537.36', 'an app'],
-  ['Mozilla/5.0 (Linux; Android 14; wv) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36 WhatsApp/2.24.1', 'WhatsApp'],
-  ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 330.0.0', 'Instagram'],
-  ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/470.0]', 'Facebook'],
-  ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 LinkedInApp', 'LinkedIn'],
-  ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148', 'an app'],
-  ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1', null],
-  ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0 Mobile/15E148 Safari/604.1', null],
-  ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36', null],
-  ['Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15', null],
-  ['', null],
-]) {
-  assert.equal(detectInAppBrowser(agent), expected, agent);
-}
 
 const full = toYandexConnection({ enabled: true, required: true, connected: true, token_state: 'needs_reauth', yandex_login: '', yandex_email: 'asha@gmail.com', connected_at: 5 });
 assert.equal(full.enabled && full.required && full.connected, true);
@@ -119,4 +101,4 @@ respond = () => [429, {}];
 assert.match(yandexErrorMessage(await yandexApi.completeConnection('1', 's').catch(error => error), 'fallback'), /Too many attempts/);
 assert.equal(yandexErrorMessage(new Error('x'), 'fallback'), 'fallback');
 
-console.log('Yandex connect checks passed: in-app browser detection, response normalization, safe return paths, and API request/response handling.');
+console.log('Yandex connect checks passed: response normalization, safe return paths, and API request/response handling.');
