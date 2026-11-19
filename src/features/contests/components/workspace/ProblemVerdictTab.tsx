@@ -71,12 +71,12 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-white">
-              {activeSubmission.phase === 'submitting' && 'Sending submission…'}
-              {activeSubmission.phase === 'received' && 'Submission received'}
-              {activeSubmission.phase === 'polling' && 'Judging in progress…'}
-              {activeSubmission.phase === 'completed' && formatVerdict(activeSubmission.status, score, activeSubmission.details?.type)}
-              {activeSubmission.phase === 'timeout' && 'Verdict delayed'}
-              {activeSubmission.phase === 'error' && (activeSubmission.id ? 'Could not verify verdict' : 'Submission failed')}
+            {activeSubmission.phase === 'submitting' && 'Sending submission…'}
+            {activeSubmission.phase === 'received' && 'Submission received'}
+            {activeSubmission.phase === 'polling' && 'Judging in progress…'}
+            {activeSubmission.phase === 'completed' && formatVerdict(activeSubmission.status, score, activeSubmission.details?.type)}
+            {activeSubmission.phase === 'timeout' && 'Verdict delayed'}
+            {activeSubmission.phase === 'error' && (activeSubmission.id ? 'Could not verify verdict' : 'Submission failed')}
           </p>
 
           {activeSubmission.message && (

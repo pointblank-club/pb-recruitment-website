@@ -75,32 +75,30 @@ export const ProblemSubmissionsTab: React.FC<ProblemSubmissionsTabProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e2636]">
-              {history.map((sub) => {
-                return (
-                  <tr key={sub.id} className="hover:bg-[#141b29]/50 transition-colors">
-                    <td className="py-2.5 px-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getVerdictClasses(sub.status, sub.score, sub.type)}`}>
-                        {formatVerdict(sub.status, sub.score, sub.type)}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-300 font-mono">
-                      {sub.score !== undefined && hasFinalScore(sub.status) ? formatScore(sub.score) : '—'}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-300 font-mono">
-                      {sub.runtime !== undefined ? `${sub.runtime} ms` : '—'}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-300 font-mono">
-                      {sub.memory !== undefined ? `${sub.memory} KB` : '—'}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
-                      {sub.language || 'Code'}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-500 text-[11px]">
-                      {formatSubmittedAt(sub.created_at)}
-                    </td>
-                  </tr>
-                );
-              })}
+              {history.map((sub) => (
+                <tr key={sub.id} className="hover:bg-[#141b29]/50 transition-colors">
+                  <td className="py-2.5 px-3">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getVerdictClasses(sub.status, sub.score, sub.type)}`}>
+                      {formatVerdict(sub.status, sub.score, sub.type)}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-3 text-slate-300 font-mono">
+                    {sub.score !== undefined && hasFinalScore(sub.status) ? formatScore(sub.score) : '—'}
+                  </td>
+                  <td className="py-2.5 px-3 text-slate-300 font-mono">
+                    {sub.runtime !== undefined ? `${sub.runtime} ms` : '—'}
+                  </td>
+                  <td className="py-2.5 px-3 text-slate-300 font-mono">
+                    {sub.memory !== undefined ? `${sub.memory} KB` : '—'}
+                  </td>
+                  <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
+                    {sub.language || 'Code'}
+                  </td>
+                  <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                    {formatSubmittedAt(sub.created_at)}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

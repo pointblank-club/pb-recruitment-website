@@ -709,10 +709,12 @@ export default function AdminContestSubmissions() {
                           </h3>
                           <span
                             className={`px-2.5 py-0.5 rounded text-xs font-semibold border ${getVerdictClasses(
-                              displaySubmission.status
+                              displaySubmission.status,
+                              displaySubmission.score,
+                              displaySubmission.type,
                             )}`}
                           >
-                            {formatVerdict(displaySubmission.status)}
+                            {formatVerdict(displaySubmission.status, displaySubmission.score, displaySubmission.type)}
                           </span>
                           {(displaySubmission.status === "pending" || displaySubmission.status === "processing") && (
                             <button

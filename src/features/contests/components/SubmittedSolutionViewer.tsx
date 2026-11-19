@@ -1,7 +1,7 @@
 import { Code2, AlertCircle, RefreshCw } from 'lucide-react';
 import { decodeBase64 } from '@/lib/base64';
 import { formatScore } from '@/lib/utils';
-import { formatVerdict, getVerdictClasses, PASSING_STATUSES, isPartialCredit } from '../submissionUtils';
+import { formatVerdict, getVerdictClasses, PASSING_STATUSES, isPartialCredit, hasFinalScore } from '../submissionUtils';
 import type { SubmissionDetailsResponse } from '@/services/api/contestApi';
 import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
 
@@ -102,7 +102,7 @@ export const SubmittedSolutionViewer = ({
               {formatVerdict(submission.status, submission.score, submission.type)}
             </span>
           )}
-          {submission.score !== undefined && (
+          {submission.score !== undefined && hasFinalScore(submission.status) && (
             <span className={`px-2 py-0.5 rounded text-[11px] font-mono border ${
               isPartial
                 ? 'bg-yellow-950/40 text-yellow-300 border-yellow-800/60'
