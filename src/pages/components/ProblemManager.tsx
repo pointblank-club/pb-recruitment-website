@@ -177,6 +177,24 @@ const ProblemManager: React.FC<ProblemManagerProps> = ({
     setLoadingProblemId(problem.id);
     try {
       const details = await adminApi.getProblemById(contestId, problem.id);
+      if (details.type === "mcq") {
+        if (!details.options || details.options.length < 2) {
+          throw new Error("This MCQ cannot be edited safely because its options were not returned.");
+        }
+        if (!details.answer || details.answer.length === 0) {
+          throw new Error("This MCQ cannot be edited safely because its correct answer was not returned.");
+        }
+        if (details.answer.length > 1) {
+          throw new Error("This editor cannot safely modify an MCQ with multiple correct answers.");
+        }
+        if (
+          !Number.isInteger(details.answer[0]) ||
+          details.answer[0] < 0 ||
+          details.answer[0] >= details.options.length
+        ) {
+          throw new Error("This MCQ cannot be edited because its stored answer is invalid.");
+        }
+      }
       setFormData(formDataFromProblem(details));
       setEditingProblemId(problem.id);
       setFormError("");

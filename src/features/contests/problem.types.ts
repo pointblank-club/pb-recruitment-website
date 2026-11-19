@@ -45,6 +45,7 @@ export interface LeaderboardEntry {
 export interface ProblemScore {
   problem_id: string;
   problem_name: string;
+  type?: ProblemType;
   score: number;
   max_score: number;
   attempts: number; // Total submissions, including judge errors; not the ranking penalty.

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Code2 } from 'lucide-react';
+import { Code2, HelpCircle } from 'lucide-react';
 import type { ProblemScore } from '../problem.types';
 import { formatTimestamp } from '@/lib/utils';
 
@@ -23,6 +23,8 @@ export const LeaderboardRowDetails = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {problemScores.map((problemScore) => {
           const scorePercentage = (problemScore.score / problemScore.max_score) * 100;
+          const type = problemScore.type;
+          const isMcq = type === 'mcq';
 
           return (
             <div
@@ -30,9 +32,22 @@ export const LeaderboardRowDetails = ({
               className="bg-gray-900 border border-gray-700 p-4"
             >
               <div className="flex items-start justify-between mb-3">
-                <h5 className="text-sm font-['DM_Sans'] text-white flex-1">
-                  {problemScore.problem_name}
-                </h5>
+                <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                  <h5 className="text-sm font-['DM_Sans'] text-white">
+                    {problemScore.problem_name}
+                  </h5>
+                  {type && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase font-mono border ${
+                        isMcq
+                          ? 'bg-purple-950/80 text-purple-300 border-purple-800/80'
+                          : 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80'
+                      }`}
+                    >
+                      {isMcq ? 'MCQ' : 'Code'}
+                    </span>
+                  )}
+                </div>
                 {/* Removed decorative solved/unsolved icons as requested */}
               </div>
 
@@ -70,11 +85,15 @@ export const LeaderboardRowDetails = ({
                           `/admin/contest/${contestId}/submissions?${new URLSearchParams({ userId, problemId: problemScore.problem_id })}`
                         )
                       }
-                      className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold border border-emerald-800 bg-emerald-950/60 px-2 py-0.5 rounded hover:border-emerald-600 transition-colors inline-flex items-center gap-1"
+                      className={`text-xs font-semibold px-2 py-0.5 rounded transition-colors inline-flex items-center gap-1 border ${
+                        isMcq
+                          ? 'text-purple-400 hover:text-purple-300 border-purple-800 bg-purple-950/60 hover:border-purple-600'
+                          : 'text-emerald-400 hover:text-emerald-300 border-emerald-800 bg-emerald-950/60 hover:border-emerald-600'
+                      }`}
                       title="View all submissions for this problem"
                     >
-                      <Code2 size={12} />
-                      View Code
+                      {isMcq ? <HelpCircle size={12} /> : <Code2 size={12} />}
+                      {isMcq ? 'View Submission' : 'View Code'}
                     </button>
                   )}
 
