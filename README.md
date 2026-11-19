@@ -150,6 +150,33 @@ site's browser data before leaving a shared computer.
 
 Run `npm run test:drafts` for the logout and draft-persistence regression checks.
 
+## Backup contest: Connect Yandex
+
+The same contest runs on Yandex Contest as a backup ([recruitment-backup](https://github.com/ShreyashSri/recruitment-backup)).
+Each candidate connects their own Yandex account from the contest page:
+
+- `GET /yandex/connection` drives the page. While the backend has the connect step
+  off (or predates it, answering 404) nothing changes. When it is on, the action
+  card shows the Connect Yandex box with the privacy notice and the agreement
+  checkbox; Connect stays disabled until it is ticked. When the backend requires a
+  connection, Register reads "Connect Yandex to Register" until the candidate
+  connects, and a 428 `yandex_not_connected` from registration re-checks the status.
+- Connect calls `POST /yandex/connection/start` and sends the candidate to Yandex,
+  which returns them to `/yandex/callback`. That page posts the code and state to
+  `POST /yandex/connection/complete` once (StrictMode-safe), removes the code from
+  the address bar, and returns to the contest. Register this route as the Yandex
+  app's redirect URI and as the backend's `YANDEX_OAUTH_REDIRECT_URI`.
+- A token Yandex no longer accepts (`token_state: needs_reauth`) shows a Reconnect
+  box on the contest page and a non-blocking notice in the live workspace, re-checked
+  every five minutes. Reconnecting happens on the contest page, outside the
+  proctored workspace. Changing accounts is offered only before the contest starts.
+- Google blocks sign-in inside app browsers (WhatsApp, Instagram, Android/iOS web
+  views). The box detects these from the user agent and asks the candidate to open
+  the page in Chrome or Safari, with a copy-link button. It does not block Connect,
+  because password sign-in still works there.
+
+Run `npm run test:yandex` for detection, response handling and request checks.
+
 ## Exam browser restrictions
 
 Active, registered participants have page-level restrictions throughout the contest
