@@ -2,7 +2,7 @@ import React from 'react';
 import { CheckCircle2, Clock3, XCircle } from 'lucide-react';
 import type { TestCaseResult } from '@/services/api/contestApi';
 import type { ActiveSubmission } from '../../hooks/useProblemSubmissions';
-import { formatVerdict, getVerdictClasses, PASSING_STATUSES, formatScore, isPartialCredit } from '../../submissionUtils';
+import { formatVerdict, getVerdictClasses, PASSING_STATUSES, formatScore, isPartialCredit, hasFinalScore } from '../../submissionUtils';
 
 interface ProblemVerdictTabProps {
   activeSubmission: ActiveSubmission;
@@ -24,7 +24,8 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
   }
 
   const isCompleted = activeSubmission.phase === 'completed';
-  const score = activeSubmission.details?.score;
+  const showScores = hasFinalScore(activeSubmission.status);
+  const score = showScores ? activeSubmission.details?.score : undefined;
   const maxScore = activeSubmission.details?.max_score;
   const isPassing = Boolean(activeSubmission.status && PASSING_STATUSES.has(activeSubmission.status));
   const isPartial = Boolean(isCompleted && isPartialCredit(activeSubmission.status, score, activeSubmission.details?.type));
@@ -38,7 +39,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
   const totalCasesCount = isMcq
     ? undefined
     : (activeSubmission.details?.total_test_cases ?? (testCaseResults ? testCaseResults.length : undefined));
-  const hasTestCaseCounts = passedCasesCount !== undefined && totalCasesCount !== undefined && totalCasesCount > 0;
+  const hasTestCaseCounts = showScores && passedCasesCount !== undefined && totalCasesCount !== undefined && totalCasesCount > 0;
 
   return (
     <div className={`space-y-4 font-['DM_Sans'] ${compact ? 'text-xs' : ''}`}>
@@ -163,7 +164,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
               const isPass = PASSING_STATUSES.has(tc.status);
               return (
                 <div key={idx} className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-2 text-xs items-center">
-                  <span className="text-slate-300 font-mono">Case {tc.test_case_id || idx + 1}</span>
+                  <span className="text-slate-300 font-mono">Case {idx + 1}</span>
                   <span className={isPass ? 'text-[#10b981] font-medium' : 'text-rose-400 font-medium'}>
                     {isPass ? 'Passed' : formatVerdict(tc.status)}
                   </span>

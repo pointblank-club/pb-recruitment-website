@@ -21,23 +21,18 @@ export const VERDICT_LABELS: Record<SubmissionStatus, string> = {
 export const PASSING_STATUSES = new Set(['accepted', 'completed', 'pass', 'passed']);
 export const JUDGING_STATUSES = new Set(['pending', 'processing']);
 
+// A score is meaningful only for finalized, non-infrastructure verdicts.
+export const hasFinalScore = (status?: string): boolean => (
+  Boolean(status) && !JUDGING_STATUSES.has(status!) && status !== 'attempted' && status !== 'judge_error'
+);
+
 export const isPartialCredit = (
   status?: string,
   score?: number,
   type?: string
-): boolean => {
-  if (type === 'mcq') return false;
-  if (
-    !status ||
-    PASSING_STATUSES.has(status) ||
-    JUDGING_STATUSES.has(status) ||
-    status === 'attempted' ||
-    status === 'judge_error'
-  ) {
-    return false;
-  }
-  return score !== undefined && score > 0;
-};
+): boolean => (
+  type !== 'mcq' && hasFinalScore(status) && !PASSING_STATUSES.has(status!) && score !== undefined && score > 0
+);
 
 export const formatVerdict = (status?: string) => {
   if (!status) return 'Unknown';

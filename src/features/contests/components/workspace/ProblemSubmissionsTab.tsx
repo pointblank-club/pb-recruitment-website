@@ -1,7 +1,7 @@
 import React from 'react';
 import { History, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { SubmissionDetailsResponse } from '@/services/api/contestApi';
-import { formatVerdict, getVerdictClasses, formatSubmittedAt, formatScore, isPartialCredit } from '../../submissionUtils';
+import { formatVerdict, getVerdictClasses, formatSubmittedAt, formatScore, isPartialCredit, hasFinalScore } from '../../submissionUtils';
 
 interface ProblemSubmissionsTabProps {
   history: SubmissionDetailsResponse[];
@@ -85,10 +85,13 @@ export const ProblemSubmissionsTab: React.FC<ProblemSubmissionsTabProps> = ({
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-slate-300 font-mono">
-                      {sub.score !== undefined ? formatScore(sub.score) : '—'}
+                      {sub.score !== undefined && hasFinalScore(sub.status) ? formatScore(sub.score) : '—'}
                     </td>
                     <td className="py-2.5 px-3 text-slate-300 font-mono">
                       {sub.runtime !== undefined ? `${sub.runtime} ms` : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-300 font-mono">
+                      {sub.memory !== undefined ? `${sub.memory} KB` : '—'}
                     </td>
                     <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
                       {sub.language || 'Code'}

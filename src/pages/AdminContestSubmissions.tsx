@@ -36,6 +36,8 @@ import {
   formatSubmittedAt,
   formatScore,
   isPartialCredit,
+  hasFinalScore,
+  PASSING_STATUSES,
 } from "@/features/contests/submissionUtils";
 import { QuestionDescription } from "@/features/contests/components/workspace/QuestionDescription";
 import { MathText } from "@/features/contests/components/workspace/MathText";
@@ -626,8 +628,8 @@ export default function AdminContestSubmissions() {
                           >
                             {sub.type === "mcq" ? "MCQ" : (sub.language || "code")}
                           </span>
-                          {sub.score !== undefined && (
-                            <span className={`font-semibold ${isSubPartial ? "text-yellow-300" : "text-emerald-400"}`}>
+                          {sub.type !== "mcq" && sub.score !== undefined && hasFinalScore(sub.status) && (
+                            <span className={`font-semibold ${isSubPartial ? "text-yellow-300" : PASSING_STATUSES.has(sub.status) ? "text-emerald-400" : "text-gray-400"}`}>
                               {formatScore(sub.score)} pts
                             </span>
                           )}
