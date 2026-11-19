@@ -6,7 +6,7 @@ import {
   writeLocalTabSwitchSnapshot,
   setContestSubmitted,
 } from '@/lib/contestStorage';
-import { contestApi } from '@/services/api/contestApi';
+import { contestApi, type ContestSessionStatus } from '@/services/api/contestApi';
 
 export type TabSwitchApiStatus = 'idle' | 'supported' | 'unsupported' | 'unauthorized' | 'offline';
 
@@ -221,6 +221,7 @@ export const mergeLocalTabSwitchStates = (
 };
 
 export interface ReconcileSessionOutcome {
+  sessionStatus?: ContestSessionStatus;
   state: LocalTabSwitchState;
   apiStatus: TabSwitchApiStatus;
   resetDetected: boolean;
@@ -291,6 +292,7 @@ export const reconcileContestSessionStatus = async ({
     return {
       state: nextState,
       apiStatus: 'supported',
+      sessionStatus: result.status,
       resetDetected,
       wasTerminatedBefore: initialBaseline.isTerminated,
       isSessionEnded: Boolean(result.status.is_session_ended),

@@ -17,19 +17,19 @@ export const useProblemDetails = (
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
+    const controller = new AbortController();
 
     const fetchProblem = async () => {
       try {
         setIsLoading(true);
         setError(null);
-        const data = await contestApi.getProblemById(contestId, problemId);
-        if (isMounted) setProblem(data);
+        const data = await contestApi.getProblemById(contestId, problemId, controller.signal);
+        if (!controller.signal.aborted) setProblem(data);
       } catch (err) {
-        if (isMounted) setError(err instanceof Error ? err.message : 'Failed to load problem');
-        console.error('Error fetching problem:', err);
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Failed to load problem');
+        if (!controller.signal.aborted) console.error('Error fetching problem:', err);
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (!controller.signal.aborted) setIsLoading(false);
       }
     };
 
@@ -38,7 +38,7 @@ export const useProblemDetails = (
     }
 
     return () => {
-      isMounted = false;
+      controller.abort();
     };
   }, [contestId, problemId]);
 

@@ -44,6 +44,7 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
       const headers = headerMode && (headerMode !== 'health-only' || url.pathname === '/health')
         ? { 'X-Server-Time-Ms': String(Date.now()), ...(headerMode === 'hidden' ? {} : { 'Access-Control-Expose-Headers': 'X-Server-Time-Ms' }) } : {};
       if (url.pathname === '/contests/test' && deliveryDelay) await new Promise(resolve => setTimeout(resolve, deliveryDelay));
+      if (url.pathname.endsWith('/browser-session')) return route.fulfill({ headers, json: { is_seb: false, generation: 0, session_count: 0, seb_not_detected: true, is_terminated: false, cookie_confirmed: false } });
       if (url.pathname === '/health') return route.fulfill({ headers, json: { status: 'ok' } });
       if (url.pathname === '/admin/') return route.fulfill({ status: 403, headers, json: { error: 'Not an admin' } });
       if (url.pathname === '/submission/list') return route.fulfill({ headers, json: { submissions: [] } });

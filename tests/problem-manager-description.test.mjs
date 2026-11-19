@@ -52,7 +52,7 @@ const adminApi = {
       throw Object.assign(new Error("Temporary save failure"), { isAxiosError: true });
     }
     Object.assign(savedProblem, payload);
-    return { id: problemId };
+    return { id: problemId, name: savedProblem.name, score: savedProblem.score, type: savedProblem.type };
   },
 };
 const module = { exports: {} };
