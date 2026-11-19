@@ -52,20 +52,6 @@ export interface ProblemScore {
   solved_at?: number | null;
 }
 
-export interface SubmissionDetails {
-  id: string;
-  problem_id: string;
-  type: ProblemType;
-  status: 'accepted' | 'wrong_answer' | 'tle' | 'rte' | 'failed_to_process' | 'pending' | string;
-  score?: number; // Supports decimal scores (e.g. 12.5 awarded for partial credit)
-  max_score?: number;
-  runtime?: number;
-  memory?: number;
-  test_case_results?: import('@/services/api/contestApi').TestCaseResult[];
-  test_cases_passed?: number;
-  total_test_cases?: number;
-}
-
 export interface Contest {
   id: string;
   name: string;

@@ -30,6 +30,7 @@ export interface ActiveSubmission {
   status?: SubmissionStatus;
   details?: SubmissionDetailsResponse;
   message?: string;
+  detailsFailed?: boolean;
 }
 
 interface SubmissionMetadata {
@@ -117,12 +118,9 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
           let details: SubmissionDetailsResponse = {
             ...summary,
             status,
-            score: statusResponse.score,
-            max_score: statusResponse.max_score,
-            test_cases_passed: statusResponse.test_cases_passed,
-            total_test_cases: statusResponse.total_test_cases,
           };
           let detailsMessage: string | undefined;
+          let detailsFailed = false;
 
           try {
             const response = await contestApi.getSubmissionDetails(summary.id);
@@ -131,12 +129,13 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
               id: response.id || summary.id,
               status,
               option: response.option && response.option.length > 0 ? response.option : summary.option,
-              score: response.score ?? statusResponse.score,
-              max_score: response.max_score ?? statusResponse.max_score,
-              test_cases_passed: response.test_cases_passed ?? statusResponse.test_cases_passed,
-              total_test_cases: response.total_test_cases ?? statusResponse.total_test_cases,
+              score: response.score,
+              max_score: response.max_score,
+              test_cases_passed: response.test_cases_passed,
+              total_test_cases: response.total_test_cases,
             };
           } catch (error) {
+            detailsFailed = true;
             detailsMessage = `Verdict received, but result details could not be loaded: ${getErrorMessage(
               error,
               'unknown error',
@@ -150,6 +149,7 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
             status,
             details,
             message: detailsMessage || statusResponse.error_message || details.error_message,
+            detailsFailed,
           });
           setHistory((current) => mergeSubmissions([details], current));
           return;
@@ -230,12 +230,41 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
             if (scopeToken !== scopeTokenRef.current) return;
             setActiveSubmission((current) => (
               current.id === latest.id && current.phase === 'completed'
-                ? { ...current, details }
+                ? { ...current, details, detailsFailed: false }
                 : current
             ));
           } catch {
             // Keep summary details if detailed fetch fails
           }
+        }
+      } else if (activeSubmissionRef.current.id) {
+        const currentActiveId = activeSubmissionRef.current.id;
+        const matchingRefreshed = submissions.find((sub) => sub.id === currentActiveId);
+        if (matchingRefreshed) {
+          setActiveSubmission((current) => {
+            if (current.id !== currentActiveId) return current;
+            const currentDetails = current.details;
+            const shouldReconcile =
+              current.detailsFailed ||
+              !currentDetails ||
+              (currentDetails.score === undefined && matchingRefreshed.score !== undefined);
+
+            if (shouldReconcile) {
+              return {
+                ...current,
+                status: matchingRefreshed.status || current.status,
+                details: {
+                  ...currentDetails,
+                  ...matchingRefreshed,
+                  score: matchingRefreshed.score ?? currentDetails?.score,
+                  max_score: matchingRefreshed.max_score ?? currentDetails?.max_score,
+                },
+                detailsFailed: false,
+                message: current.detailsFailed ? undefined : current.message,
+              };
+            }
+            return current;
+          });
         }
       }
 
@@ -360,15 +389,70 @@ export const useProblemSubmissions = (contestId: string, problemId: string, opti
     )
   ), [contestId, problemId, submit]);
 
-  const retryPolling = useCallback(() => {
-    if (!activeSubmission.id || !activeSubmission.details) return;
+  const retryDetails = useCallback(async () => {
+    const submissionId = activeSubmissionRef.current.id;
+    if (!submissionId) return;
+
     setActiveSubmission((current) => ({
       ...current,
+      message: 'Loading result details…',
+    }));
+
+    try {
+      const response = await contestApi.getSubmissionDetails(submissionId);
+      setActiveSubmission((current) => {
+        if (current.id !== submissionId) return current;
+        const details: SubmissionDetailsResponse = {
+          ...current.details,
+          ...response,
+          id: response.id || submissionId,
+          status: current.status || response.status,
+          score: response.score,
+          max_score: response.max_score,
+          test_cases_passed: response.test_cases_passed,
+          total_test_cases: response.total_test_cases,
+        };
+        return {
+          ...current,
+          details,
+          detailsFailed: false,
+          message: undefined,
+        };
+      });
+      setHistory((current) => current.map((sub) => (
+        sub.id === submissionId ? { ...sub, ...response } : sub
+      )));
+    } catch (error) {
+      setActiveSubmission((current) => (
+        current.id === submissionId
+          ? {
+              ...current,
+              detailsFailed: true,
+              message: `Verdict received, but result details could not be loaded: ${getErrorMessage(
+                error,
+                'unknown error',
+              )}`,
+            }
+          : current
+      ));
+    }
+  }, []);
+
+  const retryPolling = useCallback(() => {
+    const current = activeSubmissionRef.current;
+    if (!current.id) return;
+    if (current.phase === 'completed' && current.detailsFailed) {
+      void retryDetails();
+      return;
+    }
+    if (!current.details) return;
+    setActiveSubmission((curr) => ({
+      ...curr,
       phase: 'received',
       message: 'Checking the judge again…',
     }));
-    void pollSubmission(activeSubmission.details);
-  }, [activeSubmission.details, activeSubmission.id, pollSubmission]);
+    void pollSubmission(current.details);
+  }, [pollSubmission, retryDetails]);
 
   const displayedHistory = useMemo(() => {
     if (!activeSubmission.id || !activeSubmission.details) return history;

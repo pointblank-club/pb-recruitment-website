@@ -35,6 +35,7 @@ import {
   getVerdictClasses,
   formatSubmittedAt,
   formatScore,
+  isPartialCredit,
 } from "@/features/contests/submissionUtils";
 import { QuestionDescription } from "@/features/contests/components/workspace/QuestionDescription";
 import { MathText } from "@/features/contests/components/workspace/MathText";
@@ -568,8 +569,8 @@ export default function AdminContestSubmissions() {
               <div className="space-y-2 max-h-[750px] overflow-y-auto pr-1">
                 {filteredSubmissions.map((sub) => {
                   const isSelected = sub.id === selectedSubmissionId;
-                  const verdictBadgeClass = getVerdictClasses(sub.status, sub.score);
-                  const isSubPartial = sub.status !== "accepted" && sub.status !== "completed" && sub.score !== undefined && sub.score > 0;
+                  const isSubPartial = isPartialCredit(sub.status, sub.score, sub.type);
+                  const verdictBadgeClass = getVerdictClasses(sub.status, sub.score, sub.type);
                   return (
                     <button
                       type="button"

@@ -143,4 +143,18 @@ assert.equal(formatScore(12.50000001), '12.50');
 assert.equal(formatScore(null), '0');
 assert.equal(formatScore(undefined), '0');
 
+const submissionUtilsModule = { exports: {}, require: (name) => name.endsWith('utils') ? utilsModule.exports : {} };
+vm.runInNewContext(compile(read('src/features/contests/submissionUtils.ts')), submissionUtilsModule);
+const { isPartialCredit } = submissionUtilsModule.exports;
+assert.equal(isPartialCredit('wrong_answer', 12.5, 'code'), true);
+assert.equal(isPartialCredit('tle', 25, 'code'), true);
+assert.equal(isPartialCredit('rte', 37.5, 'code'), true);
+assert.equal(isPartialCredit('wrong_answer', 0, 'code'), false);
+assert.equal(isPartialCredit('wrong_answer', undefined, 'code'), false);
+assert.equal(isPartialCredit('accepted', 100, 'code'), false);
+assert.equal(isPartialCredit('pending', 50, 'code'), false);
+assert.equal(isPartialCredit('attempted', 50, 'code'), false);
+assert.equal(isPartialCredit('judge_error', 50, 'code'), false);
+assert.equal(isPartialCredit('wrong_answer', 50, 'mcq'), false);
+
 console.log('Leaderboard checks passed: header-independent rows/pagination, participant identity, decimal scores, malformed body rejection, and request errors.');

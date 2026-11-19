@@ -1,6 +1,6 @@
 import { Code2, AlertCircle, RefreshCw } from 'lucide-react';
 import { decodeBase64 } from '@/lib/base64';
-import { formatVerdict, getVerdictClasses, formatScore, PASSING_STATUSES } from '../submissionUtils';
+import { formatVerdict, getVerdictClasses, formatScore, PASSING_STATUSES, isPartialCredit } from '../submissionUtils';
 import type { SubmissionDetailsResponse } from '@/services/api/contestApi';
 import { preventClipboardAction, preventContextMenu, preventClipboardShortcut } from '../clipboardGuards';
 
@@ -74,8 +74,8 @@ export const SubmittedSolutionViewer = ({
   }
 
   const isPassing = Boolean(submission.status && PASSING_STATUSES.has(submission.status));
-  const isPartial = Boolean(!isPassing && submission.score !== undefined && submission.score > 0);
-  const badgeClass = getVerdictClasses(submission.status, submission.score);
+  const isPartial = Boolean(isPartialCredit(submission.status, submission.score, submission.type));
+  const badgeClass = getVerdictClasses(submission.status, submission.score, submission.type);
 
   return (
     <div
@@ -87,8 +87,8 @@ export const SubmittedSolutionViewer = ({
       onContextMenu={isContestEnded ? undefined : preventContextMenu}
     >
       {/* Header bar matching CodeProblemView right pane */}
-      <div className="h-10 border-b border-gray-700 px-4 bg-gray-900/50 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0">
+      <div className="min-h-10 py-2 border-b border-gray-700 px-4 bg-gray-900/50 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
           <Code2 className="w-4 h-4 text-green-400 flex-shrink-0" />
           <span className="text-xs font-semibold text-gray-200 uppercase tracking-wider">
             Your Submitted Solution
@@ -114,8 +114,8 @@ export const SubmittedSolutionViewer = ({
                 ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
                 : 'bg-gray-800 text-gray-300 border-gray-700'
             }`}>
-              Score: {submission.score > 0 ? `+${formatScore(submission.score)}` : formatScore(submission.score)}
-              {submission.max_score !== undefined ? ` / ${formatScore(submission.max_score)}` : ' pts'}
+              Score: {formatScore(submission.score)}
+              {submission.max_score !== undefined && submission.max_score > 0 ? ` / ${formatScore(submission.max_score)}` : ' pts'}
             </span>
           )}
           {onRetry && (submission.status === 'pending' || submission.status === 'processing') && (

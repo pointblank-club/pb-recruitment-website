@@ -832,8 +832,6 @@ export interface SubmissionDetailsResponse {
   error_message?: string;
 }
 
-export type SubmissionDetails = SubmissionDetailsResponse;
-
 export interface TestCaseResult {
   id?: string;
   submission_id?: string;

@@ -7,7 +7,13 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 const compile = (source) => ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-const utils = { exports: {} };
+const utils = {
+  exports: {},
+  require: (name) => {
+    if (name.endsWith('utils')) return { formatScore: (s) => String(s ?? 0) };
+    return {};
+  },
+};
 vm.runInNewContext(compile(read('src/features/contests/submissionUtils.ts')), utils);
 const { formatVerdict, getVerdictClasses, PASSING_STATUSES, JUDGING_STATUSES } = utils.exports;
 assert.equal(formatVerdict('attempted'), 'Attempted');

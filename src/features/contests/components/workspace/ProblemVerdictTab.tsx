@@ -2,7 +2,7 @@ import React from 'react';
 import { CheckCircle2, Clock3, XCircle } from 'lucide-react';
 import type { TestCaseResult } from '@/services/api/contestApi';
 import type { ActiveSubmission } from '../../hooks/useProblemSubmissions';
-import { formatVerdict, getVerdictClasses, PASSING_STATUSES, formatScore } from '../../submissionUtils';
+import { formatVerdict, getVerdictClasses, PASSING_STATUSES, formatScore, isPartialCredit } from '../../submissionUtils';
 
 interface ProblemVerdictTabProps {
   activeSubmission: ActiveSubmission;
@@ -27,7 +27,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
   const score = activeSubmission.details?.score;
   const maxScore = activeSubmission.details?.max_score;
   const isPassing = Boolean(activeSubmission.status && PASSING_STATUSES.has(activeSubmission.status));
-  const isPartial = Boolean(isCompleted && !isPassing && score !== undefined && score > 0);
+  const isPartial = Boolean(isCompleted && isPartialCredit(activeSubmission.status, score, activeSubmission.details?.type));
 
   const testCaseResults = activeSubmission.details?.test_case_results;
   const passedCasesCount = activeSubmission.details?.test_cases_passed ?? (
@@ -48,7 +48,7 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
                   Partial Credit
                 </span>
               )}
-              <span className={`px-2.5 py-1 rounded text-xs font-semibold border ${getVerdictClasses(activeSubmission.status, score)}`}>
+              <span className={`px-2.5 py-1 rounded text-xs font-semibold border ${getVerdictClasses(activeSubmission.status, score, activeSubmission.details?.type)}`}>
                 {formatVerdict(activeSubmission.status)}
               </span>
             </div>
@@ -87,21 +87,6 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
             )}
           </div>
 
-          {isCompleted && score !== undefined && (
-            <p className="text-xs mt-1.5 font-mono text-slate-300">
-              Score Earned:{' '}
-              <span className={`font-semibold ${isPartial ? 'text-yellow-400' : isPassing ? 'text-emerald-400' : 'text-slate-300'}`}>
-                {score > 0 ? `+${formatScore(score)}` : formatScore(score)}
-                {maxScore !== undefined ? ` / ${formatScore(maxScore)} pts` : ' pts'}
-              </span>
-              {hasTestCaseCounts && (
-                <span className="ml-2.5 text-slate-400">
-                  ({passedCasesCount} / {totalCasesCount} passed)
-                </span>
-              )}
-            </p>
-          )}
-
           {activeSubmission.message && (
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
               {activeSubmission.message}
@@ -109,13 +94,13 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
           )}
         </div>
 
-        {onRetryPolling && Boolean(activeSubmission.id) && (activeSubmission.phase === 'timeout' || activeSubmission.phase === 'error') && (
+        {onRetryPolling && Boolean(activeSubmission.id) && (activeSubmission.phase === 'timeout' || activeSubmission.phase === 'error' || activeSubmission.detailsFailed) && (
           <button
             type="button"
             onClick={onRetryPolling}
             className="px-2.5 py-1 text-xs rounded bg-[#141b29] text-slate-200 border border-[#243047] hover:bg-[#1e293b] hover:text-white transition-colors"
           >
-            Check again
+            {activeSubmission.detailsFailed ? 'Retry details' : 'Check again'}
           </button>
         )}
       </div>
@@ -125,12 +110,12 @@ export const ProblemVerdictTab: React.FC<ProblemVerdictTabProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {score !== undefined && (
             <div className="p-3 rounded bg-[#0b1018] border border-[#192233]">
-              <span className="text-[10px] text-slate-500 uppercase font-semibold">Score Earned</span>
+              <span className="text-[10px] text-slate-500 uppercase font-semibold">Submission Score</span>
               <p className={`text-sm font-mono mt-0.5 font-semibold ${
                 isPartial ? 'text-yellow-400' : isPassing ? 'text-emerald-400' : 'text-slate-200'
               }`}>
-                {score > 0 ? `+${formatScore(score)}` : formatScore(score)}
-                {maxScore !== undefined ? ` / ${formatScore(maxScore)}` : ''}
+                {formatScore(score)}
+                {maxScore !== undefined && maxScore > 0 ? ` / ${formatScore(maxScore)} pts` : ' pts'}
               </p>
             </div>
           )}
