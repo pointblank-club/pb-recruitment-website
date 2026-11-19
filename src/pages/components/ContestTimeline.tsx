@@ -167,7 +167,7 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
             break;
 
           case 428:
-            message = "Connect your Yandex account for the backup contest before registering.";
+            message = "Connect your Yandex account before registering.";
             yandex.refresh();
             break;
 
@@ -274,13 +274,12 @@ const ContestTimeline: React.FC<ContestTimelineProps> = ({ contest, onRegistered
   );
 
   const yandexSection = !showYandex || !yandexConnection ? null : !yandexConnection.connected ? (
-    <YandexConnectCard contestId={contest.id} connection={yandexConnection} variant="connect" />
+    <YandexConnectCard contestId={contest.id} variant="connect" />
   ) : needsYandexReconnect(yandexConnection) ? (
-    <YandexConnectCard contestId={contest.id} connection={yandexConnection} variant="reconnect" />
+    <YandexConnectCard contestId={contest.id} variant="reconnect" />
   ) : isChangingYandex && !contestStarted ? (
     <YandexConnectCard
       contestId={contest.id}
-      connection={yandexConnection}
       variant="change"
       onCancel={() => setIsChangingYandex(false)}
     />
