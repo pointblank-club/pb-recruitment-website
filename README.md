@@ -157,8 +157,9 @@ Each candidate connects their own Yandex account from the contest page:
 
 - `GET /yandex/connection` drives the page. While the backend has the connect step
   off (or predates it, answering 404) nothing changes. When it is on, the action
-  card shows one line of text and a Connect Yandex button; clicking it is the
-  candidate's agreement, which the backend records. When the backend requires a
+  card shows one line of text, the agreement checkbox ("I agree that Point Blank may
+  submit my solutions ... from my Yandex account") and a Connect Yandex button that
+  stays disabled until it is ticked. When the backend requires a
   connection, Register reads "Connect Yandex to Register" until the candidate
   connects, and a 428 `yandex_not_connected` from registration re-checks the status.
 - Connect calls `POST /yandex/connection/start` and sends the candidate to Yandex,
