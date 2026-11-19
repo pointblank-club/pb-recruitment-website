@@ -1,18 +1,29 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { Loader2, Pause, Play } from "lucide-react";
 import { toast } from "react-toastify";
 import { adminApi } from "@/services/api/adminApi";
+import { useAuth } from "@/lib/AuthContext";
 
 interface LeaderboardFreezeControlProps {
   contestId: string;
 }
 
 const LeaderboardFreezeControl = ({ contestId }: LeaderboardFreezeControlProps) => {
+  const { user } = useAuth();
+  const userId = user?.uid;
   const [isFrozen, setIsFrozen] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState("");
+  const scopeRef = useRef({ contestId, userId });
+  scopeRef.current = { contestId, userId };
+  const statusRequestGenerationRef = useRef(0);
+  const mutationGenerationRef = useRef(0);
+  const mutationInFlightRef = useRef(false);
+
+  const isCurrentScope = (targetContestId: string, targetUserId: string | undefined) =>
+    scopeRef.current.contestId === targetContestId && scopeRef.current.userId === targetUserId;
 
   const getErrorMessage = (err: unknown, fallback: string) => {
     if (axios.isAxiosError<{ error?: string }>(err)) {
@@ -21,40 +32,95 @@ const LeaderboardFreezeControl = ({ contestId }: LeaderboardFreezeControlProps) 
     return err instanceof Error ? err.message : fallback;
   };
 
-  const loadStatus = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const loadStatus = useCallback(async (options: { preserveError?: boolean; quiet?: boolean } = {}) => {
+    const generation = ++statusRequestGenerationRef.current;
+    const targetContestId = contestId;
+    const targetUserId = userId;
+    if (!options.quiet) setLoading(true);
+    if (!options.preserveError) setError("");
     try {
-      const status = await adminApi.getLeaderboardFreezeStatus(contestId);
+      const status = await adminApi.getLeaderboardFreezeStatus(targetContestId);
+      if (generation !== statusRequestGenerationRef.current || !isCurrentScope(targetContestId, targetUserId)) return;
       setIsFrozen(status.frozen);
     } catch (err: unknown) {
+      if (generation !== statusRequestGenerationRef.current || !isCurrentScope(targetContestId, targetUserId)) return;
       setError(getErrorMessage(err, "Failed to load leaderboard status."));
     } finally {
-      setLoading(false);
+      if (!options.quiet && generation === statusRequestGenerationRef.current && isCurrentScope(targetContestId, targetUserId)) {
+        setLoading(false);
+      }
     }
-  }, [contestId]);
+  }, [contestId, userId]);
 
   useEffect(() => {
+    setIsFrozen(null);
+    setLoading(true);
+    setUpdating(false);
+    setError("");
+    mutationInFlightRef.current = false;
     void loadStatus();
+
+    const statusGenerationRefForCleanup = statusRequestGenerationRef;
+    const mutationGenerationRefForCleanup = mutationGenerationRef;
+    const mutationInFlightRefForCleanup = mutationInFlightRef;
+    return () => {
+      statusGenerationRefForCleanup.current++;
+      mutationGenerationRefForCleanup.current++;
+      mutationInFlightRefForCleanup.current = false;
+    };
+  }, [contestId, loadStatus, userId]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible" && !mutationInFlightRef.current) {
+        void loadStatus({ quiet: true });
+      }
+    };
+    const refreshOnFocus = () => {
+      if (!mutationInFlightRef.current) void loadStatus({ quiet: true });
+    };
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [loadStatus]);
 
   const handleToggle = async () => {
-    if (isFrozen === null || updating) return;
+    if (isFrozen === null || updating || mutationInFlightRef.current) return;
     const nextFrozen = !isFrozen;
+    const operation = ++mutationGenerationRef.current;
+    const targetContestId = contestId;
+    const targetUserId = userId;
+    const isCurrentMutation = () => operation === mutationGenerationRef.current &&
+      isCurrentScope(targetContestId, targetUserId);
+
+    // A read started before this mutation could report the old server state.
+    statusRequestGenerationRef.current++;
+    mutationInFlightRef.current = true;
     setUpdating(true);
     setError("");
     try {
-      const status = await adminApi.setLeaderboardFrozen(contestId, nextFrozen);
+      const status = await adminApi.setLeaderboardFrozen(targetContestId, nextFrozen);
+      if (!isCurrentMutation()) return;
       setIsFrozen(status.frozen);
       toast.success(status.frozen
         ? "Public leaderboard frozen. Scores are still updating."
         : "Public leaderboard unfrozen with the latest ranking.");
     } catch (err: unknown) {
+      if (!isCurrentMutation()) return;
       const message = getErrorMessage(err, "Failed to update leaderboard mode.");
       setError(message);
       toast.error(message);
+      // The server may have committed the PUT even if its response was lost.
+      await loadStatus({ preserveError: true, quiet: true });
     } finally {
-      setUpdating(false);
+      if (isCurrentMutation()) {
+        mutationInFlightRef.current = false;
+        setUpdating(false);
+      }
     }
   };
 

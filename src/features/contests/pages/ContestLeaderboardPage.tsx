@@ -6,6 +6,17 @@ import { LeaderboardTable } from '../components/LeaderboardTable';
 import { adminApi } from '@/services/api/adminApi';
 import { useAuth } from '@/lib/AuthContext';
 
+const getLeaderboardFailureMessage = (error: string | null) => {
+  const message = error?.trim();
+  if (!message) return 'We couldn’t load the rankings right now. Please try again.';
+
+  const isMissingContest = /contest\s+(?:was\s+)?not\s+found/i.test(message);
+  const isAuthenticationError = /(?:invalid|expired|missing|malformed).{0,40}(?:id\s+)?token|(?:id\s+)?token.{0,40}(?:invalid|expired|missing|malformed)|unauthori[sz]ed|authentication required|sign\s?in/i.test(message);
+  return isMissingContest || isAuthenticationError
+    ? message
+    : 'We couldn’t load the rankings right now. Please try again.';
+};
+
 export const ContestLeaderboardPage = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
@@ -76,7 +87,7 @@ export const ContestLeaderboardPage = () => {
           <div className="bg-red-950/40 border border-red-500/40 rounded-lg p-6 text-center">
             <p className="text-red-400 font-medium mb-2 font-['DM_Sans']">Leaderboard unavailable</p>
             <p className="text-red-300 text-sm mb-4 font-['DM_Sans']">
-              We couldn’t load the rankings right now. Please try again.
+              {getLeaderboardFailureMessage(error)}
             </p>
             <div className="flex justify-center gap-3">
               <button
