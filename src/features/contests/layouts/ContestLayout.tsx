@@ -21,6 +21,7 @@ import {
   setContestSubmitted,
   getContestEntered,
   setContestEntered,
+  setPendingFeedback,
 } from '@/lib/contestStorage';
 import { contestApi } from '@/services/api/contestApi';
 
@@ -145,8 +146,11 @@ export const ContestLayout = () => {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
+    if (contestId && user?.uid) {
+      setPendingFeedback(contestId, user.uid);
+    }
     navigate(`/contest/${contestId}/feedback`, { replace: true });
-  }, [contestId, navigate]);
+  }, [contestId, user?.uid, navigate]);
 
   useEffect(() => {
     if (!contestId || !user?.uid) return;

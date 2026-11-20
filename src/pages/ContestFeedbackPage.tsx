@@ -6,8 +6,23 @@ import Footer from "./components/footer";
 import { contestApi, type SubmitFeedbackPayload } from "@/services/api/contestApi";
 import { Contest } from "@/models/contest";
 import { useAuth } from "@/lib/AuthContext";
+import { clearPendingFeedback } from "@/lib/contestStorage";
 import { toast } from "react-toastify";
 import axios from "axios";
+
+const setFeedbackDone = (contestId: string) => {
+  try {
+    localStorage.setItem(`pb_contest_feedback_${contestId}`, "true");
+  } catch {}
+};
+
+const isFeedbackDoneLocally = (contestId: string): boolean => {
+  try {
+    return localStorage.getItem(`pb_contest_feedback_${contestId}`) === "true";
+  } catch {
+    return false;
+  }
+};
 
 const RatingButtons: React.FC<{
   id?: string;
@@ -89,6 +104,10 @@ const ContestFeedbackPage: React.FC = () => {
     const currentUserId = user?.uid;
     const currentContestId = id;
 
+    if (isFeedbackDoneLocally(currentContestId)) {
+      setHasSubmitted(true);
+    }
+
     let isMounted = true;
     const isCurrent = () => isMounted && id === currentContestId && user?.uid === currentUserId;
 
@@ -103,8 +122,12 @@ const ContestFeedbackPage: React.FC = () => {
         if (user) {
           const status = await contestApi.getFeedbackStatus(currentContestId);
           if (!isCurrent()) return;
-          setHasSubmitted(Boolean(status.has_submitted));
+          const done = Boolean(status.has_submitted) || isFeedbackDoneLocally(currentContestId);
+          setHasSubmitted(done);
           setCanSubmit(Boolean(status.can_submit));
+          if (done && user?.uid) {
+            clearPendingFeedback(user.uid);
+          }
         }
       } catch (err: unknown) {
         if (!isCurrent()) return;
@@ -143,14 +166,23 @@ const ContestFeedbackPage: React.FC = () => {
   );
 
   useEffect(() => {
-    if (hasSubmitted || isSuccess || !canSubmit || !isDirty) return;
+    if (hasSubmitted || isSuccess || !canSubmit) return;
+    window.history.pushState(null, "", window.location.href);
+    const handlePopState = () => {
+      window.history.pushState(null, "", window.location.href);
+      toast.warning("Please submit your feedback before leaving.");
+    };
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
+    window.addEventListener("popstate", handlePopState);
     window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [hasSubmitted, isSuccess, canSubmit, isDirty]);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [hasSubmitted, isSuccess, canSubmit]);
 
   const toggleThought = (thought: string) => {
     setThoughtsDuringEvent((prev) =>
@@ -247,6 +279,8 @@ const ContestFeedbackPage: React.FC = () => {
     try {
       await contestApi.submitFeedback(targetContestId, payload);
       if (id !== targetContestId || user?.uid !== targetUserId) return;
+      setFeedbackDone(targetContestId);
+      if (user?.uid) clearPendingFeedback(user.uid);
       setIsSuccess(true);
       setHasSubmitted(true);
       toast.success("Thank you! Your feedback has been recorded.");
@@ -258,6 +292,8 @@ const ContestFeedbackPage: React.FC = () => {
         const data = err.response?.data as { error?: string; message?: string } | undefined;
         msg = data?.error || data?.message || err.message || msg;
         if (err.response?.status === 409) {
+          setFeedbackDone(targetContestId);
+          if (user?.uid) clearPendingFeedback(user.uid);
           setIsSuccess(true);
           setHasSubmitted(true);
           toast.info("You have already submitted feedback for this contest.");
