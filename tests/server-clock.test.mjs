@@ -68,11 +68,6 @@ const loadApi = name => {
     if (imported === './serverClock') return apiClock;
     if (imported.endsWith('/firebase')) return { auth };
     if (imported.endsWith('/constants')) return { getDepartmentFromBranch: value => value };
-    if (imported.endsWith('/yandexConnect')) {
-      const helpers = { exports: {} };
-      vm.runInNewContext(compile('src/lib/yandexConnect.ts'), helpers);
-      return helpers.exports;
-    }
     return {};
   } };
   vm.runInNewContext(compile(`src/services/api/${name}.ts`), context);

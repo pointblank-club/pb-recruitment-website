@@ -18,15 +18,6 @@ import { Contest } from "@/models/contest";
 import { auth } from '@/lib/firebase';
 import { encodeBase64 } from '@/lib/base64';
 import { jitterDelay, parseRetryAfterMs, requestTimeout } from '@/lib/requestPolicy';
-import {
-  DISABLED_YANDEX_CONNECTION,
-  isSafeContestId,
-  parseAuthorizeUrl,
-  parseCompletedYandexConnection,
-  parseYandexConnection,
-  type CompletedYandexConnection,
-  type YandexConnection,
-} from '@/lib/yandexConnect';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const TAB_SWITCH_REQUEST_TIMEOUT_MS = 10_000;
@@ -83,17 +74,6 @@ const extractServerErrorMessage = (data: unknown): string | undefined => {
     }
   }
   return undefined;
-};
-
-/** A message for a failed Yandex call: the server's own text where it sent one. */
-export const yandexErrorMessage = (error: unknown, fallback: string): string => {
-  if (axios.isAxiosError(error)) {
-    const message = extractServerErrorMessage(error.response?.data);
-    if (message) return message;
-    if (error.response?.status === 429) return 'Too many attempts. Wait a few minutes and try again.';
-    if (!error.response) return 'Could not reach the server. Check your connection and try again.';
-  }
-  return fallback;
 };
 
 export const isTabSwitchTerminationSubmissionError = (error: unknown): boolean => {
@@ -228,32 +208,6 @@ class ContestApiService {
   async getContestsList(page: number = 0): Promise<Contest[]> {
     const response = await this.axiosInstance.get<ContestPayload[]>(`/contests/list?page=${page}`);
     return response.data.map(c => new Contest(c));
-  }
-
-  /** The candidate's Yandex connection. A server without the endpoint (404) reads as "off". */
-  async getYandexConnection(expectedUserId: string, signal?: AbortSignal): Promise<YandexConnection> {
-    try {
-      const response = await this.axiosInstance.get('/yandex/connection',
-        { signal, timeout: 10_000, _expectedUserId: expectedUserId } as Record<string, unknown>);
-      return parseYandexConnection(response.data);
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 404) return DISABLED_YANDEX_CONNECTION;
-      throw error;
-    }
-  }
-
-  /** Returns the Yandex sign-in page. Only called once the candidate ticked the agreement. */
-  async startYandexConnection(contestId: string, expectedUserId: string, signal?: AbortSignal): Promise<string> {
-    const response = await this.axiosInstance.post('/yandex/connection/start',
-      { consent: true, contest_id: isSafeContestId(contestId) ? contestId : '' },
-      { signal, timeout: 15_000, _expectedUserId: expectedUserId } as Record<string, unknown>);
-    return parseAuthorizeUrl(response.data);
-  }
-
-  async completeYandexConnection(code: string, state: string, expectedUserId: string): Promise<CompletedYandexConnection> {
-    const response = await this.axiosInstance.post('/yandex/connection/complete', { code, state },
-      { timeout: 30_000, _expectedUserId: expectedUserId } as Record<string, unknown>);
-    return parseCompletedYandexConnection(response.data);
   }
 
   startBrowserSession(contestId: string, userId: string, signal?: AbortSignal): Promise<BrowserSession> {
