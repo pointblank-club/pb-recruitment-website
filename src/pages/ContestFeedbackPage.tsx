@@ -203,18 +203,12 @@ const ContestFeedbackPage: React.FC = () => {
       return fail("Question 7 is required: Please rate the punctuality of rounds.", "q7-logistics-punctuality");
     if (!logisticsVenue)
       return fail("Question 7 is required: Please rate venue comfort and setup.", "q7-logistics-venue");
-    if (!bestThing.trim())
-      return fail("Question 8 is required: Please tell us what Pointblank absolutely got right.", "q8-best-thing");
     if (!recommendLikelihood)
       return fail("Question 9 is required: Please select how likely you are to recommend joining Pointblank.", "q9-recommend");
     if (convincedReasons.length === 0 && (!isConvincedOtherSelected || !convincedOther.trim()))
       return fail("Question 10 is required: Please select what convinced you the most to consider joining.", "q10-convinced");
     if (isConvincedOtherSelected && !convincedOther.trim())
       return fail("Question 10 is required: Please specify what convinced you in the other text field.", "q10-convinced-other");
-    if (!suggestions.trim())
-      return fail("Question 11 is required: Please provide suggestions for how we can make the next test better.", "q11-suggestions");
-    if (!finalFeedback.trim())
-      return fail("Question 12 is required: Please share any final feedback about the test.", "q12-final-feedback");
 
     if (!user) return;
     const targetContestId = id;
@@ -416,8 +410,8 @@ const ContestFeedbackPage: React.FC = () => {
                 <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold px-3 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center gap-1.5 font-mono">
                   <ShieldCheck size={14} /> 100% Anonymous
                 </span>
-                <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold px-3 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1.5 font-mono">
-                  <AlertCircle size={14} /> All Questions Compulsory
+                <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold px-3 py-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1.5 font-mono">
+                  <AlertCircle size={14} /> Questions with * are required
                 </span>
               </div>
               <h1 className="text-3xl sm:text-5xl font-bold font-anton text-beige tracking-wide">
@@ -674,7 +668,6 @@ const ContestFeedbackPage: React.FC = () => {
                 <div className="space-y-2">
                   <label htmlFor="q8-best-thing" className="text-lg sm:text-xl font-bold text-white flex items-center gap-1.5 cursor-pointer">
                     <span>8. What's the one thing Pointblank absolutely got right during the recruitment?</span>
-                    <span className="text-red-500 font-bold">*</span>
                   </label>
                 </div>
                 <div className="pt-2">
@@ -794,7 +787,6 @@ const ContestFeedbackPage: React.FC = () => {
                 <div className="space-y-2">
                   <label htmlFor="q11-suggestions" className="text-lg sm:text-xl font-bold text-white flex items-center gap-1.5 cursor-pointer">
                     <span>11. Any suggestions for how we can make the next recruitment test even better?</span>
-                    <span className="text-red-500 font-bold">*</span>
                   </label>
                 </div>
                 <div className="pt-2">
@@ -814,7 +806,6 @@ const ContestFeedbackPage: React.FC = () => {
                 <div className="space-y-2">
                   <label htmlFor="q12-final-feedback" className="text-lg sm:text-xl font-bold text-white flex items-center gap-1.5 cursor-pointer">
                     <span>12. Any final feedback about the test?</span>
-                    <span className="text-red-500 font-bold">*</span>
                   </label>
                 </div>
                 <div className="pt-2">
@@ -849,7 +840,11 @@ const ContestFeedbackPage: React.FC = () => {
                   )}
                 </button>
                 <p className="text-sm text-gray-400 mt-3 text-center">
-                  All 12 sections must be answered before submitting.
+                  All required questions (*) must be answered before submitting. Text questions are optional.
+                </p>
+                <p className="text-xs text-blue-400/80 mt-1.5 text-center flex items-center justify-center gap-1.5">
+                  <ShieldCheck size={14} className="text-blue-400" />
+                  Your responses are anonymous and collected solely to improve future tests.
                 </p>
               </div>
             </form>
