@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Code2 } from 'lucide-react';
 import type { LeaderboardEntry } from '../problem.types';
@@ -23,7 +23,7 @@ export const LeaderboardTable = ({
   const isAdmin = propIsAdmin ?? false;
 
   const hasProblemBreakdown = entries.some(
-    (entry) => entry.problem_scores && entry.problem_scores.length > 0
+    (entry) => entry.problem_scores?.some((problem) => problem.type === 'code')
   );
 
   const toggleExpand = (userId: string) => {
@@ -60,18 +60,21 @@ export const LeaderboardTable = ({
               <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
                 USN
               </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']" title="Problems with 100% test cases passed">
-                Solved
+              <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']" title="Fully solved DSA questions">
+                DSA Solved
+              </th>
+              <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']" title="Correctly answered MCQ questions">
+                MCQ Solved
               </th>
               <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']" title="Total score (includes partial credit)">
-                Score
+                Total Score
               </th>
               <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
                 Last Submit
               </th>
               {hasProblemBreakdown && (
                 <th className="px-6 py-4 text-center text-xs font-medium text-gray-400 uppercase tracking-wider font-['DM_Sans']">
-                  Details
+                  DSA Questions
                 </th>
               )}
               {isAdmin && (
@@ -87,9 +90,8 @@ export const LeaderboardTable = ({
               const isExpanded = expandedUserId === entry.user_id;
 
               return (
-                <>
+                <Fragment key={entry.user_id}>
                   <tr
-                    key={entry.user_id}
                     className={`hover:bg-gray-900 transition-colors ${
                       isCurrentUser ? 'bg-gray-900' : ''
                     }`}
@@ -116,7 +118,12 @@ export const LeaderboardTable = ({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <span className="text-sm font-['DM_Sans'] text-white">
-                        {entry.problems_solved}
+                        {entry.dsa_solved ?? '—'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span className="text-sm font-['DM_Sans'] text-white">
+                        {entry.mcq_solved ?? '—'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -125,7 +132,10 @@ export const LeaderboardTable = ({
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-400 font-['DM_Sans']">
+                      <span
+                        className="text-sm text-gray-400 font-['DM_Sans']"
+                        title={entry.last_submission_time ? new Date(entry.last_submission_time).toLocaleString() : undefined}
+                      >
                         {!entry.last_submission_time || entry.last_submission_time <= 0
                           ? "-"
                           : formatTimestamp(entry.last_submission_time)}
@@ -133,8 +143,11 @@ export const LeaderboardTable = ({
                     </td>
                     {hasProblemBreakdown && (
                       <td className="px-6 py-4 whitespace-nowrap text-center">
-                        {entry.problem_scores && entry.problem_scores.length > 0 && (
+                        {entry.problem_scores?.some((problem) => problem.type === 'code') && (
                           <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            aria-label={`${isExpanded ? 'Hide' : 'View'} DSA results for ${entry.username}`}
                             onClick={() => toggleExpand(entry.user_id)}
                             className="text-green-400 hover:text-green-300 text-sm font-['DM_Sans'] border border-gray-700 px-2 py-1 hover:border-green-400 transition-colors"
                           >
@@ -162,17 +175,14 @@ export const LeaderboardTable = ({
                   </tr>
                   {isExpanded && entry.problem_scores && (
                     <tr>
-                      <td colSpan={6 + (hasProblemBreakdown ? 1 : 0) + (isAdmin ? 1 : 0)} className="px-6 py-4 bg-gray-900 border-t border-gray-800">
+                      <td colSpan={7 + (hasProblemBreakdown ? 1 : 0) + (isAdmin ? 1 : 0)} className="px-6 py-4 bg-gray-900 border-t border-gray-800">
                         <LeaderboardRowDetails
                           problemScores={entry.problem_scores}
-                          userId={entry.user_id}
-                          contestId={contestId}
-                          isAdmin={isAdmin}
                         />
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>

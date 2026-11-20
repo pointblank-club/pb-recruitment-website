@@ -139,6 +139,14 @@ Run `npm run test:leaderboard` for response validation. With Vite on
 current-user highlighting, and navigation checks. `PLAYWRIGHT_MODULE` can point
 to an existing Playwright installation.
 
+The leaderboard displays separate DSA Solved and MCQ Solved counts, plus Total
+Score. Expanding a participant shows DSA question names, points, and Solved,
+Partially Solved, Wrong Answer, or Not Attempted. Partial results include passed
+and failed test-case counts from the submission earning that question's score.
+Deploy the matching backend update to supply the split counts and public DSA
+breakdowns. Older frozen snapshots keep their original data and show unavailable
+split counts as `—` until an admin unfreezes the leaderboard.
+
 ## Local code drafts
 
 Code and custom-input drafts survive reloads while signed in. Signing out, losing

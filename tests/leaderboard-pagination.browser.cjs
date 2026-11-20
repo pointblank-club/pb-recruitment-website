@@ -6,7 +6,7 @@ const { chromium, firefox } = require(process.env.PLAYWRIGHT_MODULE || 'playwrig
 const origin = 'http://localhost:5173';
 const entries = (offset, count) => Array.from({ length: count }, (_, index) => ({
   rank: offset + index + 1, user_id: `user-${offset + index + 1}`, username: `Participant ${offset + index + 1}`,
-  usn: `USN-${offset + index + 1}`, total_score: 100, problems_solved: 1,
+  usn: `USN-${offset + index + 1}`, total_score: 100, problems_solved: 1, dsa_solved: 1, mcq_solved: 0,
 }));
 
 for (const [name, engine] of Object.entries({ chromium, firefox })) {
@@ -14,13 +14,13 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
   before(async () => { browser = await engine.launch({ headless: true }); });
   after(async () => { await browser?.close(); });
 
-  async function mount(headers, pages = [entries(0, 20), entries(20, 3)], admin = false) {
+  async function mount(headers, pages = [entries(0, 20), entries(20, 3)], admin = false, guest = false) {
     const page = await browser.newPage();
     const errors = [], requested = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.addInitScript(() => {
-      window.leaderboardUser = { uid: 'user-1', getIdToken: async () => 'synthetic-token' };
-    });
+    await page.addInitScript((guest) => {
+      window.leaderboardUser = guest ? null : { uid: 'user-1', getIdToken: async () => 'synthetic-token' };
+    }, guest);
     await page.route('**/*', route => {
       const url = new URL(route.request().url());
       if (url.origin === origin) {
@@ -57,6 +57,49 @@ for (const [name, engine] of Object.entries({ chromium, firefox })) {
     });
     return { page, requested, async close() { await page.close(); assert.deepEqual(errors, []); } };
   }
+
+  test(`${name}: separate counts and DSA results expand and collapse for every viewer`, { timeout: 15000 }, async () => {
+    const problem = { type: 'code', score: 0, max_score: 100, attempts: 1 };
+    const participant = {
+      ...entries(0, 1)[0], dsa_solved: 1, mcq_solved: 2, total_score: 157.5,
+      last_submission_time: Date.now() - 62 * 60_000,
+      problem_scores: [
+        { ...problem, problem_id: 'solved', problem_name: 'Solved DSA', score: 100, solved_at: 1000 },
+        { ...problem, problem_id: 'partial', problem_name: 'Partial DSA', score: 37.5, test_cases_passed: 3, total_test_cases: 8 },
+        { ...problem, problem_id: 'wrong', problem_name: 'Wrong DSA' },
+        { ...problem, problem_id: 'untouched', problem_name: 'Untouched DSA', attempts: 0 },
+        { ...problem, problem_id: 'mcq', problem_name: 'Hidden MCQ', type: 'mcq' },
+      ],
+    };
+    for (const admin of [false, true]) {
+      const fixture = await mount({}, [[participant]], admin, !admin);
+      const { page } = fixture;
+      try {
+        await page.setViewportSize({ width: admin ? 1280 : 390, height: 844 });
+        await page.getByRole('columnheader', { name: 'DSA Solved', exact: true }).waitFor();
+        await page.getByRole('columnheader', { name: 'MCQ Solved', exact: true }).waitFor();
+        await page.getByRole('columnheader', { name: 'Total Score', exact: true }).waitFor();
+        const cells = page.locator('tbody tr').first().locator('td');
+        assert.equal((await cells.nth(3).textContent()).trim(), '1');
+        assert.equal((await cells.nth(4).textContent()).trim(), '2');
+        assert.equal((await cells.nth(5).textContent()).trim(), '157.50');
+        assert.equal((await cells.nth(6).textContent()).trim(), '1h 2m ago');
+        assert.ok(await cells.nth(6).locator('span').getAttribute('title'));
+        if (!admin) assert.equal(await page.getByText('YOU', { exact: true }).count(), 0);
+        await page.getByRole('button', { name: 'View DSA results for Participant 1', exact: true }).click();
+        const details = page.locator('tbody tr').nth(1);
+        const headers = await page.getByRole('columnheader').count();
+        assert.equal(await details.locator('td').getAttribute('colspan'), String(headers));
+        for (const [name, result] of [['Solved DSA', 'Solved'], ['Partial DSA', 'Partially Solved'], ['Wrong DSA', 'Wrong Answer'], ['Untouched DSA', 'Not Attempted']]) {
+          assert.match(await details.getByRole('heading', { name, exact: true }).locator('..').textContent(), new RegExp(result));
+        }
+        assert.match(await details.textContent(), /Test cases: 3 \/ 8 passed · 5 failed/);
+        assert.doesNotMatch(await details.textContent(), /Hidden MCQ|SUBMISSIONS|Time Limit|Compilation|Runtime|Memory|View Code/);
+        await page.getByRole('button', { name: 'Hide DSA results for Participant 1', exact: true }).click();
+        assert.equal(await page.locator('tbody tr').count(), 1);
+      } finally { await fixture.close(); }
+    }
+  });
 
   for (const [label, headers] of Object.entries({
     missing: {}, countOnly: { 'X-Total-Count': '23' }, pagesOnly: { 'X-Total-Pages': '2' },
