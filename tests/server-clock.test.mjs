@@ -83,7 +83,6 @@ const clients = {
   adminApi: api => api.checkAdminAccess(),
   userApi: api => api.getUserProfile(),
   authApi: api => api.signup({ name: 'User', id: 'USN', email: 'user@example.test', mobile: '1234567890', joiningYear: 1, branch: 'CS', password: 'test' }),
-  yandexApi: api => api.getConnection(),
 };
 for (const [name, invoke] of Object.entries(clients)) {
   const api = loadApi(name);
@@ -96,7 +95,7 @@ for (const [name, invoke] of Object.entries(clients)) {
   assert.equal(apiClock.clock.getServerTime(), stamp, `${name} syncs error responses`);
   failure = false;
 }
-assert.equal(requests.length, 10, 'sync adds no requests to normal API calls');
+assert.equal(requests.length, 8, 'sync adds no requests to normal API calls');
 
 // The lifecycle tests use controllable elapsed timers, including recovery after suspended performance time.
 const document = new EventTarget();

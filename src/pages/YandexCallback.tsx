@@ -1,23 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Navbar from './components/Navbar';
 import Footer from './components/footer';
-import { forgetYandexReturn, readYandexReturn, yandexAccountLabel } from '@/lib/yandexConnect';
-import { yandexApi, yandexErrorMessage, type CompletedYandexConnection } from '@/services/api/yandexApi';
+import { useAuth } from '@/lib/AuthContext';
+import { auth } from '@/lib/firebase';
+import {
+  forgetYandexReturn,
+  readYandexReturn,
+  yandexAccountLabel,
+  type CompletedYandexConnection,
+} from '@/lib/yandexConnect';
+import { contestApi, yandexErrorMessage } from '@/services/api/contestApi';
 
-// A Yandex code works once. StrictMode runs effects twice in development, so share one
-// exchange per code.
-const exchanges = new Map<string, Promise<CompletedYandexConnection>>();
-const completeOnce = (code: string, state: string) => {
-  let pending = exchanges.get(code);
-  if (!pending) {
-    pending = yandexApi.completeConnection(code, state);
-    exchanges.set(code, pending);
-  }
-  return pending;
-};
+interface Exchange {
+  key: string;
+  promise: Promise<CompletedYandexConnection>;
+}
 
 interface CallbackParams {
   code: string | null;
@@ -35,11 +35,15 @@ const deniedMessage = (error: string) =>
 export const YandexCallback = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const userId = useAuth().user?.uid;
   const [params] = useState<CallbackParams>(() => {
     const query = new URLSearchParams(location.search);
     return { code: query.get('code'), state: query.get('state'), error: query.get('error'), returnContestId: readYandexReturn() };
   });
   const [failure, setFailure] = useState<string | null>(null);
+  // A Yandex code works once. StrictMode replays this effect while the exchange is still in
+  // flight, so the replay reuses it; it is dropped once settled so a remount can try again.
+  const exchangeRef = useRef<Exchange | null>(null);
   const returnPath = params.returnContestId ? `/contest/${params.returnContestId}` : '/contests';
 
   useEffect(() => {
@@ -54,22 +58,35 @@ export const YandexCallback = () => {
       setFailure('This page needs the sign-in details from Yandex. Start connecting again from the contest page.');
       return;
     }
+    if (!userId) return;
+    const key = JSON.stringify([userId, params.state, params.code]);
+    let exchange = exchangeRef.current;
+    if (!exchange || exchange.key !== key) {
+      const started: Exchange = { key, promise: contestApi.completeYandexConnection(params.code, params.state, userId) };
+      const release = () => {
+        if (exchangeRef.current === started) exchangeRef.current = null;
+      };
+      started.promise.then(release, release);
+      exchangeRef.current = exchange = started;
+    }
     let active = true;
-    completeOnce(params.code, params.state).then(
+    // Results only count for the account that started the exchange.
+    const current = () => active && auth.currentUser?.uid === userId;
+    exchange.promise.then(
       ({ connection, contestId }) => {
-        if (!active) return;
+        if (!current()) return;
         toast.success(`Yandex account connected: ${yandexAccountLabel(connection)}`);
         const target = contestId ?? params.returnContestId;
         navigate(target ? `/contest/${target}` : '/contests', { replace: true });
       },
       (error: unknown) => {
-        if (active) setFailure(yandexErrorMessage(error, 'Could not connect your Yandex account. Please try again.'));
+        if (current()) setFailure(yandexErrorMessage(error, 'Could not connect your Yandex account. Please try again.'));
       },
     );
     return () => {
       active = false;
     };
-  }, [params, navigate, location.pathname]);
+  }, [params, userId, navigate, location.pathname]);
 
   return (
     <div className="bg-black text-white min-h-screen flex flex-col">
