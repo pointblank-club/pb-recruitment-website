@@ -4,10 +4,14 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import axios from 'axios';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
+import { createRequire } from 'node:module';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const compile = (source) => ts.transpileModule(source.replaceAll('import.meta.env', '({})'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
 }).outputText;
 
 let mockResponse;
@@ -115,6 +119,8 @@ for (const data of [
   [{}], [null], ['invalid-entry'], [{ rank: 'first' }], [{ rank: 1, user_id: 123 }],
   [{ ...makeEntry(1), rank: -1 }], [{ ...makeEntry(1), rank: 1.5 }],
   [{ ...makeEntry(1), total_score: Infinity }], [{ ...makeEntry(1), problems_solved: '1' }],
+  [{ ...makeEntry(1), dsa_solved: -1 }], [{ ...makeEntry(1), mcq_solved: '2' }],
+  [{ ...makeEntry(1), dsa_solved: 1.5 }], [{ ...makeEntry(1), mcq_solved: null }],
 ]) {
   mockResponse = { status: 200, data, headers: {} };
   await assert.rejects(api.getContestLeaderboard('c1', 0), /Invalid leaderboard response format/);
@@ -131,9 +137,22 @@ mockResponse = { status: 200, data: [decimalEntry], headers: {} };
 const decimalResult = await api.getContestLeaderboard('c1', 0);
 assert.deepEqual(decimalResult.entries[0], decimalEntry);
 
-const utilsModule = { exports: {}, require: () => ({ clsx: () => '', twMerge: () => '' }) };
+const now = Date.parse('2026-11-20T12:00:00Z');
+const utilsModule = {
+  exports: {},
+  Date: class extends Date { static now() { return now; } },
+  require: () => ({ clsx: () => '', twMerge: () => '' }),
+};
 vm.runInNewContext(compile(read('src/lib/utils.ts')), utilsModule);
-const { formatScore } = utilsModule.exports;
+const { formatScore, formatTimestamp } = utilsModule.exports;
+for (const [minutes, expected] of [
+  [0, 'Just now'], [-1, 'Just now'], [1, '1m ago'], [59, '59m ago'],
+  [60, '1h ago'], [62, '1h 2m ago'], [1439, '23h 59m ago'],
+  [1440, '1d ago'], [1502, '1d 1h 2m ago'], [18622, '12d 22h 22m ago'],
+]) {
+  assert.equal(formatTimestamp(now - minutes * 60_000), expected);
+}
+for (const invalid of [0, -1, NaN, Infinity, 9e20]) assert.equal(formatTimestamp(invalid), '—');
 assert.equal(formatScore(10), '10');
 assert.equal(formatScore(12.5), '12.50');
 assert.equal(formatScore(87.75), '87.75');
@@ -158,5 +177,59 @@ assert.equal(isPartialCredit('pending', 50, 'code'), false);
 assert.equal(isPartialCredit('attempted', 50, 'code'), false);
 assert.equal(isPartialCredit('judge_error', 50, 'code'), false);
 assert.equal(isPartialCredit('wrong_answer', 50, 'mcq'), false);
+
+const require = createRequire(import.meta.url);
+const loadComponent = (path, dependencies) => {
+  const module = { exports: {} };
+  vm.runInNewContext(compile(read(path)), {
+    module, exports: module.exports,
+    require: (name) => dependencies[name] ?? require(name),
+  });
+  return module.exports;
+};
+const details = loadComponent('src/features/contests/components/LeaderboardRowDetails.tsx', {
+  '@/lib/utils': utilsModule.exports,
+});
+const table = loadComponent('src/features/contests/components/LeaderboardTable.tsx', {
+  '@/lib/utils': utilsModule.exports,
+  './LeaderboardRowDetails.tsx': details,
+});
+const problem = {
+  problem_id: 'p1', problem_name: 'Two Sum', type: 'code', score: 0, max_score: 100, attempts: 1,
+};
+for (const [overrides, result] of [
+  [{ solved_at: 1000, score: 100 }, 'Solved'],
+  [{ solved_at: 0, score: 0, max_score: 0 }, 'Solved'],
+  [{ score: 37.5, test_cases_passed: 3, total_test_cases: 8 }, 'Partially Solved'],
+  [{}, 'Wrong Answer'],
+  [{ attempts: 0, max_score: 0 }, 'Not Attempted'],
+]) {
+  const html = renderToStaticMarkup(React.createElement(details.LeaderboardRowDetails, {
+    problemScores: [{ ...problem, ...overrides }, { ...problem, problem_id: 'mcq', problem_name: 'Hidden MCQ', type: 'mcq' }],
+  }));
+  assert.ok(html.includes('Two Sum'));
+  assert.ok(html.includes(`>${result}<`), html);
+  assert.ok(html.includes('points'));
+  assert.doesNotMatch(html, /Hidden MCQ|SUBMISSIONS|View Code|Time Limit|Compilation|Runtime|Memory/);
+  if (result === 'Partially Solved') assert.ok(html.includes('Test cases: 3 / 8 passed · 5 failed'), html);
+}
+for (const counts of [{}, { test_cases_passed: 9, total_test_cases: 8 }, { test_cases_passed: -1, total_test_cases: 8 }]) {
+  const html = renderToStaticMarkup(React.createElement(details.LeaderboardRowDetails, {
+    problemScores: [{ ...problem, score: 37.5, ...counts }],
+  }));
+  assert.ok(html.includes('Partially Solved'));
+  assert.doesNotMatch(html, /Test cases:/, 'Missing or invalid counts must never be guessed from points');
+}
+for (const counts of [{ dsa_solved: 0, mcq_solved: 2 }, {}]) {
+  mockResponse = { status: 200, data: [{ ...makeEntry(1), ...counts }], headers: {} };
+  const { entries } = await api.getContestLeaderboard('c1');
+  const html = renderToStaticMarkup(React.createElement(MemoryRouter, null,
+    React.createElement(table.LeaderboardTable, { entries })));
+  assert.match(html, /DSA Solved/);
+  assert.match(html, /MCQ Solved/);
+  assert.match(html, /Total Score/);
+  assert.ok(html.includes(counts.dsa_solved === undefined ? '>—<' : '>0<'));
+  if (counts.mcq_solved !== undefined) assert.ok(html.includes('>2<'));
+}
 
 console.log('Leaderboard checks passed: header-independent rows/pagination, participant identity, decimal scores, malformed body rejection, and request errors.');

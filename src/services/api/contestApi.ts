@@ -96,7 +96,10 @@ const isValidLeaderboardEntry = (entry: unknown): entry is LeaderboardEntry => {
     typeof e.total_score === 'number' &&
     Number.isFinite(e.total_score) &&
     typeof e.problems_solved === 'number' &&
-    Number.isSafeInteger(e.problems_solved)
+    Number.isSafeInteger(e.problems_solved) &&
+    [e.dsa_solved, e.mcq_solved].every((count) => count === undefined || (
+      typeof count === 'number' && Number.isSafeInteger(count) && count >= 0
+    ))
   );
 };
 

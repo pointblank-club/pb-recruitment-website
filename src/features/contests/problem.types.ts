@@ -38,6 +38,8 @@ export interface LeaderboardEntry {
   usn: string;
   total_score: number; // Supports decimal scores with up to 2 decimal places (e.g. 142.75)
   problems_solved: number; // Note: Only problems with 100% full solve count here
+  dsa_solved?: number;
+  mcq_solved?: number;
   last_submission_time?: number | null;
   problem_scores?: ProblemScore[];
 }
@@ -50,6 +52,8 @@ export interface ProblemScore {
   max_score: number;
   attempts: number; // Total submissions, including judge errors; not the ranking penalty.
   solved_at?: number | null;
+  test_cases_passed?: number;
+  total_test_cases?: number;
 }
 
 export interface Contest {
