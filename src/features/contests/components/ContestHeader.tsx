@@ -11,6 +11,8 @@ interface ContestHeaderProps {
   tabSwitchCount?: number;
   pendingTabSwitchCount?: number;
   maxTabSwitches?: number;
+  participantName?: string;
+  participantUsn?: string;
 }
 
 export const ContestHeader = ({ 
@@ -23,6 +25,8 @@ export const ContestHeader = ({
   tabSwitchCount,
   pendingTabSwitchCount = 0,
   maxTabSwitches = 5,
+  participantName,
+  participantUsn,
 }: ContestHeaderProps) => {
   const location = useLocation();
 
@@ -43,6 +47,24 @@ export const ContestHeader = ({
     if (timeRemaining <= 900) return 'text-yellow-400'; // 15 minutes
     return 'text-green-400';
   };
+
+  const participantInfo = (participantName || participantUsn) ? (
+    <>
+      <div className="flex items-center gap-2 font-['DM_Sans']">
+        {participantName && (
+          <span className="text-sm font-semibold text-white truncate max-w-[120px] sm:max-w-[180px] md:max-w-[240px]" title={participantName}>
+            {participantName}
+          </span>
+        )}
+        {participantUsn && (
+          <span className="text-xs font-mono text-gray-200 bg-gray-800 border border-gray-700 px-2 py-0.5 rounded uppercase tracking-wider flex-shrink-0">
+            {participantUsn}
+          </span>
+        )}
+      </div>
+      <div className="h-8 w-px bg-gray-700/80 hidden sm:block" />
+    </>
+  ) : null;
 
   return (
     <div className="w-full bg-black border-b border-gray-700 sticky top-0 z-50">
@@ -97,7 +119,8 @@ export const ContestHeader = ({
             )}
           </div>
           {isContestEnded ? (
-            <div className="flex items-center">
+            <div className="flex items-center gap-4">
+              {participantInfo}
               <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-800 text-gray-400 border border-gray-700 font-['DM_Sans']">
                 Contest Ended
               </span>
@@ -124,6 +147,7 @@ export const ContestHeader = ({
                   </span>
                 </div>
               )}
+              {participantInfo}
               <div className="text-right flex flex-col justify-center">
                 <div className="text-xs text-gray-400 font-['DM_Sans']">Time remaining</div>
                 <div className={`text-xl font-['DM_Sans'] font-mono ${getTimeColor()}`}>

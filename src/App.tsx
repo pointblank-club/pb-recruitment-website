@@ -1,10 +1,11 @@
 import { startServerClockRefresh } from '@/services/api/serverClock';
 import React, { useEffect } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import TestPage from "./pages/test_page";
 import Home from "./pages/Home";
 import ContestDetail from "./pages/ContestDetail";
+import ContestFeedbackPage from "./pages/ContestFeedbackPage";
 import ContestList from "./pages/ContestList";
 import { ContestProblemsPage } from './features/contests/pages/ContestProblemsPage';
 import { ContestProblemPage } from './features/contests/pages/ContestProblemPage';
@@ -24,11 +25,35 @@ import YandexCallback from "./pages/YandexCallback";
 import { AdminRoute } from "./components/AdminRoute";
 import { AuthenticatedRoute } from "./components/AuthenticatedRoute";
 import { useAuth } from "./lib/AuthContext";
+import { getPendingFeedback, clearPendingFeedback } from "./lib/contestStorage";
 import * as Sentry from "@sentry/react";
 
 const App: React.FC = () => {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
   useEffect(() => startServerClockRefresh(), []);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const pendingContestId = getPendingFeedback(user.uid);
+    if (!pendingContestId) return;
+
+    if (localStorage.getItem(`pb_contest_feedback_${pendingContestId}`) === "true") {
+      clearPendingFeedback(user.uid);
+      return;
+    }
+
+    const isFeedbackPath =
+      location.pathname === `/contest/${pendingContestId}/feedback` ||
+      location.pathname === `/contests/${pendingContestId}/feedback`;
+
+    if (!isFeedbackPath && location.pathname !== '/login') {
+      navigate(`/contest/${pendingContestId}/feedback`, { replace: true });
+    }
+  }, [user?.uid, location.pathname, navigate]);
+
 
   return (
     <Sentry.ErrorBoundary
@@ -54,6 +79,14 @@ const App: React.FC = () => {
         <Route
           path="/contest/:id"
           element={<ContestDetail key={user?.uid || "guest"} />}
+        />
+        <Route
+          path="/contest/:id/feedback"
+          element={<ContestFeedbackPage key={`${user?.uid || "guest"}:${location.pathname}`} />}
+        />
+        <Route
+          path="/contests/:id/feedback"
+          element={<ContestFeedbackPage key={`${user?.uid || "guest"}:${location.pathname}`} />}
         />
         <Route
           path="/contests/:contestId"

@@ -21,6 +21,7 @@ import {
   setContestSubmitted,
   getContestEntered,
   setContestEntered,
+  setPendingFeedback,
 } from '@/lib/contestStorage';
 import { contestApi } from '@/services/api/contestApi';
 import { useYandexConnection } from '@/features/yandex/useYandexConnection';
@@ -42,7 +43,7 @@ export const ContestLayout = () => {
   const { contestId } = useParams<{ contestId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [progress, setProgress] = useState(0);
   const [hasElapsedDeadline, setHasElapsedDeadline] = useState(false);
@@ -149,35 +150,38 @@ export const ContestLayout = () => {
     }
   }, [contestId, user?.uid]);
 
+  const redirectToFeedback = useCallback(() => {
+    hasExitedRef.current = true;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    if (contestId && user?.uid) {
+      setPendingFeedback(contestId, user.uid);
+    }
+    navigate(`/contest/${contestId}/feedback`, { replace: true });
+  }, [contestId, user?.uid, navigate]);
+
   useEffect(() => {
     if (!contestId || !user?.uid) return;
     const key = `contest_submitted_${contestId}_${user.uid}`;
     const handleStorage = (event: StorageEvent) => {
       if (event.key === null || event.key === key) {
         if (getContestSubmitted(contestId, user.uid) && !hasExitedRef.current && !isLeaderboardPage) {
-          hasExitedRef.current = true;
-          if (document.fullscreenElement) {
-            document.exitFullscreen().catch(() => {});
-          }
           toast.info("This contest session has ended.");
-          navigate(`/contest/${contestId}`, { replace: true });
+          redirectToFeedback();
         }
       }
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, [contestId, user?.uid, isLeaderboardPage, navigate]);
+  }, [contestId, user?.uid, isLeaderboardPage, redirectToFeedback]);
 
   useEffect(() => {
     if (isSessionEnded && !hasExitedRef.current && !isLeaderboardPage && contest && getServerTime() < contest.end_time) {
-      hasExitedRef.current = true;
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
       toast.info("This contest session has ended.");
-      navigate(`/contest/${contestId}`, { replace: true });
+      redirectToFeedback();
     }
-  }, [isSessionEnded, isLeaderboardPage, contest, contestId, navigate, clockReady]);
+  }, [isSessionEnded, isLeaderboardPage, contest, redirectToFeedback, clockReady]);
 
   useEffect(() => {
     if (isTabSwitchTerminated && document.fullscreenElement) {
@@ -223,12 +227,8 @@ export const ContestLayout = () => {
     );
 
     if (isSubmittedEarly && !hasExitedRef.current && !isLeaderboardPage && getServerTime() < contest.end_time) {
-      hasExitedRef.current = true;
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
       toast.info("This contest session has ended.");
-      navigate(`/contest/${contestId}`, { replace: true });
+      redirectToFeedback();
       return;
     }
 
@@ -272,12 +272,8 @@ export const ContestLayout = () => {
           // The user may have left (e.g. to the leaderboard) while the refetch was in flight
           if (cancelled) return true;
 
-          hasExitedRef.current = true;
-          if (document.fullscreenElement) {
-            document.exitFullscreen().catch(() => {});
-          }
           toast.info("Time is up! The contest has ended.");
-          navigate(`/contest/${contestId}`, { replace: true });
+          redirectToFeedback();
           return true;
         }
 
@@ -321,14 +317,18 @@ export const ContestLayout = () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [contest, contestId, isLeaderboardPage, navigate, refetch, user?.uid, clockReady]);
+  }, [contest, contestId, isLeaderboardPage, navigate, refetch, user?.uid, clockReady, redirectToFeedback]);
 
   const handleOpenEndModal = () => {
     setEndContestError(null);
     setIsEndModalOpen(true);
   };
 
-  const handleLeaveContest = () => {
+  const handleLeaveContest = (withFeedback: boolean | unknown = false) => {
+    if (withFeedback === true) {
+      redirectToFeedback();
+      return;
+    }
     hasExitedRef.current = true;
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
@@ -367,7 +367,7 @@ export const ContestLayout = () => {
       setContestSubmitted(targetContestId, targetUserId);
       setIsEndModalOpen(false);
       toast.info("Contest ended. Only your submitted solutions will be scored.");
-      handleLeaveContest();
+      handleLeaveContest(true);
     } catch (err: unknown) {
       if (controller.signal.aborted || !isCurrent()) return;
 
@@ -378,7 +378,7 @@ export const ContestLayout = () => {
           setContestSubmitted(targetContestId, targetUserId);
           setIsEndModalOpen(false);
           toast.info("Contest ended. Only your submitted solutions will be scored.");
-          handleLeaveContest();
+          handleLeaveContest(true);
           return;
         }
       } catch {
@@ -448,6 +448,9 @@ export const ContestLayout = () => {
     </div>
   );
 
+  const participantName = (userProfile?.name || user?.displayName) || undefined;
+  const participantUsn = userProfile?.id || undefined;
+
   if (isContestLoading || (contest && workspaceBlocked && admittedScopeRef.current !== workspaceScope)) {
     return (
       <div className="w-full bg-black h-screen flex flex-col overflow-hidden">
@@ -456,6 +459,8 @@ export const ContestLayout = () => {
           progress={0}
           contestName="Loading..."
           contestId={contestId}
+          participantName={participantName}
+          participantUsn={participantUsn}
         />
         <div className="flex-1 flex items-center justify-center">
           {!clockReady ? clockNotice : !browser.ready || browser.locked ? browserNotice : <div className="text-gray-400">Loading contest...</div>}
@@ -487,6 +492,8 @@ export const ContestLayout = () => {
         tabSwitchCount={isTrackingActive && tabSwitchApiStatus !== 'unsupported' ? tabSwitchCount : undefined}
         pendingTabSwitchCount={isTrackingActive && tabSwitchApiStatus !== 'unsupported' ? pendingSyncCount : 0}
         maxTabSwitches={maxSwitches}
+        participantName={participantName}
+        participantUsn={participantUsn}
       />
 
       {showYandexNotice && (
@@ -541,7 +548,7 @@ export const ContestLayout = () => {
             </button>
             <button
               type="button"
-              onClick={handleLeaveContest}
+              onClick={() => handleLeaveContest(true)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-semibold transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />

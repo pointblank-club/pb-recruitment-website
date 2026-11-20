@@ -47,19 +47,19 @@ export default function Pattern() {
           className="grid grid-cols-1 md:grid-cols-3 gap-6"
         >
           <div className="rounded-2xl border border-gray-700/60 bg-zinc-900/40 p-6">
-            <div className="text-4xl md:text-5xl font-anton text-green mb-2">10</div>
+            <div className="text-4xl md:text-5xl font-anton text-green mb-2">60</div>
             <div className="text-xl font-semibold mb-1">MCQ Questions</div>
             <p className="text-gray-300 text-sm md:text-base">Quick multiple-choice questions covering CS fundamentals and basic problem solving.</p>
           </div>
           <div className="rounded-2xl border border-gray-700/60 bg-zinc-900/40 p-6">
-            <div className="text-4xl md:text-5xl font-anton text-green mb-2">5</div>
+            <div className="text-4xl md:text-5xl font-anton text-green mb-2">6</div>
             <div className="text-xl font-semibold mb-1">DSA Problems</div>
             <p className="text-gray-300 text-sm md:text-base">Algorithmic coding tasks of increasing difficulty to assess depth and speed.</p>
           </div>
           <div className="rounded-2xl border border-gray-700/60 bg-zinc-900/40 p-6">
-            <div className="text-4xl md:text-5xl font-anton text-green mb-2">120 min</div>
+            <div className="text-4xl md:text-5xl font-anton text-green mb-2">180 min</div>
             <div className="text-xl font-semibold mb-1">Total Duration</div>
-            <p className="text-gray-300 text-sm md:text-base">Single sitting. Partial scoring enabled. Languages: C, C++, Java, Javascript, Typescript and Python.</p>
+            <p className="text-gray-300 text-sm md:text-base">Single sitting. Partial scoring enabled. Languages: C, C++, Java, Javascript and Python.</p>
           </div>
         </motion.div>
 
