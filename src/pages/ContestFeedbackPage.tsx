@@ -413,6 +413,9 @@ const ContestFeedbackPage: React.FC = () => {
                 <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold px-3 py-1 rounded bg-green-500/20 text-green border border-green-500/30 flex items-center gap-1.5 font-mono">
                   <Sparkles size={14} /> Participant Feedback
                 </span>
+                <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold px-3 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center gap-1.5 font-mono">
+                  <ShieldCheck size={14} /> 100% Anonymous
+                </span>
                 <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold px-3 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1.5 font-mono">
                   <AlertCircle size={14} /> All Questions Compulsory
                 </span>
@@ -421,8 +424,14 @@ const ContestFeedbackPage: React.FC = () => {
                 Pointblank Recruitment: 1st year Feedback!
               </h1>
               <p className="text-gray-300 text-base sm:text-lg mt-3 max-w-3xl leading-relaxed">
-                Spill the tea! Tell us about your Pointblank recruitment experience. Your honest (and maybe weird) feedback helps us level up!
+                Spill the tea! Tell us about your Pointblank recruitment experience. This feedback form is <strong>completely anonymous</strong>—your responses will not be linked to your test performance or candidate scoring. Your honest (and maybe weird) feedback helps us level up!
               </p>
+              <div className="mt-4 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-blue-950/40 border border-blue-800/50 text-blue-300 text-sm">
+                <ShieldCheck className="w-5 h-5 text-blue-400 shrink-0" />
+                <span>
+                  <strong>Anonymous Submission:</strong> Your name and identity are kept confidential and will not affect your recruitment outcome. Please feel free to be completely honest!
+                </span>
+              </div>
             </div>
 
             {errorMessage && (
