@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 import { CheckCircle2, ExternalLink, Loader2 } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
+import { auth } from '@/lib/firebase';
 import { rememberYandexReturn, yandexAccountLabel, type YandexConnection } from '@/lib/yandexConnect';
-import { yandexApi, yandexErrorMessage } from '@/services/api/yandexApi';
+import { contestApi, yandexErrorMessage } from '@/services/api/contestApi';
 
 type Variant = 'connect' | 'reconnect' | 'change';
 
@@ -21,23 +24,39 @@ const AGREEMENT =
   'I agree that Point Blank may submit my solutions to the backup contest on Yandex Contest from my Yandex account';
 
 export const YandexConnectCard = ({ contestId, variant, onCancel }: YandexConnectCardProps) => {
+  const { user } = useAuth();
   const [agreed, setAgreed] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { text, action } = COPY[variant];
   const checkboxId = `yandex-consent-${variant}-${contestId}`;
+  const controllerRef = useRef<AbortController | null>(null);
+
+  // A Start response that arrives after this box closed must not send anyone to Yandex.
+  useEffect(() => () => controllerRef.current?.abort(), []);
 
   const handleConnect = async () => {
-    if (!agreed || starting) return;
+    const userId = user?.uid;
+    if (!agreed || starting || !userId) return;
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
     setStarting(true);
     setError(null);
     try {
-      const authorizeUrl = await yandexApi.startConnection(true, contestId);
+      const authorizeUrl = await contestApi.startYandexConnection(contestId, userId, controller.signal);
+      if (controller.signal.aborted) return;
+      // The state in this URL belongs to the account that asked for it.
+      if (auth.currentUser?.uid !== userId) {
+        setStarting(false);
+        return;
+      }
       rememberYandexReturn(contestId);
       window.location.assign(authorizeUrl);
     } catch (err) {
-      setError(yandexErrorMessage(err, 'Could not start Yandex sign-in. Please try again.'));
+      if (controller.signal.aborted) return;
       setStarting(false);
+      if (!axios.isCancel(err)) setError(yandexErrorMessage(err, 'Could not start Yandex sign-in. Please try again.'));
     }
   };
 
@@ -85,6 +104,7 @@ export const YandexConnectCard = ({ contestId, variant, onCancel }: YandexConnec
           </button>
         )}
       </div>
+      <p className="mt-2 text-xs text-gray-400">Opened from WhatsApp or Instagram? Open this page in Chrome or Safari first.</p>
     </div>
   );
 };

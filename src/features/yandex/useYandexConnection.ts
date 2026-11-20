@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { auth } from '@/lib/firebase';
 import { DISABLED_YANDEX_CONNECTION, type YandexConnection } from '@/lib/yandexConnect';
-import { yandexApi, yandexErrorMessage } from '@/services/api/yandexApi';
+import { contestApi, yandexErrorMessage } from '@/services/api/contestApi';
 
 interface Options {
   /** Skip fetching entirely, e.g. while the workspace is not in use. */
@@ -38,7 +38,7 @@ export const useYandexConnection = (userId: string | undefined, options: Options
     const sequence = ++sequenceRef.current;
     lastFetchRef.current = Date.now();
     setState((prev) => ({ ...prev, loading: true }));
-    yandexApi.getConnection(controller.signal).then(
+    contestApi.getYandexConnection(userId, controller.signal).then(
       (connection) => {
         if (sequence !== sequenceRef.current || auth.currentUser?.uid !== userId) return;
         setState({ connection, loading: false, error: null });
@@ -48,7 +48,7 @@ export const useYandexConnection = (userId: string | undefined, options: Options
         setState((prev) => ({
           connection: prev.connection,
           loading: false,
-          error: yandexErrorMessage(error, 'Could not check your Yandex backup connection.'),
+          error: yandexErrorMessage(error, 'Could not check your Yandex connection.'),
         }));
       },
     );

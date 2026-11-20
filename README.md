@@ -156,23 +156,34 @@ The same contest runs on Yandex Contest as a backup ([recruitment-backup](https:
 Each candidate connects their own Yandex account from the contest page:
 
 - `GET /yandex/connection` drives the page. While the backend has the connect step
-  off (or predates it, answering 404) nothing changes. When it is on, the action
-  card shows one line of text, the agreement checkbox ("I agree that Point Blank may
-  submit my solutions ... from my Yandex account") and a Connect Yandex button that
-  stays disabled until it is ticked. When the backend requires a
+  off (or predates it, answering 404) nothing changes. Any other unexpected answer
+  (an error status, missing fields, an unknown token state) is an error with a Retry
+  link, never "off". When it is on, the action card shows one line of text, the
+  agreement checkbox ("I agree that Point Blank may submit my solutions ... from my
+  Yandex account"), a Connect Yandex button that stays disabled until it is ticked,
+  and a fixed one-line tip to open the page in Chrome or Safari if it was opened from
+  WhatsApp or Instagram (Google sign-in does not work inside those apps). When the
+  backend requires a
   connection, Register reads "Connect Yandex to Register" until the candidate
   connects, and a 428 `yandex_not_connected` from registration re-checks the status.
 - Connect calls `POST /yandex/connection/start` and sends the candidate to Yandex,
   which returns them to `/yandex/callback`. That page posts the code and state to
-  `POST /yandex/connection/complete` once (StrictMode-safe), removes the code from
-  the address bar, and returns to the contest. Register this route as the Yandex
-  app's redirect URI and as the backend's `YANDEX_OAUTH_REDIRECT_URI`.
+  `POST /yandex/connection/complete` (a StrictMode replay reuses the request in
+  flight), removes the code from the address bar, and returns to the contest only when
+  the server confirms an active connection for the account that started it. Sentry
+  breadcrumbs and events have the callback's `code` and `state` replaced with
+  `[Filtered]`. Register this route as the Yandex app's redirect URI and as the
+  backend's `YANDEX_OAUTH_REDIRECT_URI`.
+- Yandex calls go through `contestApi`, so a request made for one account is never
+  sent after another account signs in, and a Connect response that arrives after the
+  box closed or the account changed does not navigate.
 - A token Yandex no longer accepts (`token_state: needs_reauth`) shows a Reconnect
   box on the contest page and a non-blocking notice in the live workspace, re-checked
   every five minutes. Reconnecting happens on the contest page, outside the
   proctored workspace. Changing accounts is offered only before the contest starts.
 
-Run `npm run test:yandex` for response handling and request checks.
+Run `npm run test:yandex` for response validation, Sentry redaction, request checks,
+and mounted checks of the callback page and connect box.
 
 ## Exam browser restrictions
 
